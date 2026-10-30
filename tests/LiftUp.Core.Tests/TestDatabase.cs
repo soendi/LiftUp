@@ -43,12 +43,14 @@ public sealed class TestDatabase : IDisposable
 
     public void Dispose()
     {
+        // Windows hält die Datei über den Verbindungspool offen; ohne das Leeren
+        // schlägt das Löschen des Temp-Ordners fehl.
         SqliteConnection.ClearAllPools();
         try
         {
             Directory.Delete(Root, recursive: true);
         }
-        catch (IOException)
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
             // Aufräumen ist für den Testausgang nicht entscheidend.
         }

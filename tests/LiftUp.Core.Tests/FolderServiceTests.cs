@@ -48,9 +48,17 @@ public sealed class FolderServiceTests
         }
         finally
         {
-            if (Directory.Exists(Path.GetDirectoryName(folder)!))
+            var root = Path.GetDirectoryName(Path.GetDirectoryName(folder)!);
+            try
             {
-                Directory.Delete(Path.GetDirectoryName(Path.GetDirectoryName(folder)!)!, recursive: true);
+                if (Directory.Exists(root))
+                {
+                    Directory.Delete(root!, recursive: true);
+                }
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                // Aufräumen ist für den Testausgang nicht entscheidend.
             }
         }
     }

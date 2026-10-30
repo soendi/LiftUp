@@ -29,10 +29,18 @@ public sealed class DatabaseDiagnosticsTests
         }
         finally
         {
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
             var directory = Path.GetDirectoryName(path)!;
-            if (Directory.Exists(directory))
+            try
             {
-                Directory.Delete(directory, recursive: true);
+                if (Directory.Exists(directory))
+                {
+                    Directory.Delete(directory, recursive: true);
+                }
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                // Unter Windows kann die Datei noch kurz durch den Pool belegt sein.
             }
         }
     }
