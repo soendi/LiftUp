@@ -47,6 +47,15 @@ wix build installer/LiftUp.wxs `
     -o artifacts/LiftUp-Setup.msi | Out-Host
 
 Write-Host "5/5 Installationsprogramm bauen (lädt die .NET-Desktop-Runtime bei Bedarf nach)"
+# Burn braucht die Runtime-Datei beim Bauen, um ihre Prüfsumme zu kennen. Ausgeliefert
+# wird sie nicht: das Installationsprogramm lädt sie nur bei Bedarf aus dem Netz.
+$runtimePath = "artifacts/dotnet/windowsdesktop-runtime-8.0-win-x64.exe"
+New-Item -ItemType Directory -Force artifacts/dotnet | Out-Null
+if (-not (Test-Path $runtimePath)) {
+    Invoke-WebRequest -UseBasicParsing -OutFile $runtimePath `
+        -Uri "https://builds.dotnet.microsoft.com/dotnet/WindowsDesktop/8.0.33/windowsdesktop-runtime-8.0.33-win-x64.exe"
+}
+
 wix extension add -g WixToolset.Bal.wixext/5.0.2 2>&1 | Out-Host
 wix extension add -g WixToolset.Netfx.wixext/5.0.2 2>&1 | Out-Host
 
@@ -58,6 +67,7 @@ if (-not $balExtension) { throw "Bal-Erweiterung nicht gefunden." }
 wix build installer/Bundle.wxs `
     -d Version=$Version `
     -d MsiPath="$((Resolve-Path artifacts/LiftUp-Setup.msi).Path)" `
+    -d DotNetInstaller="$((Resolve-Path $runtimePath).Path)" `
     -d IconPath="$(Resolve-Path src/LiftUp.App/Assets/LiftUp.ico).Path" `
     -d LicensePath="$(Resolve-Path installer/License.rtf).Path" `
     -ext "$balExtension" `

@@ -96,6 +96,19 @@ jobs:
             -o artifacts/LiftUp-Setup.msi 2>&1 | Tee-Object -FilePath logs/06-msi.log
           if ($LASTEXITCODE -ne 0) { throw "MSI-Bau fehlgeschlagen." }
 
+      # Burn braucht die Runtime-Datei beim Bauen, um ihre Prüfsumme zu kennen.
+      # Ausgeliefert wird sie nicht: das Installationsprogramm lädt sie nur bei Bedarf.
+      - name: .NET-Runtime für das Installationsprogramm laden
+        shell: pwsh
+        run: |
+          $target = "artifacts/dotnet/windowsdesktop-runtime-8.0-win-x64.exe"
+          New-Item -ItemType Directory -Force artifacts/dotnet | Out-Null
+          if (-not (Test-Path $target)) {
+            Invoke-WebRequest -UseBasicParsing -OutFile $target `
+              -Uri "https://builds.dotnet.microsoft.com/dotnet/WindowsDesktop/8.0.33/windowsdesktop-runtime-8.0.33-win-x64.exe"
+          }
+          "Runtime: $((Get-Item $target).Length) Bytes" | Tee-Object -FilePath logs/06b-runtime.log
+
       - name: Installationsprogramm bauen
         shell: pwsh
         run: |
@@ -108,6 +121,7 @@ jobs:
           wix build installer/Bundle.wxs `
             -d Version=${{ steps.version.outputs.value }} `
             -d MsiPath="$((Resolve-Path artifacts/LiftUp-Setup.msi).Path)" `
+            -d DotNetInstaller="$((Resolve-Path artifacts/dotnet/windowsdesktop-runtime-8.0-win-x64.exe).Path)" `
             -d IconPath="$((Resolve-Path src/LiftUp.App/Assets/LiftUp.ico).Path)" `
             -d LicensePath="$((Resolve-Path installer/License.rtf).Path)" `
             -ext "$bal" `
