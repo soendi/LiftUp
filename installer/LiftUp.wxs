@@ -33,7 +33,8 @@
             Message="LiftUp benötigt die .NET 8 Desktop Runtime. Bitte LiftUpSetup.exe verwenden, das sie nachinstalliert." />
 
     <StandardDirectory Id="LocalAppDataFolder">
-      <Directory Id="ProgramsFolder" Name="Programs">
+      <!-- Eigene ID: "ProgramsFolder" ist eine vordefinierte MSI-Eigenschaft. -->
+      <Directory Id="LiftUpProgramsFolder" Name="Programs">
         <Directory Id="INSTALLFOLDER" Name="LiftUp" />
       </Directory>
     </StandardDirectory>
