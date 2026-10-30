@@ -4,8 +4,7 @@ on:
   push:
     tags:
       - "v*"
-    # Erlaubt einen Release direkt aus dem Arbeitsbranch, solange kein Tag gepusht
-    # werden kann. Nach dem ersten Release kann dieser Eintrag entfallen.
+    # Erlaubt einen Release direkt aus dem Arbeitsbranch, solange Tags nicht pushbar sind.
     branches:
       - "freebuff/444d1acf47b98bf84d8c9e9c"
   workflow_dispatch:
@@ -33,6 +32,7 @@ jobs:
         id: version
         shell: pwsh
         run: |
+          New-Item -ItemType Directory -Force logs | Out-Null
           $version = $null
           if ("${{ github.ref_type }}" -eq "tag") {
             $version = "${{ github.ref_name }}".TrimStart("v")
@@ -46,36 +46,43 @@ jobs:
           }
 
           if ([string]::IsNullOrWhiteSpace($version)) { throw "Version konnte nicht bestimmt werden." }
-          "value=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "value=$version" >> $env:GITHUB_OUTPUT
           Write-Host "Version: $version"
 
       - name: Tests
-        run: dotnet test tests/LiftUp.Core.Tests/LiftUp.Core.Tests.csproj -c Release
+        shell: pwsh
+        run: >
+          dotnet test tests/LiftUp.Core.Tests/LiftUp.Core.Tests.csproj -c Release
+          2>&1 | Tee-Object -FilePath logs/01-tests.log
 
       - name: Veröffentlichen
+        shell: pwsh
         run: >
           dotnet publish src/LiftUp.App/LiftUp.App.csproj
           -c Release -r win-x64 --self-contained false
           -p:Version=${{ steps.version.outputs.value }} -p:DebugType=none
           -o artifacts/publish
+          2>&1 | Tee-Object -FilePath logs/02-publish-app.log
 
       - name: Prüfwerkzeug veröffentlichen
+        shell: pwsh
         run: >
           dotnet publish tools/LiftUp.Preflight/LiftUp.Preflight.csproj
           -c Release -r win-x64 --self-contained false
           -p:Version=${{ steps.version.outputs.value }} -p:DebugType=none
           -o artifacts/publish
+          2>&1 | Tee-Object -FilePath logs/03-publish-preflight.log
 
       - name: WiX installieren
         shell: pwsh
         run: |
-          dotnet tool install --global wix --version 5.0.2
+          dotnet tool install --global wix --version 5.0.2 2>&1 | Tee-Object -FilePath logs/04-wix-tool.log
           "$env:USERPROFILE\.dotnet\tools" | Out-File -FilePath $env:GITHUB_PATH -Append
 
       - name: MSI bauen
         shell: pwsh
         run: |
-          wix extension add -g WixToolset.UI.wixext/5.0.2
+          wix extension add -g WixToolset.UI.wixext/5.0.2 2>&1 | Tee-Object -FilePath logs/05-wix-extension.log
           wix build installer/LiftUp.wxs `
             -d Version=${{ steps.version.outputs.value }} `
             -d PublishDir="$((Resolve-Path artifacts/publish).Path)" `
@@ -87,13 +94,14 @@ jobs:
             -d GitHubRepo="LiftUp" `
             -ext WixToolset.UI.wixext `
             -culture de-de `
-            -o artifacts/LiftUp-Setup.msi
+            -o artifacts/LiftUp-Setup.msi 2>&1 | Tee-Object -FilePath logs/06-msi.log
 
       - name: Prüfsumme schreiben
         shell: pwsh
         run: |
           $hash = (Get-FileHash artifacts/LiftUp-Setup.msi -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  LiftUp-Setup.msi" | Out-File -FilePath artifacts/SHA256SUMS.txt -Encoding ascii
+          Get-ChildItem artifacts | Out-File -FilePath logs/07-artifacts.log
 
       - name: Release veröffentlichen
         uses: softprops/action-gh-release@v2
@@ -106,3 +114,20 @@ jobs:
           generate_release_notes: true
           fail_on_unmatched_files: true
           draft: false
+
+      # Diagnose: Bei einem Fehlschlag wandern die Protokolle auf einen eigenen Branch,
+      # damit sie auch ohne angemeldeten Zugriff ausgewertet werden können.
+      - name: Protokoll ablegen
+        if: failure()
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if (-not (Test-Path logs)) { New-Item -ItemType Directory logs | Out-Null }
+          Get-ChildItem Env: | Where-Object { $_.Name -match '^(DOTNET|WIX|RUNNER)' } |
+            Out-File -FilePath logs/00-environment.log
+          dotnet --info 2>&1 | Out-File -Append -FilePath logs/00-environment.log
+          git checkout -b "ci-logs-${{ github.run_id }}"
+          git add -f logs
+          git commit -m "CI-Protokoll für Run ${{ github.run_id }}"
+          git push origin "ci-logs-${{ github.run_id }}"
