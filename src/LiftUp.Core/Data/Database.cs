@@ -12,7 +12,7 @@ namespace LiftUp.Core.Data;
 /// </summary>
 public sealed class Database
 {
-    public const int CurrentSchemaVersion = 4;
+    public const int CurrentSchemaVersion = 5;
 
     private readonly string _connectionString;
 
@@ -61,6 +61,7 @@ public sealed class Database
         SeedRoles(connection, transaction);
         SeedAdministrator(connection, transaction);
         SeedDeviceId(connection, transaction);
+        SeedDocumentTypes(connection, transaction);
         SeedTemplates(connection, transaction);
         transaction.Commit();
     }
@@ -109,7 +110,8 @@ public sealed class Database
             MigrateToVersion2(connection);
         }
 
-        // Version 3 und 4 legen nur neue Tabellen an; das erledigt das Schema per IF NOT EXISTS.
+        // Version 3 bis 5 legen nur neue Tabellen an; das erledigt das Schema per IF NOT EXISTS.
+        MigrateDocumentTypes(connection);
 
         using var command = Db.Command(connection, "UPDATE SchemaInfo SET Version = $version;");
         command.With("$version", CurrentSchemaVersion);
@@ -167,6 +169,39 @@ public sealed class Database
             """);
         rename.With("$archive", (int)Permission.ViewArchivedProjects);
         rename.ExecuteNonQuery();
+    }
+
+    /// <summary>Übernimmt vorhandene Typnamen bestehender Vorlagen in die Typenliste.</summary>
+    private static void MigrateDocumentTypes(SqliteConnection connection)
+    {
+        using var command = Db.Command(connection, """
+            INSERT INTO DocumentTypes (Id, Name, SortOrder, IsArchived, CreatedUtc)
+            SELECT lower(hex(randomblob(16))), t.Name, 100, 0, $createdUtc
+            FROM (SELECT DISTINCT DocumentType AS Name FROM Templates
+                  WHERE DocumentType IS NOT NULL AND trim(DocumentType) <> '') t
+            WHERE NOT EXISTS (SELECT 1 FROM DocumentTypes d WHERE d.Name = t.Name);
+            """);
+        command.With("$createdUtc", DateTime.UtcNow.ToDb());
+        command.ExecuteNonQuery();
+    }
+
+    private static void SeedDocumentTypes(SqliteConnection connection, SqliteTransaction transaction)
+    {
+        string[] defaults = ["Angebot", "Rechnung", "Lieferschein", "Bericht", "Korrespondenz", "Dokument"];
+        var sort = 1;
+
+        foreach (var name in defaults)
+        {
+            using var insert = Db.Command(connection, """
+                INSERT INTO DocumentTypes (Id, Name, SortOrder, IsArchived, CreatedUtc)
+                SELECT lower(hex(randomblob(16))), $name, $sort, 0, $createdUtc
+                WHERE NOT EXISTS (SELECT 1 FROM DocumentTypes WHERE Name = $name);
+                """, transaction);
+            insert.With("$name", name)
+                .With("$sort", sort++)
+                .With("$createdUtc", DateTime.UtcNow.ToDb());
+            insert.ExecuteNonQuery();
+        }
     }
 
     /// <summary>Legt eine brauchbare Startvorlage an, damit der PDF-Generator sofort nutzbar ist.</summary>
@@ -460,6 +495,14 @@ public sealed class Database
             RowVersion INTEGER NOT NULL DEFAULT 1
         );
 
+        CREATE TABLE IF NOT EXISTS DocumentTypes (
+            Id         TEXT PRIMARY KEY NOT NULL,
+            Name       TEXT NOT NULL COLLATE NOCASE UNIQUE,
+            SortOrder  INTEGER NOT NULL DEFAULT 0,
+            IsArchived INTEGER NOT NULL DEFAULT 0,
+            CreatedUtc TEXT NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS Images (
             Id          TEXT PRIMARY KEY NOT NULL,
             Name        TEXT NOT NULL COLLATE NOCASE,
@@ -494,6 +537,6 @@ public sealed class Database
         CREATE INDEX IF NOT EXISTS IX_ProjectDocuments_Project ON ProjectDocuments (ProjectId);
 
         INSERT INTO SchemaInfo (Version)
-        SELECT 4 WHERE NOT EXISTS (SELECT 1 FROM SchemaInfo);
+        SELECT 5 WHERE NOT EXISTS (SELECT 1 FROM SchemaInfo);
         """;
 }

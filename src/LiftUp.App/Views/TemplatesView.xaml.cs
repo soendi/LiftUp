@@ -19,7 +19,29 @@ public partial class TemplatesView : UserControl
             .Select(entry => new { entry.Token, entry.Description })
             .ToArray();
 
+        LoadDocumentTypes();
         LoadTemplates();
+    }
+
+    private void LoadDocumentTypes()
+    {
+        try
+        {
+            TypeBox.ItemsSource = _services.DocumentTypes.GetAll();
+        }
+        catch (LiftUpException exception)
+        {
+            InfoText.Text = exception.Message;
+        }
+    }
+
+    private void OnManageTypesClick(object sender, RoutedEventArgs e)
+    {
+        var dialog = new DocumentTypesWindow(_services) { Owner = Window.GetWindow(this) };
+        dialog.ShowDialog();
+
+        LoadDocumentTypes();
+        LoadTemplates(_templateId);
     }
 
     private void LoadTemplates(Guid? selectId = null)
@@ -65,7 +87,8 @@ public partial class TemplatesView : UserControl
             _templateId = template.Id;
 
             NameBox.Text = template.Name;
-            TypeBox.Text = template.DocumentType;
+            TypeBox.SelectedItem = (TypeBox.ItemsSource as IEnumerable<DocumentType>)?
+                .FirstOrDefault(type => string.Equals(type.Name, template.DocumentType, StringComparison.OrdinalIgnoreCase));
             ToggleActiveButton.IsEnabled = true;
             ToggleActiveButton.Content = template.IsActive ? "Deaktivieren" : "Aktivieren";
 
@@ -98,7 +121,8 @@ public partial class TemplatesView : UserControl
         ClearEditor();
 
         NameBox.Text = "Neue Vorlage";
-        TypeBox.Text = "Dokument";
+        TypeBox.SelectedItem = (TypeBox.ItemsSource as IEnumerable<DocumentType>)?
+            .FirstOrDefault(type => type.Name == "Dokument");
         HtmlBox.Text = """
             <!DOCTYPE html>
             <html lang="de">
@@ -126,7 +150,7 @@ public partial class TemplatesView : UserControl
     private void ClearEditor()
     {
         NameBox.Text = string.Empty;
-        TypeBox.Text = string.Empty;
+        TypeBox.SelectedItem = null;
         HtmlBox.Text = string.Empty;
         VersionBox.ItemsSource = null;
         ToggleActiveButton.IsEnabled = false;
@@ -137,7 +161,7 @@ public partial class TemplatesView : UserControl
         var input = new TemplateInput
         {
             Name = NameBox.Text,
-            DocumentType = TypeBox.Text,
+            DocumentType = (TypeBox.SelectedItem as DocumentType)?.Name ?? string.Empty,
             Html = HtmlBox.Text,
             IsActive = true,
         };

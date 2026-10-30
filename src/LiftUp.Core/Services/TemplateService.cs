@@ -13,6 +13,7 @@ public sealed class TemplateService
     private readonly Database _database;
     private readonly Session _actor;
     private readonly TemplateRepository _templates = new();
+    private readonly DocumentTypeRepository _types = new();
     private readonly ChangeLogWriter _changes;
 
     public TemplateService(Database database, Session actor)
@@ -22,11 +23,16 @@ public sealed class TemplateService
         _changes = new ChangeLogWriter(database);
     }
 
-    public IReadOnlyList<TemplateListItem> GetAll(bool includeInactive = true)
+    public IReadOnlyList<TemplateListItem> GetAll(bool includeInactive = true, string? documentType = null)
     {
         RequireRead();
         using var connection = _database.Open();
-        return _templates.GetAll(connection, null, includeInactive);
+        var items = _templates.GetAll(connection, null, includeInactive);
+
+        return string.IsNullOrWhiteSpace(documentType)
+            ? items
+            : items.Where(item => string.Equals(item.DocumentType, documentType.Trim(), StringComparison.OrdinalIgnoreCase))
+                .ToArray();
     }
 
     public DocumentTemplate Get(Guid id)
@@ -77,10 +83,12 @@ public sealed class TemplateService
             throw new ValidationException($"Es gibt bereits eine Vorlage mit dem Namen \"{name}\".");
         }
 
+        var documentType = RequireKnownType(connection, transaction, input.DocumentType);
+
         var template = new DocumentTemplate
         {
             Name = name,
-            DocumentType = string.IsNullOrWhiteSpace(input.DocumentType) ? "Dokument" : input.DocumentType.Trim(),
+            DocumentType = documentType,
             CurrentVersion = 1,
             IsActive = input.IsActive,
             CreatedUtc = now,
@@ -128,9 +136,10 @@ public sealed class TemplateService
         }
 
         var nextVersion = Math.Max(template.CurrentVersion, 0) + 1;
+        var documentType = RequireKnownType(connection, transaction, input.DocumentType);
 
         template.Name = name;
-        template.DocumentType = string.IsNullOrWhiteSpace(input.DocumentType) ? "Dokument" : input.DocumentType.Trim();
+        template.DocumentType = documentType;
         template.CurrentVersion = nextVersion;
         template.IsActive = input.IsActive;
         template.UpdatedUtc = now;
@@ -187,6 +196,23 @@ public sealed class TemplateService
         {
             throw new PermissionDeniedException(Permission.ManageTemplates);
         }
+    }
+
+    /// <summary>Stellt sicher, dass der Typ in der zentralen Liste steht.</summary>
+    private string RequireKnownType(
+        Microsoft.Data.Sqlite.SqliteConnection connection,
+        Microsoft.Data.Sqlite.SqliteTransaction? transaction,
+        string? documentType)
+    {
+        var name = string.IsNullOrWhiteSpace(documentType) ? "Dokument" : documentType.Trim();
+
+        if (_types.GetByName(connection, transaction, name) is null)
+        {
+            throw new ValidationException(
+                $"Der Dokumenttyp \"{name}\" ist nicht bekannt. Bitte unter Vorlagen → Typen verwalten anlegen.");
+        }
+
+        return name;
     }
 
     private static string RequireName(string? name)

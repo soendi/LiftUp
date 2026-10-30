@@ -23,6 +23,10 @@
                     <ComboBox x:Name="ProjectBox" Width="240" Margin="0,0,14,0"
                               DisplayMemberPath="DisplayText" SelectionChanged="OnProjectChanged" />
 
+                    <TextBlock Text="Typ" VerticalAlignment="Center" Margin="0,0,6,0" Style="{StaticResource LiftUpFieldLabel}" />
+                    <ComboBox x:Name="TypeFilterBox" Width="140" Margin="0,0,14,0"
+                              DisplayMemberPath="Display" SelectionChanged="OnTypeChanged" />
+
                     <TextBlock Text="Vorlage" VerticalAlignment="Center" Margin="0,0,6,0" Style="{StaticResource LiftUpFieldLabel}" />
                     <ComboBox x:Name="TemplateBox" Width="190" DisplayMemberPath="Name" />
                 </StackPanel>

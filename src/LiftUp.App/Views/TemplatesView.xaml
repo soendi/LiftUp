@@ -54,7 +54,8 @@
                         <TextBox x:Name="NameBox" Width="220" Margin="0,0,14,0" />
 
                         <TextBlock Text="Dokumenttyp" VerticalAlignment="Center" Margin="0,0,6,0" Style="{StaticResource LiftUpFieldLabel}" />
-                        <TextBox x:Name="TypeBox" Width="150" Margin="0,0,14,0" />
+                        <ComboBox x:Name="TypeBox" Width="150" Margin="0,0,6,0" DisplayMemberPath="Name" />
+                        <Button Content="Typen …" Margin="0,0,14,0" Click="OnManageTypesClick" />
 
                         <TextBlock Text="Version" VerticalAlignment="Center" Margin="0,0,6,0" Style="{StaticResource LiftUpFieldLabel}" />
                         <ComboBox x:Name="VersionBox" Width="120" DisplayMemberPath="VersionText" SelectionChanged="OnVersionSelected" />

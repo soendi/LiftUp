@@ -11,6 +11,8 @@ public partial class PdfView : UserControl
 {
     private sealed record ProjectOption(Guid Id, string DisplayText);
 
+    private sealed record TypeOption(string? Name, string Display);
+
     private sealed record FormatOption(string Value, string Name);
 
     private sealed record OrientationOption(bool Landscape, string Name);
@@ -30,6 +32,7 @@ public partial class PdfView : UserControl
         OrientationBox.ItemsSource = Orientations;
         OrientationBox.SelectedIndex = 0;
 
+        LoadTypes();
         LoadProjects();
         LoadTemplates();
         LoadDocuments();
@@ -56,17 +59,39 @@ public partial class PdfView : UserControl
         }
     }
 
+    private void LoadTypes()
+    {
+        var options = new List<TypeOption> { new(null, "Alle Typen") };
+
+        try
+        {
+            options.AddRange(_services.DocumentTypes.GetAll().Select(type => new TypeOption(type.Name, type.Name)));
+        }
+        catch (LiftUpException exception)
+        {
+            InfoText.Text = exception.Message;
+        }
+
+        TypeFilterBox.ItemsSource = options;
+        TypeFilterBox.SelectedIndex = 0;
+    }
+
+    private void OnTypeChanged(object sender, SelectionChangedEventArgs e) => LoadTemplates();
+
     private void LoadTemplates()
     {
         try
         {
-            var templates = _services.Templates.GetAll(includeInactive: false);
+            var documentType = (TypeFilterBox.SelectedItem as TypeOption)?.Name;
+            var templates = _services.Templates.GetAll(includeInactive: false, documentType: documentType);
             TemplateBox.ItemsSource = templates;
             TemplateBox.SelectedIndex = templates.Count > 0 ? 0 : -1;
 
             if (templates.Count == 0)
             {
-                InfoText.Text = "Keine aktive Vorlage vorhanden. Bitte unter „Vorlagen“ eine anlegen.";
+                InfoText.Text = documentType is null
+                    ? "Keine aktive Vorlage vorhanden. Bitte unter „Vorlagen“ eine anlegen."
+                    : $"Keine aktive Vorlage für den Typ „{documentType}“.";
             }
         }
         catch (LiftUpException exception)
