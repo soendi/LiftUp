@@ -4,6 +4,10 @@ on:
   push:
     tags:
       - "v*"
+    # Erlaubt einen Release direkt aus dem Arbeitsbranch, solange kein Tag gepusht
+    # werden kann. Nach dem ersten Release kann dieser Eintrag entfallen.
+    branches:
+      - "freebuff/444d1acf47b98bf84d8c9e9c"
   workflow_dispatch:
     inputs:
       version:
@@ -29,7 +33,18 @@ jobs:
         id: version
         shell: pwsh
         run: |
-          $version = if ("${{ github.ref_type }}" -eq "tag") { "${{ github.ref_name }}".TrimStart("v") } else { "${{ inputs.version }}" }
+          $version = $null
+          if ("${{ github.ref_type }}" -eq "tag") {
+            $version = "${{ github.ref_name }}".TrimStart("v")
+          }
+          elseif (-not [string]::IsNullOrWhiteSpace("${{ inputs.version }}")) {
+            $version = "${{ inputs.version }}"
+          }
+          else {
+            $match = Select-String -Path Directory.Build.props -Pattern '<Version>([^<]+)</Version>'
+            if ($match) { $version = $match.Matches[0].Groups[1].Value }
+          }
+
           if ([string]::IsNullOrWhiteSpace($version)) { throw "Version konnte nicht bestimmt werden." }
           "value=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           Write-Host "Version: $version"
@@ -83,8 +98,11 @@ jobs:
       - name: Release veröffentlichen
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: v${{ steps.version.outputs.value }}
+          name: LiftUp ${{ steps.version.outputs.value }}
           files: |
             artifacts/LiftUp-Setup.msi
             artifacts/SHA256SUMS.txt
           generate_release_notes: true
+          fail_on_unmatched_files: true
           draft: false
