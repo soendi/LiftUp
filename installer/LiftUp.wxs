@@ -3,7 +3,7 @@
      xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
 
   <Package Name="LiftUp"
-           Manufacturer="LiftUp"
+           Manufacturer="Lukas Sonderegger"
            Version="$(var.Version)"
            UpgradeCode="9E4C21B0-3B76-4C55-9F1E-3D6B0C7A8E42"
            Language="1031"
@@ -12,7 +12,7 @@
            Compressed="yes">
 
     <SummaryInformation Description="LiftUp – Projekt- und Benutzerverwaltung"
-                        Manufacturer="LiftUp" />
+                        Manufacturer="Lukas Sonderegger" />
 
     <!-- Benutzerinstallation: kein Adminrecht nötig, damit stille Updates ohne UAC laufen. -->
     <MajorUpgrade DowngradeErrorMessage="Eine neuere Version von LiftUp ist bereits installiert." />

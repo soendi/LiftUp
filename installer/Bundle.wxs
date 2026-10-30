@@ -6,7 +6,7 @@
   <!-- Installationsprogramm: prüft die .NET-Desktop-Runtime und lädt sie bei Bedarf
        selbst nach, bevor das MSI läuft. Stille Installation: LiftUp-Setup.exe /quiet -->
   <Bundle Name="LiftUp"
-          Manufacturer="LiftUp"
+          Manufacturer="Lukas Sonderegger"
           Version="$(var.Version)"
           UpgradeCode="5B8E0F31-2A64-4C7D-8E19-6D3F5A0B7C48"
           IconSourceFile="$(var.IconPath)">
