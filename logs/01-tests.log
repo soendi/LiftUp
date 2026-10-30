@@ -1,0 +1,9 @@
+  Determining projects to restore...
+  Restored D:\a\LiftUp\LiftUp\src\LiftUp.Core\LiftUp.Core.csproj (in 4.79 sec).
+  Restored D:\a\LiftUp\LiftUp\tests\LiftUp.Core.Tests\LiftUp.Core.Tests.csproj (in 5.56 sec).
+  LiftUp.Core -> D:\a\LiftUp\LiftUp\src\LiftUp.Core\bin\Release\net8.0\LiftUp.Core.dll
+  LiftUp.Core.Tests -> D:\a\LiftUp\LiftUp\tests\LiftUp.Core.Tests\bin\Release\net8.0\LiftUp.Core.Tests.dll
+Test run for D:\a\LiftUp\LiftUp\tests\LiftUp.Core.Tests\bin\Release\net8.0\LiftUp.Core.Tests.dll (.NETCoreApp,Version=v8.0)
+A total of 1 test files matched the specified pattern.
+
+Passed!  - Failed:     0, Passed:    50, Skipped:     0, Total:    50, Duration: 7 s - LiftUp.Core.Tests.dll (net8.0)

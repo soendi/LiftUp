@@ -1,0 +1,2 @@
+D:\a\LiftUp\LiftUp\installer\Bundle.wxs(15) : error WIX0010: The WixStandardBootstrapperApplication element must have a value for exactly one of the LicenseFile or LicenseUrl attributes.
+D:\a\LiftUp\LiftUp\installer\Bundle.wxs(14) : error WIX0044: The BootstrapperApplication element's Name or SourceFile attribute was not found; one of these is required.

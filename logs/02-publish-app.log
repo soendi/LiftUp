@@ -1,0 +1,6 @@
+  Determining projects to restore...
+  Restored D:\a\LiftUp\LiftUp\src\LiftUp.App\LiftUp.App.csproj (in 221 ms).
+  Restored D:\a\LiftUp\LiftUp\src\LiftUp.Core\LiftUp.Core.csproj (in 221 ms).
+  LiftUp.Core -> D:\a\LiftUp\LiftUp\src\LiftUp.Core\bin\Release\net8.0\LiftUp.Core.dll
+  LiftUp.App -> D:\a\LiftUp\LiftUp\src\LiftUp.App\bin\Release\net8.0-windows\win-x64\LiftUp.App.dll
+  LiftUp.App -> D:\a\LiftUp\LiftUp\artifacts\publish\
