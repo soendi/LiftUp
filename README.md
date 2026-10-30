@@ -319,3 +319,56 @@ Berechtigungen: Microsoft `offline_access Files.ReadWrite.AppFolder`, Google `dr
 - Die Update-Logik ist gegen einen HTTP-Stub getestet, nicht gegen ein echtes GitHub-Release.
 - `installer/Install-ServerDatabase.ps1` konnte hier nicht ausgeführt werden (kein PowerShell unter Linux);
   geprüft ist nur die Logik, nicht der Lauf gegen einen echten PostgreSQL-Server.
+
+## Prüfliste vor der Auslieferung (Windows)
+
+Einmal auf einem frischen Windows-Rechner durchgehen. Was hier nicht abgehakt ist, gilt als ungetestet.
+
+**Installation**
+
+- [ ] `LiftUp-Setup.exe` auf einem Rechner ohne .NET-Desktop-Runtime ausführen; die Runtime wird nachgeladen.
+- [ ] Startmenü-Eintrag vorhanden, Programm startet ohne Fehlermeldung.
+- [ ] Installation ohne Administratorrechte möglich.
+- [ ] Deinstallation entfernt die Programmdateien, lässt `%LOCALAPPDATA%\LiftUp` (Datenbank, Bilder, Sicherungen) stehen.
+- [ ] Installation über eine vorhandene Version (Update) übernimmt Einstellungen und Datenbank.
+
+**Anmeldung und Rechte**
+
+- [ ] Erstanmeldung `admin`/`admin` erzwingt einen Passwortwechsel.
+- [ ] Je einen Benutzer pro Rolle anlegen: Administrator, Projektleiter, Mitarbeiter, Leser.
+- [ ] Mit jeder Rolle anmelden: Leser sieht keine bearbeitenden Schaltflächen, Mitarbeiter pflegt Projekte,
+      Administrator sieht Benutzer und Sicherung.
+- [ ] Falsches Passwort: Meldung prüfen und notieren, was passiert.
+
+**Projekte**
+
+- [ ] Neues Projekt erhält die nächste Nummer im Format `JJJJ-0001`.
+- [ ] Projektordner wird mit den Standard-Unterordnern angelegt, auch auf einem Netzlaufwerk.
+- [ ] Suche, Filter und Sortierung liefern die erwarteten Treffer.
+- [ ] Archivieren ändert nur den Status; nichts wird verschoben oder gelöscht. Wiederherstellen funktioniert.
+- [ ] Ein Projekt auf einer Freigabe anlegen und mit einem zweiten Benutzer öffnen.
+
+**PDF**
+
+- [ ] Vorlage anlegen und ändern; die Versionierung ist in der Historie sichtbar.
+- [ ] Platzhalter `{{project.*}}`, `{{date}}`, `{{user}}`, `{{snippet:…}}`, `{{bild:…}}` werden ersetzt –
+      auch mit Umlauten und Sonderzeichen.
+- [ ] PDF landet in `03_PDF`, Eintrag in der Historie mit Vorlagenversion.
+- [ ] Ohne WebView2-Runtime: verständliche Fehlermeldung statt Absturz.
+- [ ] Bild aus der Bibliothek erscheint im PDF, auch wenn das Projekt auf einer Freigabe liegt.
+
+**Sicherung**
+
+- [ ] Lokal sichern; die Datei erscheint in der Liste und im gewählten Ordner.
+- [ ] Aufbewahrung prüfen: alte Sicherungen verschwinden, die jüngste bleibt.
+- [ ] Wiederherstellen: Sicherheitsbackup entsteht, Daten sind zurück, Hinweis auf Neustart erscheint.
+- [ ] Google Drive mit einem Firmenkonto anmelden (Gerätecode im Browser bestätigen), sichern, Datei im
+      App-Ordner des Kontos prüfen.
+- [ ] Dasselbe mit OneDrive.
+- [ ] Nach Ablauf der Token-Gültigkeit erneut sichern: die Anmeldung erneuert sich ohne Zutun.
+- [ ] Abmelden entfernt die Verbindung; Sichern mit Cloud-Ziel meldet sauber, dass keine Anmeldung vorliegt.
+
+**Update**
+
+- [ ] Ältere Version installieren, nach Updates suchen lassen, stilles Update bis zum Neustart begleiten.
+- [ ] Nach dem Update sind Datenbank und Einstellungen unverändert.
