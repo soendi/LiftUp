@@ -103,10 +103,20 @@ jobs:
           "$hash  LiftUp-Setup.msi" | Out-File -FilePath artifacts/SHA256SUMS.txt -Encoding ascii
           Get-ChildItem artifacts | Out-File -FilePath logs/07-artifacts.log
 
+      # Der Release-Action legt den Tag sonst am Default-Branch an; hier wird er fest
+      # auf den tatsächlich veröffentlichten Commit gesetzt.
+      - name: Tag auf diesen Commit setzen
+        shell: pwsh
+        run: |
+          $tag = "v${{ steps.version.outputs.value }}"
+          git tag -f $tag $env:GITHUB_SHA
+          git push origin "refs/tags/$tag" --force
+
       - name: Release veröffentlichen
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.value }}
+          target_commitish: ${{ github.sha }}
           name: LiftUp ${{ steps.version.outputs.value }}
           files: |
             artifacts/LiftUp-Setup.msi
