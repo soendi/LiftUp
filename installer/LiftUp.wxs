@@ -21,7 +21,6 @@
     <Icon Id="LiftUpIcon" SourceFile="$(var.IconPath)" />
     <Property Id="ARPPRODUCTICON" Value="LiftUpIcon" />
     <Property Id="ARPHELPLINK" Value="https://github.com/$(var.GitHubOwner)/$(var.GitHubRepo)" />
-    <Property Id="ARPNOMODIFY" Value="1" />
 
     <!-- Voraussetzung: .NET 8 Desktop Runtime. Fehlt sie, bricht das MSI mit Hinweis ab;
          LiftUpSetup.exe (Bundle) installiert sie bei Bedarf nach. -->
