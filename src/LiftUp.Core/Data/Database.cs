@@ -12,7 +12,7 @@ namespace LiftUp.Core.Data;
 /// </summary>
 public sealed class Database
 {
-    public const int CurrentSchemaVersion = 2;
+    public const int CurrentSchemaVersion = 3;
 
     private readonly string _connectionString;
 
@@ -61,6 +61,7 @@ public sealed class Database
         SeedRoles(connection, transaction);
         SeedAdministrator(connection, transaction);
         SeedDeviceId(connection, transaction);
+        SeedTemplates(connection, transaction);
         transaction.Commit();
     }
 
@@ -107,6 +108,8 @@ public sealed class Database
         {
             MigrateToVersion2(connection);
         }
+
+        // Version 3 legt nur neue Tabellen an; das erledigt das Schema per IF NOT EXISTS.
 
         using var command = Db.Command(connection, "UPDATE SchemaInfo SET Version = $version;");
         command.With("$version", CurrentSchemaVersion);
@@ -165,6 +168,64 @@ public sealed class Database
         rename.With("$archive", (int)Permission.ViewArchivedProjects);
         rename.ExecuteNonQuery();
     }
+
+    /// <summary>Legt eine brauchbare Startvorlage an, damit der PDF-Generator sofort nutzbar ist.</summary>
+    private static void SeedTemplates(SqliteConnection connection, SqliteTransaction transaction)
+    {
+        using var count = Db.Command(connection, "SELECT COUNT(1) FROM Templates;", transaction);
+        if (Convert.ToInt64(count.ExecuteScalar(), CultureInfo.InvariantCulture) > 0)
+        {
+            return;
+        }
+
+        var templateId = Guid.NewGuid();
+        var now = DateTime.UtcNow;
+
+        using var insert = Db.Command(connection, """
+            INSERT INTO Templates
+                (Id, Name, DocumentType, CurrentVersion, IsActive, CreatedUtc, CreatedBy,
+                 UpdatedUtc, UpdatedBy, RowVersion, IsDeleted)
+            VALUES ($id, 'Standard-Dokument', 'Dokument', 1, 1, $createdUtc, 'System', $createdUtc, 'System', 1, 0);
+
+            INSERT INTO TemplateVersions (Id, TemplateId, Version, Html, CreatedUtc, CreatedBy)
+            VALUES ($versionId, $id, 1, $html, $createdUtc, 'System');
+            """, transaction);
+        insert.With("$id", templateId.ToString("D"))
+            .With("$versionId", Guid.NewGuid().ToString("D"))
+            .With("$html", DefaultTemplateHtml)
+            .With("$createdUtc", now.ToDb());
+        insert.ExecuteNonQuery();
+    }
+
+    private const string DefaultTemplateHtml = """
+        <!DOCTYPE html>
+        <html lang="de">
+        <head>
+          <meta charset="utf-8" />
+          <style>
+            @page { size: A4; margin: 20mm 18mm; }
+            body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 11pt; color: #1f2933; }
+            h1 { font-size: 18pt; margin: 0 0 4mm 0; }
+            .meta { color: #52606d; font-size: 9.5pt; margin-bottom: 8mm; }
+            table { width: 100%; border-collapse: collapse; }
+            td { padding: 2mm 0; vertical-align: top; }
+            .label { width: 40mm; color: #52606d; }
+            .note { margin-top: 8mm; white-space: pre-wrap; }
+          </style>
+        </head>
+        <body>
+          <h1>{{project.name}}</h1>
+          <div class="meta">Projekt {{project.number}} · {{date}}</div>
+          <table>
+            <tr><td class="label">Kunde</td><td>{{project.customer}}</td></tr>
+            <tr><td class="label">Ansprechpartner</td><td>{{project.contact}}</td></tr>
+            <tr><td class="label">Verantwortlich</td><td>{{project.responsible}}</td></tr>
+            <tr><td class="label">Status</td><td>{{project.status}}</td></tr>
+          </table>
+          <div class="note">{{project.description}}</div>
+        </body>
+        </html>
+        """;
 
     private static void SeedRoles(SqliteConnection connection, SqliteTransaction transaction)
     {
@@ -346,6 +407,59 @@ public sealed class Database
             LastNumber INTEGER NOT NULL DEFAULT 0
         );
 
+        CREATE TABLE IF NOT EXISTS Templates (
+            Id             TEXT PRIMARY KEY NOT NULL,
+            Name           TEXT NOT NULL COLLATE NOCASE UNIQUE,
+            DocumentType   TEXT NOT NULL DEFAULT '',
+            CurrentVersion INTEGER NOT NULL DEFAULT 0,
+            IsActive       INTEGER NOT NULL DEFAULT 1,
+            CreatedUtc     TEXT NOT NULL,
+            CreatedBy      TEXT NULL,
+            UpdatedUtc     TEXT NOT NULL,
+            UpdatedBy      TEXT NULL,
+            RowVersion     INTEGER NOT NULL DEFAULT 1,
+            IsDeleted      INTEGER NOT NULL DEFAULT 0
+        );
+
+        CREATE TABLE IF NOT EXISTS TemplateVersions (
+            Id         TEXT PRIMARY KEY NOT NULL,
+            TemplateId TEXT NOT NULL REFERENCES Templates(Id),
+            Version    INTEGER NOT NULL,
+            Html       TEXT NOT NULL,
+            CreatedUtc TEXT NOT NULL,
+            CreatedBy  TEXT NOT NULL,
+            UNIQUE (TemplateId, Version)
+        );
+
+        CREATE TABLE IF NOT EXISTS ProjectDocuments (
+            Id              TEXT PRIMARY KEY NOT NULL,
+            ProjectId       TEXT NOT NULL REFERENCES Projects(Id),
+            TemplateId      TEXT NOT NULL,
+            TemplateName    TEXT NOT NULL,
+            TemplateVersion INTEGER NOT NULL,
+            FileName        TEXT NOT NULL,
+            FilePath        TEXT NOT NULL,
+            SizeBytes       INTEGER NOT NULL DEFAULT 0,
+            CreatedUtc      TEXT NOT NULL,
+            CreatedBy       TEXT NOT NULL,
+            RowVersion      INTEGER NOT NULL DEFAULT 1,
+            IsDeleted       INTEGER NOT NULL DEFAULT 0
+        );
+
+        CREATE TABLE IF NOT EXISTS TextSnippets (
+            Id         TEXT PRIMARY KEY NOT NULL,
+            Name       TEXT NOT NULL COLLATE NOCASE UNIQUE,
+            Category   TEXT NULL,
+            Html       TEXT NOT NULL,
+            IsArchived INTEGER NOT NULL DEFAULT 0,
+            Version    INTEGER NOT NULL DEFAULT 1,
+            CreatedUtc TEXT NOT NULL,
+            CreatedBy  TEXT NULL,
+            UpdatedUtc TEXT NOT NULL,
+            UpdatedBy  TEXT NULL,
+            RowVersion INTEGER NOT NULL DEFAULT 1
+        );
+
         CREATE UNIQUE INDEX IF NOT EXISTS UX_Projects_Number
             ON Projects (Number) WHERE Number IS NOT NULL AND IsDeleted = 0;
 
@@ -355,8 +469,9 @@ public sealed class Database
         CREATE INDEX IF NOT EXISTS IX_Users_RoleId ON Users (RoleId);
         CREATE INDEX IF NOT EXISTS IX_Projects_Status ON Projects (Status);
         CREATE INDEX IF NOT EXISTS IX_ChangeLog_Pending ON ChangeLog (SyncedUtc) WHERE SyncedUtc IS NULL;
+        CREATE INDEX IF NOT EXISTS IX_ProjectDocuments_Project ON ProjectDocuments (ProjectId);
 
         INSERT INTO SchemaInfo (Version)
-        SELECT 2 WHERE NOT EXISTS (SELECT 1 FROM SchemaInfo);
+        SELECT 3 WHERE NOT EXISTS (SELECT 1 FROM SchemaInfo);
         """;
 }

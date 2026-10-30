@@ -1,0 +1,102 @@
+<UserControl x:Class="LiftUp.App.Views.TemplatesView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="320" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0" Style="{StaticResource LiftUpCard}" Padding="10" Margin="0,0,10,0">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Text="Vorlagen" Style="{StaticResource LiftUpFieldLabel}" Margin="0,0,0,8" />
+
+                    <DataGrid x:Name="TemplatesGrid" Grid.Row="1" IsReadOnly="True" SelectionChanged="OnTemplateSelected">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="*" />
+                            <DataGridTextColumn Header="Version" Binding="{Binding VersionText}" Width="70" />
+                            <DataGridTextColumn Header="Status" Binding="{Binding StatusText}" Width="75" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+                        <Button Content="Neue Vorlage" Click="OnNewClick" />
+                        <Button x:Name="ToggleActiveButton" Content="Aktivieren" Click="OnToggleActiveClick" IsEnabled="False" Margin="0" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <Border Grid.Column="1" Style="{StaticResource LiftUpCard}" Padding="10">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
+                        <TextBlock Text="Name" VerticalAlignment="Center" Margin="0,0,6,0" Style="{StaticResource LiftUpFieldLabel}" />
+                        <TextBox x:Name="NameBox" Width="220" Margin="0,0,14,0" />
+
+                        <TextBlock Text="Dokumenttyp" VerticalAlignment="Center" Margin="0,0,6,0" Style="{StaticResource LiftUpFieldLabel}" />
+                        <TextBox x:Name="TypeBox" Width="150" Margin="0,0,14,0" />
+
+                        <TextBlock Text="Version" VerticalAlignment="Center" Margin="0,0,6,0" Style="{StaticResource LiftUpFieldLabel}" />
+                        <ComboBox x:Name="VersionBox" Width="120" DisplayMemberPath="VersionText" SelectionChanged="OnVersionSelected" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,8">
+                        <Button Content="Vorschau" Click="OnPreviewClick" />
+                        <Button Content="Als neue Version speichern" Style="{StaticResource LiftUpPrimaryButton}" Margin="0" Click="OnSaveClick" />
+                    </StackPanel>
+
+                    <Grid Grid.Row="2">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="300" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBox x:Name="HtmlBox" Grid.Column="0" Margin="0,0,10,0"
+                                 AcceptsReturn="True" AcceptsTab="True" TextWrapping="NoWrap"
+                                 VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                                 FontFamily="Consolas" FontSize="12" />
+
+                        <Border Grid.Column="1" BorderBrush="{StaticResource LiftUpBorder}" BorderThickness="1">
+                            <wv2:WebView2 x:Name="PreviewBrowser" />
+                        </Border>
+                    </Grid>
+
+                    <Expander Grid.Row="3" Header="Platzhalter (Doppelklick fügt ein)" Margin="0,8,0,0" IsExpanded="True">
+                        <ListBox x:Name="PlaceholderList" Height="120" MouseDoubleClick="OnPlaceholderDoubleClick">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{Binding Token}" FontFamily="Consolas" Width="220" />
+                                        <TextBlock Text="{Binding Description}" Style="{StaticResource LiftUpMutedText}" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Expander>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <TextBlock x:Name="InfoText" Grid.Row="1" Style="{StaticResource LiftUpMutedText}" Margin="2,8,0,0" />
+    </Grid>
+</UserControl>

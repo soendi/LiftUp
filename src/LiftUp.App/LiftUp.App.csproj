@@ -13,4 +13,9 @@
   <ItemGroup>
     <ProjectReference Include="..\LiftUp.Core\LiftUp.Core.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <!-- Auf Windows vorinstallierte WebView2-Engine: rendert HTML/CSS originalgetreu nach PDF. -->
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.*" />
+  </ItemGroup>
 </Project>

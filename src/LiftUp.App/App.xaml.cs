@@ -69,4 +69,7 @@ public sealed class AppServices(Database database)
     public ProjectService Projects => new(Database, CurrentSession);
     public UserService Users => new(Database, CurrentSession);
     public RoleService Roles => new(Database, CurrentSession);
+    public TemplateService Templates => new(Database, CurrentSession);
+    public SnippetService Snippets => new(Database, CurrentSession);
+    public DocumentService Documents => new(Database, CurrentSession, new Documents.WebView2PdfRenderer());
 }

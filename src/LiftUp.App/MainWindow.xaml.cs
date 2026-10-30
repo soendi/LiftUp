@@ -24,6 +24,16 @@ public partial class MainWindow : Window
             Tabs.Items.Add(new TabItem { Header = "Projekte", Content = new ProjectsView(_services) });
         }
 
+        if (session.Can(Permission.CreateDocuments) || session.Can(Permission.ManageTemplates))
+        {
+            Tabs.Items.Add(new TabItem { Header = "PDF", Content = new PdfView(_services) });
+        }
+
+        if (session.Can(Permission.ManageTemplates))
+        {
+            Tabs.Items.Add(new TabItem { Header = "Vorlagen", Content = new TemplatesView(_services) });
+        }
+
         if (session.Can(Permission.ManageUsers))
         {
             Tabs.Items.Add(new TabItem { Header = "Benutzer", Content = new UsersView(_services) });
