@@ -12,6 +12,9 @@ public sealed class PlaceholderContext
 
     /// <summary>Liefert den HTML-Inhalt eines Textbausteins (Name, ohne Präfix).</summary>
     public Func<string, string?>? SnippetResolver { get; init; }
+
+    /// <summary>Liefert den HTML-Baustein eines Bildes (Name, ohne Präfix).</summary>
+    public Func<string, string?>? ImageResolver { get; init; }
 }
 
 /// <summary>
@@ -25,6 +28,8 @@ public static class PlaceholderRenderer
         new(@"\{\{\s*([A-Za-z0-9_.:\-]+)\s*\}\}", RegexOptions.Compiled);
 
     public const string SnippetPrefix = "snippet:";
+    public const string ImagePrefix = "bild:";
+    public const string ImagePrefixEnglish = "image:";
 
     /// <summary>Übersicht für den Vorlageneditor.</summary>
     public static IReadOnlyList<(string Token, string Description)> Known { get; } =
@@ -41,6 +46,7 @@ public static class PlaceholderRenderer
         ("{{datetime}}", "Datum und Uhrzeit"),
         ("{{user}}", "Angemeldeter Benutzer"),
         ("{{snippet:Name}}", "Textbaustein mit diesem Namen"),
+        ("{{bild:Name}}", "Bild aus der Bibliothek"),
     ];
 
     public static IReadOnlyList<string> FindPlaceholders(string html)
@@ -77,6 +83,16 @@ public static class PlaceholderRenderer
         {
             var name = token[SnippetPrefix.Length..];
             return context.SnippetResolver?.Invoke(name) ?? string.Empty;
+        }
+
+        if (key.StartsWith(ImagePrefix, StringComparison.Ordinal))
+        {
+            return context.ImageResolver?.Invoke(token[ImagePrefix.Length..]) ?? string.Empty;
+        }
+
+        if (key.StartsWith(ImagePrefixEnglish, StringComparison.Ordinal))
+        {
+            return context.ImageResolver?.Invoke(token[ImagePrefixEnglish.Length..]) ?? string.Empty;
         }
 
         return key switch

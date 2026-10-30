@@ -1,0 +1,92 @@
+<UserControl x:Class="LiftUp.App.Views.ImagesView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Style="{StaticResource LiftUpCard}" Padding="12" Margin="0,0,0,10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" Orientation="Horizontal">
+                    <TextBlock Text="Name" VerticalAlignment="Center" Margin="0,0,6,0" Style="{StaticResource LiftUpFieldLabel}" />
+                    <TextBox x:Name="NameBox" Width="150" Margin="0,0,10,0" />
+
+                    <TextBlock Text="Kategorie" VerticalAlignment="Center" Margin="0,0,6,0" Style="{StaticResource LiftUpFieldLabel}" />
+                    <TextBox x:Name="ImportCategoryBox" Width="130" Margin="0,0,10,0" />
+
+                    <Button Content="Bild importieren" Style="{StaticResource LiftUpPrimaryButton}" Click="OnImportClick" />
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="14,0,0,0">
+                    <TextBlock Text="Bereich" VerticalAlignment="Center" Margin="0,0,6,0" Style="{StaticResource LiftUpFieldLabel}" />
+                    <ComboBox x:Name="ProjectBox" Width="230" Margin="0,0,12,0"
+                              DisplayMemberPath="Name" SelectionChanged="OnFilterChanged" />
+
+                    <TextBlock Text="Kategorie" VerticalAlignment="Center" Margin="0,0,6,0" Style="{StaticResource LiftUpFieldLabel}" />
+                    <ComboBox x:Name="CategoryFilterBox" Width="150" SelectionChanged="OnCategoryChanged" />
+
+                    <TextBlock Text="Suche" VerticalAlignment="Center" Margin="12,0,6,0" Style="{StaticResource LiftUpFieldLabel}" />
+                    <TextBox x:Name="SearchBox" Width="150" TextChanged="OnSearchChanged" />
+                </StackPanel>
+
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <CheckBox x:Name="ArchiveToggle" Content="Archivierte anzeigen" Click="OnFilterChanged" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="340" />
+            </Grid.ColumnDefinitions>
+
+            <DataGrid x:Name="ImagesGrid" Grid.Column="0" IsReadOnly="True" Margin="0,0,10,0"
+                      SelectionChanged="OnSelectionChanged">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="*" />
+                    <DataGridTextColumn Header="Kategorie" Binding="{Binding Category}" Width="150" />
+                    <DataGridTextColumn Header="Bereich" Binding="{Binding ScopeText}" Width="90" />
+                    <DataGridTextColumn Header="Größe" Binding="{Binding SizeText}" Width="90" />
+                    <DataGridTextColumn Header="Status" Binding="{Binding StatusText}" Width="90" />
+                </DataGrid.Columns>
+            </DataGrid>
+
+            <Border Grid.Column="1" Style="{StaticResource LiftUpCard}" Padding="10">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <Border Grid.Row="0" Background="White" BorderBrush="{StaticResource LiftUpBorder}" BorderThickness="1">
+                        <Image x:Name="PreviewImage" Stretch="Uniform" Margin="6" />
+                    </Border>
+
+                    <StackPanel Grid.Row="1" Margin="0,8,0,0">
+                        <TextBlock x:Name="PlaceholderText" FontFamily="Consolas" FontSize="12" TextWrapping="Wrap" />
+                        <TextBlock Style="{StaticResource LiftUpMutedText}" TextWrapping="Wrap" Margin="0,4,0,0"
+                                   Text="Diesen Baustein in eine Vorlage einsetzen – das Bild wird als Data-URI eingebettet." />
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+                        <Button x:Name="ArchiveButton" Content="Archivieren" Click="OnArchiveClick" IsEnabled="False" Margin="0" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <TextBlock x:Name="InfoText" Grid.Row="2" Style="{StaticResource LiftUpMutedText}" Margin="2,8,0,0" />
+    </Grid>
+</UserControl>

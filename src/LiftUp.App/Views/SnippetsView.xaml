@@ -1,0 +1,75 @@
+<UserControl x:Class="LiftUp.App.Views.SnippetsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="330" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0" Style="{StaticResource LiftUpCard}" Padding="10" Margin="0,0,10,0">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Text="Textbausteine" Style="{StaticResource LiftUpFieldLabel}" Margin="0,0,0,8" />
+
+                    <DataGrid x:Name="SnippetsGrid" Grid.Row="1" IsReadOnly="True" SelectionChanged="OnSelected">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="*" />
+                            <DataGridTextColumn Header="Kategorie" Binding="{Binding Category}" Width="110" />
+                            <DataGridTextColumn Header="Version" Binding="{Binding VersionText}" Width="70" />
+                            <DataGridTextColumn Header="Status" Binding="{Binding StatusText}" Width="80" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+                        <Button Content="Neu" Click="OnNewClick" />
+                        <Button x:Name="ArchiveButton" Content="Archivieren" Click="OnArchiveClick" IsEnabled="False" Margin="0" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <Border Grid.Column="1" Style="{StaticResource LiftUpCard}" Padding="10">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
+                        <TextBlock Text="Name" VerticalAlignment="Center" Margin="0,0,6,0" Style="{StaticResource LiftUpFieldLabel}" />
+                        <TextBox x:Name="NameBox" Width="220" Margin="0,0,14,0" />
+
+                        <TextBlock Text="Kategorie" VerticalAlignment="Center" Margin="0,0,6,0" Style="{StaticResource LiftUpFieldLabel}" />
+                        <TextBox x:Name="CategoryBox" Width="180" />
+                    </StackPanel>
+
+                    <TextBox Grid.Row="1" x:Name="HtmlBox" AcceptsReturn="True" AcceptsTab="True"
+                             TextWrapping="NoWrap" VerticalScrollBarVisibility="Auto"
+                             HorizontalScrollBarVisibility="Auto" FontFamily="Consolas" FontSize="12" />
+
+                    <StackPanel Grid.Row="2" Margin="0,8,0,0">
+                        <TextBlock Style="{StaticResource LiftUpMutedText}" TextWrapping="Wrap"
+                                   Text="In Vorlagen mit {{snippet:Name}} einsetzen. Formatierung als HTML: &lt;b&gt;, &lt;i&gt;, &lt;u&gt;, &lt;ul&gt;, &lt;ol&gt;, &lt;table&gt;, &lt;a href&gt;." />
+                        <Button Content="Speichern" Style="{StaticResource LiftUpPrimaryButton}" HorizontalAlignment="Right"
+                                Margin="0,8,0,0" Click="OnSaveClick" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <TextBlock x:Name="InfoText" Grid.Row="1" Style="{StaticResource LiftUpMutedText}" Margin="2,8,0,0" />
+    </Grid>
+</UserControl>

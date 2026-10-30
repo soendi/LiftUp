@@ -19,6 +19,7 @@ public sealed class DocumentService
     private readonly TemplateRepository _templates = new();
     private readonly DocumentRepository _documents = new();
     private readonly SnippetRepository _snippets = new();
+    private readonly ImageRepository _images = new();
     private readonly ChangeLogWriter _changes;
 
     public DocumentService(Database database, Session actor, IHtmlToPdfRenderer renderer)
@@ -40,12 +41,14 @@ public sealed class DocumentService
         var version = _templates.GetLatestVersion(connection, null, templateId)
                       ?? throw new ValidationException("Für diese Vorlage gibt es noch keine Version.");
         var snippets = _snippets.GetActiveByName(connection, null);
+        var images = BuildImageLookup(connection, null, project.Id);
 
         return PlaceholderRenderer.Render(version.Html, new PlaceholderContext
         {
             Project = project,
             UserName = _actor.DisplayName is { Length: > 0 } display ? display : _actor.UserName,
             SnippetResolver = name => snippets.TryGetValue(name, out var html) ? html : null,
+            ImageResolver = name => images.TryGetValue(name, out var image) ? ImageEmbedding.ToImageTag(image) : null,
         });
     }
 
@@ -68,12 +71,14 @@ public sealed class DocumentService
         var version = _templates.GetLatestVersion(connection, transaction, templateId)
                       ?? throw new ValidationException("Für diese Vorlage gibt es noch keine Version.");
         var snippets = _snippets.GetActiveByName(connection, transaction);
+        var images = BuildImageLookup(connection, transaction, project.Id);
 
         var html = PlaceholderRenderer.Render(version.Html, new PlaceholderContext
         {
             Project = project,
             UserName = _actor.DisplayName is { Length: > 0 } display ? display : _actor.UserName,
             SnippetResolver = name => snippets.TryGetValue(name, out var snippet) ? snippet : null,
+            ImageResolver = name => images.TryGetValue(name, out var image) ? ImageEmbedding.ToImageTag(image) : null,
         });
 
         var bytes = await _renderer.RenderAsync(html, settings, cancellationToken).ConfigureAwait(false);
@@ -112,6 +117,24 @@ public sealed class DocumentService
         _actor.Require(Permission.ViewProjects);
         using var connection = _database.Open();
         return _documents.GetByProject(connection, null, projectId);
+    }
+
+    /// <summary>
+    /// Bilder nach Namen auflösen; projektbezogene Bilder überschreiben gleichnamige
+    /// globale Bilder, weil die Abfrage globale zuerst liefert.
+    /// </summary>
+    private Dictionary<string, LibraryImage> BuildImageLookup(
+        Microsoft.Data.Sqlite.SqliteConnection connection,
+        Microsoft.Data.Sqlite.SqliteTransaction? transaction,
+        Guid projectId)
+    {
+        var lookup = new Dictionary<string, LibraryImage>(StringComparer.OrdinalIgnoreCase);
+        foreach (var image in _images.GetActive(connection, transaction, projectId))
+        {
+            lookup[image.Name] = image;
+        }
+
+        return lookup;
     }
 
     private static string BuildFileName(string? number, string templateName, DateTime now)

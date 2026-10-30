@@ -34,6 +34,16 @@ public partial class MainWindow : Window
             Tabs.Items.Add(new TabItem { Header = "Vorlagen", Content = new TemplatesView(_services) });
         }
 
+        if (session.Can(Permission.ManageImages) || session.Can(Permission.CreateDocuments))
+        {
+            Tabs.Items.Add(new TabItem { Header = "Bilder", Content = new ImagesView(_services) });
+        }
+
+        if (session.Can(Permission.ManageSnippets) || session.Can(Permission.ViewProjects))
+        {
+            Tabs.Items.Add(new TabItem { Header = "Textbausteine", Content = new SnippetsView(_services) });
+        }
+
         if (session.Can(Permission.ManageUsers))
         {
             Tabs.Items.Add(new TabItem { Header = "Benutzer", Content = new UsersView(_services) });

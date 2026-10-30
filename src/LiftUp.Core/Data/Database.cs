@@ -12,7 +12,7 @@ namespace LiftUp.Core.Data;
 /// </summary>
 public sealed class Database
 {
-    public const int CurrentSchemaVersion = 3;
+    public const int CurrentSchemaVersion = 4;
 
     private readonly string _connectionString;
 
@@ -109,7 +109,7 @@ public sealed class Database
             MigrateToVersion2(connection);
         }
 
-        // Version 3 legt nur neue Tabellen an; das erledigt das Schema per IF NOT EXISTS.
+        // Version 3 und 4 legen nur neue Tabellen an; das erledigt das Schema per IF NOT EXISTS.
 
         using var command = Db.Command(connection, "UPDATE SchemaInfo SET Version = $version;");
         command.With("$version", CurrentSchemaVersion);
@@ -460,6 +460,28 @@ public sealed class Database
             RowVersion INTEGER NOT NULL DEFAULT 1
         );
 
+        CREATE TABLE IF NOT EXISTS Images (
+            Id          TEXT PRIMARY KEY NOT NULL,
+            Name        TEXT NOT NULL COLLATE NOCASE,
+            Category    TEXT NULL,
+            Description TEXT NULL,
+            ProjectId   TEXT NULL REFERENCES Projects(Id),
+            FileName    TEXT NOT NULL,
+            FilePath    TEXT NOT NULL,
+            ContentType TEXT NOT NULL,
+            SizeBytes   INTEGER NOT NULL DEFAULT 0,
+            IsArchived  INTEGER NOT NULL DEFAULT 0,
+            CreatedUtc  TEXT NOT NULL,
+            CreatedBy   TEXT NULL,
+            RowVersion  INTEGER NOT NULL DEFAULT 1
+        );
+
+        CREATE UNIQUE INDEX IF NOT EXISTS UX_Images_GlobalName
+            ON Images (Name) WHERE ProjectId IS NULL;
+
+        CREATE UNIQUE INDEX IF NOT EXISTS UX_Images_ProjectName
+            ON Images (ProjectId, Name) WHERE ProjectId IS NOT NULL;
+
         CREATE UNIQUE INDEX IF NOT EXISTS UX_Projects_Number
             ON Projects (Number) WHERE Number IS NOT NULL AND IsDeleted = 0;
 
@@ -472,6 +494,6 @@ public sealed class Database
         CREATE INDEX IF NOT EXISTS IX_ProjectDocuments_Project ON ProjectDocuments (ProjectId);
 
         INSERT INTO SchemaInfo (Version)
-        SELECT 3 WHERE NOT EXISTS (SELECT 1 FROM SchemaInfo);
+        SELECT 4 WHERE NOT EXISTS (SELECT 1 FROM SchemaInfo);
         """;
 }
