@@ -75,6 +75,25 @@ public sealed class Database
         return value is null or DBNull ? 0 : Convert.ToInt32(value);
     }
 
+    public string? GetSetting(string key)
+    {
+        using var connection = Open();
+        using var command = Db.Command(connection, "SELECT Value FROM Settings WHERE Key = $key;");
+        command.With("$key", key);
+        return command.ExecuteScalar() as string;
+    }
+
+    public void SetSetting(string key, string value)
+    {
+        using var connection = Open();
+        using var command = Db.Command(connection, """
+            INSERT INTO Settings (Key, Value) VALUES ($key, $value)
+            ON CONFLICT(Key) DO UPDATE SET Value = excluded.Value;
+            """);
+        command.With("$key", key).With("$value", value);
+        command.ExecuteNonQuery();
+    }
+
     /// <summary>Eindeutige Kennung dieses Arbeitsplatzes für das Änderungsprotokoll.</summary>
     public string GetDeviceId()
     {

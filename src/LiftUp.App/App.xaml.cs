@@ -1,5 +1,7 @@
 using System.Reflection;
 using System.Windows;
+using LiftUp.Core.Backup;
+using LiftUp.Core.Backup.Cloud;
 using LiftUp.Core.Data;
 using LiftUp.Core.Domain;
 using LiftUp.Core.Services;
@@ -71,6 +73,8 @@ public sealed class AppServices(Database database)
     public RoleService Roles => new(Database, CurrentSession);
     public TemplateService Templates => new(Database, CurrentSession);
     public DocumentTypeService DocumentTypes => new(Database, CurrentSession);
+    public BackupService Backups { get; } = new(database);
+    public CloudBackupService CloudBackups { get; } = new(database);
     public ImageService Images => new(Database, CurrentSession);
     public SnippetService Snippets => new(Database, CurrentSession);
     public DocumentService Documents => new(Database, CurrentSession, new Documents.WebView2PdfRenderer());

@@ -1,0 +1,97 @@
+<UserControl x:Class="LiftUp.App.Views.BackupsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Style="{StaticResource LiftUpCard}" Padding="12" Margin="0,0,0,10">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <StackPanel Grid.Row="0" Orientation="Horizontal">
+                    <TextBlock Text="Ziel" VerticalAlignment="Center" Margin="0,0,6,0" Style="{StaticResource LiftUpFieldLabel}" />
+                    <ComboBox x:Name="TargetBox" Width="170" Margin="0,0,14,0"
+                              DisplayMemberPath="Name" SelectionChanged="OnTargetChanged" />
+
+                    <TextBlock Text="Ordner" VerticalAlignment="Center" Margin="0,0,6,0" Style="{StaticResource LiftUpFieldLabel}" />
+                    <TextBox x:Name="FolderBox" Width="300" Margin="0,0,8,0" />
+                    <Button Content="Ordner wählen …" Click="OnBrowseClick" Margin="0,0,14,0" />
+
+                    <TextBlock Text="Aufbewahrung (Tage)" VerticalAlignment="Center" Margin="0,0,6,0" Style="{StaticResource LiftUpFieldLabel}" />
+                    <TextBox x:Name="KeepDaysBox" Width="60" Text="30" />
+                </StackPanel>
+
+                <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,10,0,0">
+                    <CheckBox x:Name="UploadToCloudCheck" Content="Nach jeder Sicherung zusätzlich in die Cloud laden"
+                              VerticalAlignment="Center" Margin="0,0,16,0" />
+
+                    <Button Content="Jetzt sichern" Style="{StaticResource LiftUpPrimaryButton}" Click="OnCreateClick" />
+                    <Button Content="Einstellungen speichern" Click="OnSaveOptionsClick" />
+                    <Button Content="Aktualisieren" Click="OnRefreshClick" Margin="0" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <Border Grid.Row="1" Style="{StaticResource LiftUpCard}" Padding="12" Margin="0,0,0,10">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <StackPanel Grid.Row="0" Orientation="Horizontal">
+                    <TextBlock x:Name="CloudHeading" Text="Cloud-Konto" Style="{StaticResource LiftUpFieldLabel}"
+                               VerticalAlignment="Center" Margin="0,0,12,0" />
+
+                    <TextBlock Text="Client-ID" VerticalAlignment="Center" Margin="0,0,6,0" Style="{StaticResource LiftUpFieldLabel}" />
+                    <TextBox x:Name="ClientIdBox" Width="260" Margin="0,0,12,0" />
+
+                    <StackPanel x:Name="ClientSecretPanel" Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="Client-Schlüssel" VerticalAlignment="Center" Margin="0,0,6,0" Style="{StaticResource LiftUpFieldLabel}" />
+                        <PasswordBox x:Name="ClientSecretBox" Width="200" Margin="0,0,12,0" />
+                    </StackPanel>
+
+                    <Button Content="Speichern" Click="OnSaveCloudConfigClick" />
+                </StackPanel>
+
+                <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,10,0,0">
+                    <Button x:Name="SignInButton" Content="Anmelden" Click="OnSignInClick" />
+                    <Button x:Name="SignOutButton" Content="Abmelden" Click="OnSignOutClick" />
+                    <TextBlock x:Name="CloudStatusText" VerticalAlignment="Center" Margin="12,0,0,0"
+                               Style="{StaticResource LiftUpMutedText}" TextWrapping="Wrap" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <DataGrid x:Name="BackupsGrid" Grid.Column="0" IsReadOnly="True" SelectionChanged="OnSelectionChanged">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Datei" Binding="{Binding FileName}" Width="*" />
+                    <DataGridTextColumn Header="Erstellt" Binding="{Binding CreatedText}" Width="150" />
+                    <DataGridTextColumn Header="Größe" Binding="{Binding SizeText}" Width="100" />
+                </DataGrid.Columns>
+            </DataGrid>
+
+            <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Top">
+                <Button x:Name="RestoreButton" Content="Wiederherstellen" IsEnabled="False" Click="OnRestoreClick" Width="150" />
+                <Button x:Name="ShowFolderButton" Content="Im Ordner zeigen" Click="OnShowFolderClick" Width="150" />
+            </StackPanel>
+        </Grid>
+
+        <TextBlock x:Name="InfoText" Grid.Row="3" Style="{StaticResource LiftUpMutedText}" Margin="2,8,0,0" TextWrapping="Wrap" />
+    </Grid>
+</UserControl>

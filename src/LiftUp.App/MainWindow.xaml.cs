@@ -47,6 +47,7 @@ public partial class MainWindow : Window
         if (session.Can(Permission.ManageUsers))
         {
             Tabs.Items.Add(new TabItem { Header = "Benutzer", Content = new UsersView(_services) });
+            Tabs.Items.Add(new TabItem { Header = "Sicherung", Content = new BackupsView(_services) });
         }
 
         if (session.Can(Permission.ManageRoles))

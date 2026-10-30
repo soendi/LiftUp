@@ -268,10 +268,50 @@ python3 installer/make-assets.py
 
 Ergebnis: `src/LiftUp.App/Assets/LiftUp.ico`, `installer/assets/banner.bmp`, `installer/assets/dialog.bmp`.
 
+## Datensicherung
+
+Der Reiter **Sicherung** (nur für Administratoren) sichert die Datenbank. Sicherungen entstehen mit
+`VACUUM INTO` und sind deshalb auch im laufenden Betrieb konsistent – es wird nie eine offene Datei
+kopiert. Einstellbar sind Zielordner, Aufbewahrung (Standard 30 Tage; die jüngste Sicherung bleibt
+immer erhalten) und ein zusätzlicher Cloud-Upload. Vor jeder Wiederherstellung legt LiftUp
+automatisch eine Sicherung des aktuellen Stands an (`…-vor-wiederherstellung.db`), eine falsche
+Auswahl ist also rückholbar.
+
+Ziele: lokaler Ordner, Google Drive, OneDrive. Angemeldet wird sich mit dem eigenen Konto – auch
+mit einem Firmenkonto. Die Anmeldung läuft über den Gerätecode: LiftUp zeigt einen Code, öffnet die
+Anbieterseite im Browser, und nach der Freigabe ist die Verbindung aktiv; ein Passwort sieht LiftUp
+nie. Die Tokens liegen DPAPI-verschlüsselt und an den Windows-Benutzer gebunden unter
+`<Datenbankordner>\cloud\`. Gesichert wird ausschließlich im App-Ordner des Anbieters
+(`Files.ReadWrite.AppFolder` bzw. Google `drive.appdata`), nicht in den übrigen Dateien des Kontos.
+
+### Anwendung registrieren (einmalig)
+
+Beide Anbieter verlangen eine eigene Anwendungsregistrierung; LiftUp bringt keine Client-IDs mit.
+Eingetragen werden sie im Reiter **Sicherung**.
+
+OneDrive / Microsoft:
+
+1. https://portal.azure.com → Entra ID → App-Registrierungen → Neue Registrierung.
+2. Kontotypen: „Konten in einem beliebigen Organisationsverzeichnis und persönliche Microsoft-Konten“.
+3. Unter Authentifizierung → Erweitert: „Öffentliche Clientflüsse zulassen“ aktivieren.
+4. Die Anwendungs-ID (Client-ID) übernehmen; ein Client-Schlüssel ist nicht nötig.
+
+Google Drive:
+
+1. https://console.cloud.google.com → Projekt anlegen, Google Drive API aktivieren.
+2. OAuth-Zustimmungsbildschirm einrichten (extern; Testbenutzer oder veröffentlicht).
+3. Anmeldedaten → OAuth-Client-ID → Anwendungstyp „TVs und Geräte mit eingeschränktem Zugriff“.
+4. Client-ID und Client-Schlüssel übernehmen.
+
+Berechtigungen: Microsoft `offline_access Files.ReadWrite.AppFolder`, Google `drive.appdata`.
+
 ## Bekannte Grenzen
 
 - Die Oberfläche ist bisher nur kompiliert, nicht auf einem Windows-Rechner durchgeklickt.
-- Es gibt keine Migration bestehender Datenbankversionen; das Schema liegt in Version 1.
+- Die Cloud-Anmeldung (Google Drive, OneDrive) ist nicht gegen die echten Anbieter durchgespielt:
+  dafür braucht es die Client-IDs des Kunden und einen Browser. Geprüft ist der Ablauf bis zum
+  Gerätecode sowie die Fehlerbehandlung; Uploads sind ungetestet.
+- Die Schemamigrationen sind nur über Tests abgedeckt, nicht gegen echte Vorversionen im Feld.
 - Projektordner werden beim Löschen nicht automatisch gesichert oder archiviert.
 - Ein Ordner, der nach dem Anlegen umbenannt oder verschoben wird, muss im Projekt nachgezogen werden.
 - Das MSI konnte in dieser Entwicklungsumgebung nicht erzeugt werden: WiX 5 läuft nur unter Windows.
