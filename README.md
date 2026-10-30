@@ -132,6 +132,37 @@ normalen Übersicht und erscheinen über „Archiv anzeigen“; dort lassen sie 
 Projektleiter dürfen zusätzlich archivieren, löschen und Dokumente erzeugen. Die frühere Rolle
 „Betrachter“ heißt bei bestehenden Datenbanken automatisch „Leser“ (Schema-Migration auf Version 2).
 
+## PDF-Erzeugung und Vorlagen
+
+Vorlagen bestehen aus HTML und CSS (Register "Vorlagen"). Der Editor bietet HTML-Eingabe,
+Vorschau mit Beispieldaten und eine Platzhalterliste, aus der per Doppelklick eingefügt wird.
+
+| Platzhalter | Inhalt |
+| --- | --- |
+| `{{project.number}}` | Projektnummer |
+| `{{project.name}}` | Projektname |
+| `{{project.customer}}` | Kunde |
+| `{{project.contact}}` | Ansprechpartner |
+| `{{project.responsible}}` | Verantwortlicher |
+| `{{project.description}}` | Beschreibung |
+| `{{project.status}}` | Status |
+| `{{date}}`, `{{datetime}}` | Datum bzw. Datum mit Uhrzeit |
+| `{{user}}` | Angemeldeter Benutzer |
+| `{{snippet:Name}}` | Textbaustein mit diesem Namen (HTML) |
+
+Werte aus der Datenbank werden HTML-escaped eingesetzt (`&`, `<`, `>`, `"`, `'`), Umlaute bleiben
+lesbar. Textbausteine werden bewusst als HTML eingefügt.
+
+**Versionierung:** Jedes Speichern erzeugt eine neue, unveränderliche Vorlagenversion. Erzeugte
+PDFs merken sich die verwendete Version; wird die Vorlage später geändert, bleiben alte PDFs
+unverändert und weiter abrufbar.
+
+**Erzeugung:** Der Reiter "PDF" rendert die Vorschau und das PDF über die unter Windows
+vorinstallierte **WebView2**-Engine – damit stimmen `@page`, Seitenumbrüche, Tabellen und
+Schriftgrößen. Formate A4/A3, Hoch-/Querformat und Seitenrand sind einstellbar. Die PDFs landen
+im Projektordner unter `03_PDF`; die Historie zeigt Datei, Vorlage, Version und Zeitpunkt und kann
+die Datei direkt öffnen.
+
 ## Installation und Updates
 
 ### Installer bauen
