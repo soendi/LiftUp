@@ -1,0 +1,35 @@
+namespace LiftUp.Core.Domain;
+
+public sealed class User
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public string UserName { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+    public Guid RoleId { get; set; }
+    public bool IsActive { get; set; } = true;
+
+    public string PasswordHash { get; set; } = string.Empty;
+    public string PasswordSalt { get; set; } = string.Empty;
+    public int PasswordIterations { get; set; }
+    public bool MustChangePassword { get; set; }
+
+    public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
+    public string? CreatedBy { get; set; }
+    public DateTime? LastLoginUtc { get; set; }
+
+    public long RowVersion { get; set; } = 1;
+    public bool IsDeleted { get; set; }
+}
+
+/// <summary>Anzeigeobjekt für die Benutzerliste.</summary>
+public sealed class UserListItem
+{
+    public Guid Id { get; init; }
+    public string UserName { get; init; } = string.Empty;
+    public string DisplayName { get; init; } = string.Empty;
+    public string RoleName { get; init; } = string.Empty;
+    public bool IsActive { get; init; }
+    public string StatusText => IsActive ? "Aktiv" : "Deaktiviert";
+    public string LastLoginText { get; init; } = "–";
+    public string PermissionSummary { get; init; } = string.Empty;
+}

@@ -1,0 +1,39 @@
+<Window x:Class="LiftUp.App.LoginWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="LiftUp – Anmeldung"
+        Width="430"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="NoResize"
+        Background="{StaticResource LiftUpBackground}">
+
+    <Border Margin="20" Style="{StaticResource LiftUpCard}">
+        <StackPanel>
+            <TextBlock Text="LiftUp" Style="{StaticResource LiftUpHeading}" />
+            <TextBlock Text="Projekt- und Benutzerverwaltung"
+                       Style="{StaticResource LiftUpMutedText}"
+                       Margin="0,2,0,18" />
+
+            <TextBlock Text="Benutzername" Style="{StaticResource LiftUpFieldLabel}" />
+            <TextBox x:Name="UserNameBox" Margin="0,0,0,12" />
+
+            <TextBlock Text="Passwort" Style="{StaticResource LiftUpFieldLabel}" />
+            <PasswordBox x:Name="PasswordInput" Margin="0,0,0,8" />
+
+            <TextBlock x:Name="ErrorText"
+                       Foreground="{StaticResource LiftUpDanger}"
+                       TextWrapping="Wrap"
+                       MinHeight="34"
+                       FontSize="12" />
+
+            <Button Content="Anmelden"
+                    IsDefault="True"
+                    Style="{StaticResource LiftUpPrimaryButton}"
+                    Margin="0,4,0,0"
+                    Click="OnLoginClick" />
+
+            <TextBlock x:Name="FooterText" Style="{StaticResource LiftUpMutedText}" Margin="0,16,0,0" />
+        </StackPanel>
+    </Border>
+</Window>

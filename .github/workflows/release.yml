@@ -1,0 +1,90 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version ohne führendes v, z. B. 1.0.1"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Version bestimmen
+        id: version
+        shell: pwsh
+        run: |
+          $version = if ("${{ github.ref_type }}" -eq "tag") { "${{ github.ref_name }}".TrimStart("v") } else { "${{ inputs.version }}" }
+          if ([string]::IsNullOrWhiteSpace($version)) { throw "Version konnte nicht bestimmt werden." }
+          "value=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "Version: $version"
+
+      - name: Tests
+        run: dotnet test tests/LiftUp.Core.Tests/LiftUp.Core.Tests.csproj -c Release
+
+      - name: Veröffentlichen
+        run: >
+          dotnet publish src/LiftUp.App/LiftUp.App.csproj
+          -c Release -r win-x64 --self-contained false
+          -p:Version=${{ steps.version.outputs.value }} -p:DebugType=none
+          -o artifacts/publish
+
+      - name: Prüfwerkzeug veröffentlichen
+        run: >
+          dotnet publish tools/LiftUp.Preflight/LiftUp.Preflight.csproj
+          -c Release -r win-x64 --self-contained false
+          -p:Version=${{ steps.version.outputs.value }} -p:DebugType=none
+          -o artifacts/publish
+
+      - name: WiX installieren
+        shell: pwsh
+        run: |
+          dotnet tool install --global wix --version 5.0.2
+          "$env:USERPROFILE\.dotnet\tools" | Out-File -FilePath $env:GITHUB_PATH -Append
+
+      - name: MSI bauen
+        shell: pwsh
+        run: |
+          wix extension add -g WixToolset.UI.wixext/5.0.2
+          wix build installer/LiftUp.wxs `
+            -d Version=${{ steps.version.outputs.value }} `
+            -d PublishDir="$((Resolve-Path artifacts/publish).Path)" `
+            -d IconPath="$((Resolve-Path src/LiftUp.App/Assets/LiftUp.ico).Path)" `
+            -d LicensePath="$((Resolve-Path installer/License.rtf).Path)" `
+            -d BannerPath="$((Resolve-Path installer/assets/banner.bmp).Path)" `
+            -d DialogPath="$((Resolve-Path installer/assets/dialog.bmp).Path)" `
+            -d GitHubOwner="soendi" `
+            -d GitHubRepo="LiftUp" `
+            -ext WixToolset.UI.wixext `
+            -culture de-de `
+            -o artifacts/LiftUp-Setup.msi
+
+      - name: Prüfsumme schreiben
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash artifacts/LiftUp-Setup.msi -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  LiftUp-Setup.msi" | Out-File -FilePath artifacts/SHA256SUMS.txt -Encoding ascii
+
+      - name: Release veröffentlichen
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/LiftUp-Setup.msi
+            artifacts/SHA256SUMS.txt
+          generate_release_notes: true
+          draft: false

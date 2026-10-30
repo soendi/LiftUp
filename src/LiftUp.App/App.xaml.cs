@@ -1,0 +1,72 @@
+using System.Reflection;
+using System.Windows;
+using LiftUp.Core.Data;
+using LiftUp.Core.Domain;
+using LiftUp.Core.Services;
+using LiftUp.Core.Sync;
+using LiftUp.Core.Updates;
+
+namespace LiftUp.App;
+
+public partial class App : System.Windows.Application
+{
+    public static AppServices Services { get; private set; } = null!;
+
+    protected override void OnStartup(StartupEventArgs e)
+    {
+        base.OnStartup(e);
+        ShutdownMode = ShutdownMode.OnExplicitShutdown;
+
+        try
+        {
+            var database = new Database();
+            database.EnsureCreated();
+            Services = new AppServices(database);
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(
+                "Die lokale Datenbank konnte nicht geöffnet werden.\n\n" + exception.Message,
+                "LiftUp", MessageBoxButton.OK, MessageBoxImage.Error);
+            Shutdown();
+            return;
+        }
+
+        var login = new LoginWindow(Services);
+        var loggedIn = login.ShowDialog();
+        if (loggedIn != true || Services.Session is null)
+        {
+            Shutdown();
+            return;
+        }
+
+        var mainWindow = new MainWindow(Services);
+        MainWindow = mainWindow;
+        ShutdownMode = ShutdownMode.OnMainWindowClose;
+        mainWindow.Show();
+    }
+}
+
+/// <summary>Bündelt Datenbank und Dienste; wird nach der Anmeldung mit einer Sitzung versehen.</summary>
+public sealed class AppServices(Database database)
+{
+    public Database Database { get; } = database;
+    public AuthService Auth { get; } = new(database);
+    public SyncService Sync { get; } = new(database, new NotConfiguredSyncTransport());
+
+    public UpdateService Updates { get; } = new(
+        GitHubReleaseSource.Owner,
+        GitHubReleaseSource.Repository,
+        Assembly.GetEntryAssembly()?.GetName().Version ?? new Version(1, 0, 0));
+
+    public Session? Session { get; private set; }
+
+    public Session CurrentSession => Session
+        ?? throw new InvalidOperationException("Es ist kein Benutzer angemeldet.");
+
+    public void SetSession(Session session) => Session = session;
+
+    public ProjectService Projects => new(Database, CurrentSession);
+    public UserService Users => new(Database, CurrentSession);
+    public RoleService Roles => new(Database, CurrentSession);
+}

@@ -1,1 +1,222 @@
 # LiftUp
+
+Lokale Windows-Anwendung für Projektverwaltung mit Benutzerverwaltung und Rechteverteilung.
+Alle Daten liegen in einer SQLite-Datei auf dem Arbeitsplatz; die Datenstruktur ist auf einen
+späteren Abgleich mit einer zentralen PostgreSQL-Datenbank vorbereitet.
+
+## Technik
+
+| Baustein | Verwendung |
+| --- | --- |
+| WPF (.NET 8, `net8.0-windows`) | Oberfläche |
+| LiftUp.Core (`net8.0`) | Domäne, Datenbank, Dienste, Rechte, Sync-Gerüst – ohne UI-Abhängigkeiten |
+| Microsoft.Data.Sqlite | lokale Datenbank |
+| xUnit | Tests der Core-Schicht |
+
+## Starten
+
+Voraussetzungen: Windows, .NET 8 SDK (oder Visual Studio 2022 mit .NET-8-Workload).
+
+```bash
+dotnet build LiftUp.sln
+dotnet run --project src/LiftUp.App
+```
+
+Tests:
+
+```bash
+dotnet test tests/LiftUp.Core.Tests
+```
+
+Beim ersten Start wird die Datenbank automatisch angelegt:
+
+```
+%LOCALAPPDATA%\LiftUp\liftup.db
+```
+
+Der Ort lässt sich über die Umgebungsvariable `LIFTUP_DB` auf einen anderen Pfad legen,
+z. B. auf ein Netzlaufwerk.
+
+**Erste Anmeldung:** Benutzer `admin`, Passwort `admin`. Das Startpasswort muss direkt nach
+der Anmeldung geändert werden (mindestens 8 Zeichen, Buchstaben und Ziffern).
+
+## Funktionsumfang
+
+### Benutzer und Rechte
+
+- Anmeldung mit Benutzername und Passwort (PBKDF2-HMAC-SHA256, 210.000 Iterationen, Zufallssalz je Konto).
+- Benutzer anlegen, bearbeiten, deaktivieren, löschen, Passwort zurücksetzen.
+- Rollen mit Rechtebitmaske; Rechte werden im Rollen-Reiter per Häkchen verteilt.
+- Systemrollen `Administrator`, `Projektleiter`, `Betrachter` sind vorangelegt und nicht löschbar.
+- Der letzte aktive Administrator kann sich nicht selbst die Rechte entziehen oder das Konto löschen.
+- Das eigene Konto kann nicht gelöscht oder deaktiviert werden.
+
+Rechte im Einzelnen: Projekte ansehen, Projekte anlegen, Projekte bearbeiten, Projekte löschen,
+Benutzer verwalten, Rollen und Rechte verwalten. Die Prüfung passiert in der Core-Schicht
+(`Session.Require`), nicht nur in der Oberfläche – ein Aufruf ohne Recht wirft
+`PermissionDeniedException`.
+
+### Projekte
+
+- Projekt anlegen, bearbeiten, löschen (Nr., Name, Kunde, Beschreibung, Status, Projektordner).
+- Projektordner frei wählbar auf jedem Laufwerk: über „Ordner wählen …“ oder als getippter Pfad.
+- Fehlt der Ordner, kann er beim Speichern angelegt werden (Häkchen, standardmäßig aktiv).
+- Prüfungen: Pfadformat, verfügbares Laufwerk, kein Dateipfad, kein doppelt zugeordneter Ordner,
+  eindeutige Projektnummer.
+- Löschen entfernt den Datensatz; auf Wunsch wird der Projektordner zusätzlich in den Papierkorb
+  verschoben (Rückfrage im Dialog, standardmäßig „Nein“).
+- Die Liste zeigt zusätzlich, ob der Ordner aktuell vorhanden ist.
+
+## Datenmodell
+
+Tabellen: `Users`, `Roles`, `Projects`, `ChangeLog`, `Settings`, `SchemaInfo`.
+
+Jede fachliche Tabelle führt:
+
+- `Id` als GUID (clientseitig erzeugt, damit Datensätze ohne Server kollisionsfrei bleiben),
+- `RowVersion` (Zähler, wird bei jeder Änderung erhöht),
+- `IsDeleted` (weiches Löschen, damit Löschungen synchronisierbar bleiben),
+- UTC-Zeitstempel `CreatedUtc` / `UpdatedUtc` sowie `CreatedBy` / `UpdatedBy`.
+
+## Vorbereitung für PostgreSQL
+
+Der Abgleich ist bewusst noch nicht aktiv, aber vollständig vorbereitet:
+
+1. **Änderungsprotokoll als Outbox** – jede schreibende Aktion schreibt in derselben Transaktion
+   einen Eintrag nach `ChangeLog` (Entität, Id, Operation, JSON-Nutzlast, Geräte-Id, RowVersion).
+   Passwörter und Hashes stehen nie in der Nutzlast.
+2. **Geräte-Id** – beim ersten Start wird eine `DeviceId` erzeugt und in `Settings` abgelegt, damit
+   Änderungen ihrem Ursprungsarbeitsplatz zugeordnet werden können.
+3. **Transport-Schnittstelle** – `ISyncTransport` (`PushAsync` / `PullAsync`) kapselt den Server.
+   `SyncService` überträgt offene Einträge und bestätigt sie erst nach erfolgreichem Push.
+   Ohne konfiguriertes Ziel meldet die Anwendung „lokal“ und ändert nichts.
+
+Für den echten Betrieb fehlen zwei Schritte: eine `ISyncTransport`-Implementierung (z. B. REST-
+Endpunkt vor PostgreSQL oder Npgsql direkt) und die Konfliktregel pro Entität. Empfohlen:
+RowVersion vergleichen, bei Konflikt feldweise zusammenführen und Löschungen über `IsDeleted`
+gewinnen lassen.
+
+## Projektstruktur
+
+```
+src/LiftUp.Core/
+  Domain/        Benutzer, Rollen, Rechte, Projekte, Sitzung
+  Data/          Datenbank, Schema, Änderungsprotokoll, Pfade
+  Security/      Passwort-Hashing und -Richtlinie
+  Repositories/  SQL und Mapping
+  Services/      Anmeldung, Benutzer, Rollen, Projekte, Ordner
+  Sync/          Transport-Schnittstelle und Sync-Dienst
+src/LiftUp.App/
+  Views/         Projekt-, Benutzer- und Rollenreiter plus Dialoge
+tests/LiftUp.Core.Tests/
+```
+
+## Installation und Updates
+
+### Installer bauen
+
+Das MSI entsteht unter Windows (WiX 5 läuft nur dort):
+
+```powershell
+.\installer\build-installer.ps1 -Version 1.0.1
+```
+
+Ergebnis: `artifacts\LiftUp-Setup.msi` und `artifacts\SHA256SUMS.txt`.
+
+Die Installation erfolgt je Benutzer nach `%LOCALAPPDATA%\Programs\LiftUp` – ohne
+Administratorfreigabe, mit Verknüpfungen im Startmenü und auf dem Desktop. Das Setup bringt
+den deutschen WiX-Assistenten mit eigenem Banner, Dialogbild, Symbol und Lizenztext mit.
+Verknüpfungen, Programmeintrag und Deinstallation verwaltet Windows selbst.
+
+Stille Installation und Deinstallation:
+
+```
+msiexec /i LiftUp-Setup.msi /qn /norestart
+msiexec /x {9E4C21B0-3B76-4C55-9F1E-3D6B0C7A8E42} /qn
+```
+
+Das Paket ist absichtlich schlank: veröffentlicht wird framework-abhängig (rund 2,3 MB),
+auf dem Zielrechner muss die .NET 8 **Desktop** Runtime vorhanden sein. Selbstenthaltend
+wären es etwa 150 MB.
+
+### Stille Updates über GitHub
+
+`UpdateService` (in `LiftUp.Core/Updates`) fragt `api.github.com/repos/soendi/LiftUp/releases/latest` ab:
+
+1. Version aus dem Tag (`v1.2.0`) mit der laufenden Version vergleichen.
+2. `LiftUp-Setup.msi` herunterladen und gegen `SHA256SUMS.txt` prüfen; bei Abweichung wird abgebrochen.
+3. Installation still per `msiexec /qn /norestart` starten, danach öffnet sich LiftUp wieder.
+
+Das passiert beim Start automatisch. Ein Merker unter `%LOCALAPPDATA%\LiftUp\update-attempt.json`
+verhindert Endlosschleifen, falls die Installation scheitert (6 Stunden Sperre je Version).
+Abschalten mit `setx LIFTUP_DISABLE_AUTOUPDATE 1`; manuell auslösen über „Updates“ im Kopfbereich.
+
+### Version veröffentlichen
+
+```bash
+git tag v1.0.1 && git push origin v1.0.1
+```
+
+`.github/workflows/release.yml` baut auf `windows-latest`, führt die Tests aus, erzeugt MSI und
+Prüfsumme und legt das Release an. Für die Update-Prüfung ohne Token muss das Repository
+öffentlich sein.
+
+### Datenbanken: prüfen und nachholen
+
+LiftUp braucht zwei Datenbanken – die lokale SQLite-Datei und später die zentrale PostgreSQL-Datenbank.
+So geht das Setup damit um:
+
+| Prüfung | Verhalten |
+| --- | --- |
+| Lokale Datenbank | SQLite ist in der Anwendung enthalten (`e_sqlite3.dll`), es gibt nichts zu installieren. Datei und Schema entstehen beim ersten Start – bzw. beim ersten Lauf von `LiftUp.Preflight` – unter dem Konto des Anwenders. |
+| Server-Datenbank | `LiftUp.Preflight` prüft die Erreichbarkeit (TCP auf 5432). Das Setup installiert sie nicht still mit – Begründung unten. |
+| .NET 8 Desktop Runtime | Das MSI prüft sie über eine Launch-Bedingung und bricht mit klarem Hinweis ab, wenn sie fehlt. |
+
+Prüfen, ohne die Oberfläche zu starten:
+
+```
+LiftUp.Preflight.exe                                  # Textausgabe
+LiftUp.Preflight.exe --json                           # maschinenlesbar
+LiftUp.Preflight.exe --server db-server:5432 --db D:\Daten\liftup.db
+```
+
+Rückgabewerte: `0` alles bereit, `1` lokale Datenbank nicht nutzbar, `2` nur die Server-Datenbank fehlt.
+Das Werkzeug liegt nach der Installation neben `LiftUp.App.exe`.
+
+Server-Datenbank einrichten (einmalig auf dem Datenbank-Server, als Administrator):
+
+```powershell
+.\installer\Install-ServerDatabase.ps1 -SuperuserPassword "…" -UserPassword "…"
+.\installer\Install-ServerDatabase.ps1 -WhatIf      # nur prüfen, nichts ändern
+```
+
+Das Skript erkennt eine vorhandene Installation (Dienst `postgresql*`, Registry, Port 5432) und
+überspringt sie; sonst installiert es PostgreSQL still über winget und legt Datenbank und Benutzer
+idempotent an. Clients finden den Server über `LIFTUP_PG_HOST` und `LIFTUP_PG_PORT`.
+
+**Warum nicht automatisch im Client-Setup?** Eine PostgreSQL-Installation braucht Administratorrechte,
+läuft als Dienst und gehört auf den Datenbank-Server, nicht auf jeden Arbeitsplatz. Sie würde außerdem
+die Benutzer-Installation verlassen und damit die stillen Updates aushebeln. Deshalb prüft das
+Client-Setup und meldet, während das Server-Skript einrichtet.
+
+### Marken-Assets
+
+Symbol und Setup-Bilder werden ohne externe Werkzeuge erzeugt:
+
+```bash
+python3 installer/make-assets.py
+```
+
+Ergebnis: `src/LiftUp.App/Assets/LiftUp.ico`, `installer/assets/banner.bmp`, `installer/assets/dialog.bmp`.
+
+## Bekannte Grenzen
+
+- Die Oberfläche ist bisher nur kompiliert, nicht auf einem Windows-Rechner durchgeklickt.
+- Es gibt keine Migration bestehender Datenbankversionen; das Schema liegt in Version 1.
+- Projektordner werden beim Löschen nicht automatisch gesichert oder archiviert.
+- Ein Ordner, der nach dem Anlegen umbenannt oder verschoben wird, muss im Projekt nachgezogen werden.
+- Das MSI konnte in dieser Entwicklungsumgebung nicht erzeugt werden: WiX 5 läuft nur unter Windows.
+  Die Definition ist syntaktisch geprüft, das Paket selbst entsteht über `build-installer.ps1` oder die CI.
+- Die Update-Logik ist gegen einen HTTP-Stub getestet, nicht gegen ein echtes GitHub-Release.
+- `installer/Install-ServerDatabase.ps1` konnte hier nicht ausgeführt werden (kein PowerShell unter Linux);
+  geprüft ist nur die Logik, nicht der Lauf gegen einen echten PostgreSQL-Server.

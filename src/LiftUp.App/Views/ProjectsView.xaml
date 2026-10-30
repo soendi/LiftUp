@@ -1,0 +1,46 @@
+<UserControl x:Class="LiftUp.App.Views.ProjectsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Style="{StaticResource LiftUpCard}" Padding="12" Margin="0,0,0,10">
+            <Grid>
+                <StackPanel Orientation="Horizontal">
+                    <Button x:Name="NewButton" Content="Neues Projekt" Style="{StaticResource LiftUpPrimaryButton}" Click="OnNewClick" />
+                    <Button x:Name="EditButton" Content="Bearbeiten" Click="OnEditClick" />
+                    <Button x:Name="DeleteButton" Content="Löschen" Style="{StaticResource LiftUpDangerButton}" Click="OnDeleteClick" />
+                    <Button Content="Aktualisieren" Click="OnRefreshClick" />
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <TextBlock Text="Suche" VerticalAlignment="Center" Margin="0,0,6,0" Style="{StaticResource LiftUpFieldLabel}" />
+                    <TextBox x:Name="SearchBox" Width="240" TextChanged="OnSearchChanged" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <DataGrid x:Name="ProjectsGrid"
+                  Grid.Row="1"
+                  IsReadOnly="True"
+                  MouseDoubleClick="OnRowDoubleClick">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Nr." Binding="{Binding Number}" Width="90" />
+                <DataGridTextColumn Header="Projekt" Binding="{Binding Name}" Width="*" />
+                <DataGridTextColumn Header="Kunde" Binding="{Binding Customer}" Width="170" />
+                <DataGridTextColumn Header="Status" Binding="{Binding StatusText}" Width="110" />
+                <DataGridTextColumn Header="Projektordner" Binding="{Binding FolderPath}" Width="280" />
+                <DataGridTextColumn Header="Ordner" Binding="{Binding FolderState}" Width="80" />
+                <DataGridTextColumn Header="Geändert" Binding="{Binding UpdatedText}" Width="130" />
+                <DataGridTextColumn Header="Von" Binding="{Binding UpdatedBy}" Width="110" />
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <TextBlock x:Name="InfoText" Grid.Row="2" Style="{StaticResource LiftUpMutedText}" Margin="2,8,0,0" />
+    </Grid>
+</UserControl>

@@ -1,0 +1,107 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <SolidColorBrush x:Key="LiftUpHeader" Color="#1F2A44" />
+    <SolidColorBrush x:Key="LiftUpAccent" Color="#2D6CDF" />
+    <SolidColorBrush x:Key="LiftUpAccentSoft" Color="#E8F0FE" />
+    <SolidColorBrush x:Key="LiftUpDanger" Color="#B3261E" />
+    <SolidColorBrush x:Key="LiftUpBackground" Color="#F4F5F7" />
+    <SolidColorBrush x:Key="LiftUpSurface" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="LiftUpBorder" Color="#DCE1E8" />
+    <SolidColorBrush x:Key="LiftUpMuted" Color="#6B7480" />
+
+    <Style x:Key="LiftUpHeading" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="24" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{StaticResource LiftUpHeader}" />
+    </Style>
+
+    <Style x:Key="LiftUpSubheading" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="15" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{StaticResource LiftUpHeader}" />
+    </Style>
+
+    <Style x:Key="LiftUpMutedText" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{StaticResource LiftUpMuted}" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+
+    <Style x:Key="LiftUpFieldLabel" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{StaticResource LiftUpHeader}" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Margin" Value="0,0,0,3" />
+    </Style>
+
+    <Style TargetType="TextBox">
+        <Setter Property="Padding" Value="7,5" />
+        <Setter Property="BorderBrush" Value="{StaticResource LiftUpBorder}" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+
+    <Style TargetType="PasswordBox">
+        <Setter Property="Padding" Value="7,5" />
+        <Setter Property="BorderBrush" Value="{StaticResource LiftUpBorder}" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+
+    <Style TargetType="ComboBox">
+        <Setter Property="Padding" Value="7,4" />
+        <Setter Property="MinHeight" Value="28" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+
+    <Style TargetType="Button">
+        <Setter Property="Padding" Value="12,5" />
+        <Setter Property="MinWidth" Value="92" />
+        <Setter Property="Margin" Value="0,0,8,0" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+    </Style>
+
+    <Style x:Key="LiftUpPrimaryButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+        <Setter Property="Background" Value="{StaticResource LiftUpAccent}" />
+        <Setter Property="Foreground" Value="White" />
+        <Setter Property="BorderBrush" Value="{StaticResource LiftUpAccent}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+
+    <Style x:Key="LiftUpDangerButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+        <Setter Property="Foreground" Value="{StaticResource LiftUpDanger}" />
+        <Setter Property="BorderBrush" Value="{StaticResource LiftUpBorder}" />
+        <Setter Property="Background" Value="{StaticResource LiftUpSurface}" />
+    </Style>
+
+    <Style x:Key="LiftUpHeaderButton" TargetType="Button">
+        <Setter Property="Background" Value="#2B3856" />
+        <Setter Property="Foreground" Value="White" />
+        <Setter Property="BorderBrush" Value="#3D4B6B" />
+        <Setter Property="Padding" Value="12,5" />
+        <Setter Property="Margin" Value="8,0,0,0" />
+        <Setter Property="MinWidth" Value="0" />
+    </Style>
+
+    <Style x:Key="LiftUpCard" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource LiftUpSurface}" />
+        <Setter Property="BorderBrush" Value="{StaticResource LiftUpBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="Padding" Value="16" />
+    </Style>
+
+    <Style TargetType="DataGrid">
+        <Setter Property="Background" Value="{StaticResource LiftUpSurface}" />
+        <Setter Property="BorderBrush" Value="{StaticResource LiftUpBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="RowHeight" Value="28" />
+        <Setter Property="HeadersVisibility" Value="Column" />
+        <Setter Property="GridLinesVisibility" Value="Horizontal" />
+        <Setter Property="HorizontalGridLinesBrush" Value="#EDF0F4" />
+        <Setter Property="AlternatingRowBackground" Value="#FAFBFC" />
+        <Setter Property="SelectionMode" Value="Single" />
+        <Setter Property="CanUserAddRows" Value="False" />
+        <Setter Property="AutoGenerateColumns" Value="False" />
+    </Style>
+
+</ResourceDictionary>

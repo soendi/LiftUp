@@ -1,0 +1,64 @@
+<UserControl x:Class="LiftUp.App.Views.RolesView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="280" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <Border Grid.Column="0" Style="{StaticResource LiftUpCard}" Margin="0,0,10,0" Padding="12">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
+                    <Button Content="Neue Rolle" Style="{StaticResource LiftUpPrimaryButton}" MinWidth="0" Padding="10,5" Click="OnNewClick" />
+                    <Button Content="Aktualisieren" MinWidth="0" Padding="10,5" Click="OnRefreshClick" />
+                </StackPanel>
+
+                <ListBox x:Name="RoleList" Grid.Row="1" DisplayMemberPath="Name" SelectionChanged="OnRoleSelected" />
+            </Grid>
+        </Border>
+
+        <Border Grid.Column="1" Style="{StaticResource LiftUpCard}" Padding="16">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <StackPanel Grid.Row="0">
+                    <TextBlock x:Name="HeadingText" Style="{StaticResource LiftUpSubheading}" Margin="0,0,0,12" />
+
+                    <TextBlock Text="Rollenname" Style="{StaticResource LiftUpFieldLabel}" />
+                    <TextBox x:Name="NameBox" Margin="0,3,0,8" />
+
+                    <TextBlock Text="Beschreibung" Style="{StaticResource LiftUpFieldLabel}" />
+                    <TextBox x:Name="DescriptionBox" Margin="0,3,0,8" />
+
+                    <TextBlock Text="Rechte" Style="{StaticResource LiftUpFieldLabel}" Margin="0,4,0,2" />
+                </StackPanel>
+
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <StackPanel x:Name="PermissionPanel" />
+                        <TextBlock x:Name="SystemHintText" Style="{StaticResource LiftUpMutedText}" Margin="0,12,0,0" />
+                    </StackPanel>
+                </ScrollViewer>
+
+                <StackPanel Grid.Row="2">
+                    <TextBlock x:Name="ErrorText" Foreground="{StaticResource LiftUpDanger}" TextWrapping="Wrap" MinHeight="28" FontSize="12" Margin="0,8,0,0" />
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button x:Name="DeleteButton" Content="Rolle löschen" Style="{StaticResource LiftUpDangerButton}" Click="OnDeleteClick" />
+                        <Button x:Name="SaveButton" Content="Speichern" Style="{StaticResource LiftUpPrimaryButton}" Margin="0" Click="OnSaveClick" />
+                    </StackPanel>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

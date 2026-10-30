@@ -1,0 +1,42 @@
+<UserControl x:Class="LiftUp.App.Views.UsersView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Style="{StaticResource LiftUpCard}" Padding="12" Margin="0,0,0,10">
+            <Grid>
+                <StackPanel Orientation="Horizontal">
+                    <Button Content="Neues Konto" Style="{StaticResource LiftUpPrimaryButton}" Click="OnNewClick" />
+                    <Button Content="Bearbeiten" Click="OnEditClick" />
+                    <Button Content="Passwort zurücksetzen" Click="OnResetPasswordClick" />
+                    <Button Content="Löschen" Style="{StaticResource LiftUpDangerButton}" Click="OnDeleteClick" />
+                    <Button Content="Aktualisieren" Click="OnRefreshClick" />
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <TextBlock Text="Suche" VerticalAlignment="Center" Margin="0,0,6,0" Style="{StaticResource LiftUpFieldLabel}" />
+                    <TextBox x:Name="SearchBox" Width="220" TextChanged="OnSearchChanged" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <DataGrid x:Name="UsersGrid" Grid.Row="1" IsReadOnly="True" MouseDoubleClick="OnRowDoubleClick">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Benutzername" Binding="{Binding UserName}" Width="160" />
+                <DataGridTextColumn Header="Anzeigename" Binding="{Binding DisplayName}" Width="180" />
+                <DataGridTextColumn Header="Rolle" Binding="{Binding RoleName}" Width="150" />
+                <DataGridTextColumn Header="Rechte" Binding="{Binding PermissionSummary}" Width="*" />
+                <DataGridTextColumn Header="Status" Binding="{Binding StatusText}" Width="100" />
+                <DataGridTextColumn Header="Letzte Anmeldung" Binding="{Binding LastLoginText}" Width="150" />
+            </DataGrid.Columns>
+        </DataGrid>
+
+        <TextBlock x:Name="InfoText" Grid.Row="2" Style="{StaticResource LiftUpMutedText}" Margin="2,8,0,0" />
+    </Grid>
+</UserControl>

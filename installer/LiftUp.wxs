@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+
+  <Package Name="LiftUp"
+           Manufacturer="LiftUp"
+           Version="$(var.Version)"
+           UpgradeCode="9E4C21B0-3B76-4C55-9F1E-3D6B0C7A8E42"
+           Language="1031"
+           Scope="perUser"
+           InstallerVersion="500"
+           Compressed="yes">
+
+    <SummaryInformation Description="LiftUp – Projekt- und Benutzerverwaltung"
+                        Manufacturer="LiftUp" />
+
+    <!-- Benutzerinstallation: kein Adminrecht nötig, damit stille Updates ohne UAC laufen. -->
+    <MajorUpgrade DowngradeErrorMessage="Eine neuere Version von LiftUp ist bereits installiert." />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <Icon Id="LiftUpIcon" SourceFile="$(var.IconPath)" />
+    <Property Id="ARPPRODUCTICON" Value="LiftUpIcon" />
+    <Property Id="ARPHELPLINK" Value="https://github.com/$(var.GitHubOwner)/$(var.GitHubRepo)" />
+    <Property Id="ARPNOMODIFY" Value="1" />
+
+    <!-- Voraussetzung: .NET 8 Desktop Runtime. Fehlt sie, bricht das MSI mit Hinweis ab;
+         LiftUpSetup.exe (Bundle) installiert sie bei Bedarf nach. -->
+    <Property Id="NETDESKTOPRUNTIME8">
+      <DirectorySearch Id="DotnetDesktopRuntimeSearch"
+                       Path="[ProgramFiles6432Folder]dotnet\shared\Microsoft.WindowsDesktop.App" />
+    </Property>
+    <Launch Condition="NETDESKTOPRUNTIME8"
+            Message="LiftUp benötigt die .NET 8 Desktop Runtime. Bitte LiftUpSetup.exe verwenden, das sie nachinstalliert." />
+
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="ProgramsFolder" Name="Programs">
+        <Directory Id="INSTALLFOLDER" Name="LiftUp" />
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ApplicationProgramsFolder" Name="LiftUp" />
+    </StandardDirectory>
+
+    <StandardDirectory Id="DesktopFolder" />
+
+    <Feature Id="Main" Title="LiftUp" Level="1">
+      <ComponentGroupRef Id="AppFiles" />
+      <ComponentRef Id="StartMenuShortcut" />
+      <ComponentRef Id="DesktopShortcut" />
+    </Feature>
+
+    <ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
+      <!-- PDBs entfallen über -p:DebugType=none beim Veröffentlichen. -->
+      <Files Include="$(var.PublishDir)\**" />
+    </ComponentGroup>
+
+    <Component Id="StartMenuShortcut" Directory="ApplicationProgramsFolder" Guid="B1D3A9F2-6C4E-4F7B-9A21-5C8D0E2F3A11">
+      <Shortcut Id="StartMenuLiftUp"
+                Name="LiftUp"
+                Description="Projekt- und Benutzerverwaltung"
+                Target="[INSTALLFOLDER]LiftUp.App.exe"
+                WorkingDirectory="INSTALLFOLDER"
+                Icon="LiftUpIcon" />
+      <RemoveFolder Id="RemoveApplicationProgramsFolder" Directory="ApplicationProgramsFolder" On="uninstall" />
+      <RegistryValue Root="HKCU" Key="Software\LiftUp" Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+
+    <Component Id="DesktopShortcut" Directory="DesktopFolder" Guid="C2E4B0A3-7D5F-4A8C-8B32-6D9E1F4A5B22">
+      <Shortcut Id="DesktopLiftUp"
+                Name="LiftUp"
+                Description="Projekt- und Benutzerverwaltung"
+                Target="[INSTALLFOLDER]LiftUp.App.exe"
+                WorkingDirectory="INSTALLFOLDER"
+                Icon="LiftUpIcon" />
+      <RegistryValue Root="HKCU" Key="Software\LiftUp" Name="DesktopShortcut" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+
+    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+    <WixVariable Id="WixUILicenseRtf" Value="$(var.LicensePath)" />
+    <WixVariable Id="WixUIBannerBmp" Value="$(var.BannerPath)" />
+    <WixVariable Id="WixUIDialogBmp" Value="$(var.DialogPath)" />
+
+    <!-- Stille Installation: msiexec /i LiftUp-Setup.msi /qn /norestart -->
+  </Package>
+</Wix>

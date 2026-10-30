@@ -1,0 +1,50 @@
+<Window x:Class="LiftUp.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="LiftUp"
+        Height="720"
+        Width="1180"
+        MinHeight="560"
+        MinWidth="900"
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource LiftUpBackground}">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Background="{StaticResource LiftUpHeader}" Padding="20,12">
+            <Grid>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="LiftUp" Foreground="White" FontSize="20" FontWeight="SemiBold" />
+                    <TextBlock Text="Projekt- und Benutzerverwaltung"
+                               Foreground="#A9B6CC"
+                               FontSize="12"
+                               Margin="12,0,0,2"
+                               VerticalAlignment="Bottom" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <TextBlock x:Name="UserText" Foreground="White" VerticalAlignment="Center" FontSize="12" />
+                    <Button Content="Updates" Style="{StaticResource LiftUpHeaderButton}" Click="OnCheckUpdatesClick" />
+                    <Button Content="Passwort ändern" Style="{StaticResource LiftUpHeaderButton}" Click="OnChangePasswordClick" />
+                    <Button Content="Abmelden" Style="{StaticResource LiftUpHeaderButton}" Click="OnLogoutClick" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <TabControl x:Name="Tabs" Grid.Row="1" Margin="16,12,16,8" />
+
+        <Border Grid.Row="2" Background="{StaticResource LiftUpSurface}" BorderBrush="{StaticResource LiftUpBorder}" BorderThickness="0,1,0,0" Padding="16,6">
+            <Grid>
+                <TextBlock x:Name="StatusText" Style="{StaticResource LiftUpMutedText}" VerticalAlignment="Center" />
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <TextBlock x:Name="UpdateText" Style="{StaticResource LiftUpMutedText}" VerticalAlignment="Center" Margin="0,0,18,0" />
+                    <TextBlock x:Name="SyncText" Style="{StaticResource LiftUpMutedText}" VerticalAlignment="Center" />
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
