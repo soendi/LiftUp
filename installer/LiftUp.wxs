@@ -22,14 +22,8 @@
     <Property Id="ARPPRODUCTICON" Value="LiftUpIcon" />
     <Property Id="ARPHELPLINK" Value="https://github.com/$(var.GitHubOwner)/$(var.GitHubRepo)" />
 
-    <!-- Voraussetzung: .NET 8 Desktop Runtime. Fehlt sie, bricht das MSI mit Hinweis ab;
-         LiftUpSetup.exe (Bundle) installiert sie bei Bedarf nach. -->
-    <Property Id="NETDESKTOPRUNTIME8">
-      <DirectorySearch Id="DotnetDesktopRuntimeSearch"
-                       Path="[ProgramFiles6432Folder]dotnet\shared\Microsoft.WindowsDesktop.App" />
-    </Property>
-    <Launch Condition="NETDESKTOPRUNTIME8"
-            Message="LiftUp benötigt die .NET 8 Desktop Runtime. Bitte LiftUpSetup.exe verwenden, das sie nachinstalliert." />
+    <!-- Voraussetzung: .NET 8 Desktop Runtime. Das MSI prüft sie bewusst nicht selbst;
+         LiftUp-Setup.exe (Bundle) erkennt sie und lädt sie bei Bedarf nach. -->
 
     <StandardDirectory Id="LocalAppDataFolder">
       <!-- Eigene ID: "ProgramsFolder" ist eine vordefinierte MSI-Eigenschaft. -->

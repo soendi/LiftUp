@@ -121,9 +121,15 @@ Das MSI entsteht unter Windows (WiX 5 läuft nur dort):
 .\installer\build-installer.ps1 -Version 1.0.1
 ```
 
-Ergebnis: `artifacts\LiftUp-Setup.msi` und `artifacts\SHA256SUMS.txt`.
+Ergebnis: `artifacts\LiftUp-Setup.exe` (Installationsprogramm), `artifacts\LiftUp-Setup.msi`
+und `artifacts\SHA256SUMS.txt`.
 
-Die Installation erfolgt je Benutzer nach `%LOCALAPPDATA%\Programs\LiftUp` – ohne
+Zum Installieren dient **`LiftUp-Setup.exe`**. Das Programm prüft zuerst die .NET 8
+**Desktop** Runtime und lädt sie bei Bedarf von Microsoft nach
+(`aka.ms/dotnet/8.0/windowsdesktop-runtime-win-x64.exe`, rund 58 MB), bevor es das MSI startet.
+Ist die Runtime vorhanden, wird nichts geladen – dann läuft alles wie gehabt.
+
+Die Installation selbst erfolgt je Benutzer nach `%LOCALAPPDATA%\Programs\LiftUp` – ohne
 Administratorfreigabe, mit Verknüpfungen im Startmenü und auf dem Desktop. Das Setup bringt
 den deutschen WiX-Assistenten mit eigenem Banner, Dialogbild, Symbol und Lizenztext mit.
 Verknüpfungen, Programmeintrag und Deinstallation verwaltet Windows selbst.
@@ -131,13 +137,14 @@ Verknüpfungen, Programmeintrag und Deinstallation verwaltet Windows selbst.
 Stille Installation und Deinstallation:
 
 ```
+LiftUp-Setup.exe /quiet /norestart
 msiexec /i LiftUp-Setup.msi /qn /norestart
 msiexec /x {9E4C21B0-3B76-4C55-9F1E-3D6B0C7A8E42} /qn
 ```
 
-Das Paket ist absichtlich schlank: veröffentlicht wird framework-abhängig (rund 2,3 MB),
-auf dem Zielrechner muss die .NET 8 **Desktop** Runtime vorhanden sein. Selbstenthaltend
-wären es etwa 150 MB.
+Das Paket ist absichtlich schlank: veröffentlicht wird framework-abhängig (rund 2,3 MB).
+Das MSI enthält bewusst keine eigene Runtime-Prüfung mehr, sondern überlässt sie dem
+Installationsprogramm; selbstenthaltend wären es etwa 150 MB.
 
 ### Stille Updates über GitHub
 
@@ -157,9 +164,9 @@ Abschalten mit `setx LIFTUP_DISABLE_AUTOUPDATE 1`; manuell auslösen über „Up
 git tag v1.0.1 && git push origin v1.0.1
 ```
 
-`.github/workflows/release.yml` baut auf `windows-latest`, führt die Tests aus, erzeugt MSI und
-Prüfsumme und legt das Release an. Für die Update-Prüfung ohne Token muss das Repository
-öffentlich sein.
+`.github/workflows/release.yml` baut auf `windows-latest`, führt die Tests aus, erzeugt MSI,
+Installationsprogramm und Prüfsumme und legt das Release an. Für die Update-Prüfung ohne Token
+muss das Repository öffentlich sein.
 
 ### Datenbanken: prüfen und nachholen
 

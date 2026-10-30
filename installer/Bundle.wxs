@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal"
+     xmlns:netfx="http://wixtoolset.org/schemas/v4/wxs/netfx">
+
+  <!-- Installationsprogramm: prüft die .NET-Desktop-Runtime und lädt sie bei Bedarf
+       selbst nach, bevor das MSI läuft. Stille Installation: LiftUp-Setup.exe /quiet -->
+  <Bundle Name="LiftUp"
+          Manufacturer="LiftUp"
+          Version="$(var.Version)"
+          UpgradeCode="5B8E0F31-2A64-4C7D-8E19-6D3F5A0B7C48"
+          IconSourceFile="$(var.IconPath)">
+
+    <BootstrapperApplication>
+      <bal:WixStandardBootstrapperApplication Theme="rtfLicense" />
+    </BootstrapperApplication>
+    <WixVariable Id="WixStdbaLicenseRtf" Value="$(var.LicensePath)" />
+
+    <!-- Sucht die .NET 8 Desktop Runtime (x64). Ist sie vorhanden, wird nichts geladen. -->
+    <netfx:DotNetCoreSearch RuntimeType="desktop"
+                            Platform="x64"
+                            MajorVersion="8"
+                            Variable="LiftUpDesktopRuntime8" />
+
+    <Chain>
+      <!-- Wird nur ausgeführt, wenn die Suche nichts findet. Die Runtime ist
+           maschinenweit und braucht Administratorrechte; danach läuft das MSI
+           wieder ohne Rückfrage. -->
+      <ExePackage Id="DotNetDesktopRuntime8"
+                  Name="windowsdesktop-runtime-8.0-win-x64.exe"
+                  Description=".NET 8 Desktop Runtime"
+                  DownloadUrl="https://aka.ms/dotnet/8.0/windowsdesktop-runtime-win-x64.exe"
+                  Compressed="no"
+                  InstallArguments="/install /quiet /norestart"
+                  DetectCondition="LiftUpDesktopRuntime8 &gt;= v8.0.0"
+                  InstallCondition="NOT (LiftUpDesktopRuntime8 &gt;= v8.0.0)"
+                  PerMachine="yes"
+                  Permanent="yes"
+                  Vital="yes">
+        <ExitCode Value="3010" Behavior="scheduleReboot" />
+      </ExePackage>
+
+      <MsiPackage Id="LiftUpMsi" SourceFile="$(var.MsiPath)" Vital="yes" />
+    </Chain>
+  </Bundle>
+</Wix>

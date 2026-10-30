@@ -10,11 +10,11 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
-Write-Host "1/4 Tests"
+Write-Host "1/5 Tests"
 dotnet test tests/LiftUp.Core.Tests/LiftUp.Core.Tests.csproj -c $Configuration | Out-Host
 if ($LASTEXITCODE -ne 0) { throw "Tests fehlgeschlagen." }
 
-Write-Host "2/4 Veröffentlichen (framework-abhängig, schlank)"
+Write-Host "2/5 Veröffentlichen (framework-abhängig, schlank)"
 dotnet publish src/LiftUp.App/LiftUp.App.csproj -c $Configuration -r $Runtime --self-contained false `
     -p:Version=$Version -p:DebugType=none -o artifacts/publish | Out-Host
 if ($LASTEXITCODE -ne 0) { throw "Veröffentlichen fehlgeschlagen." }
@@ -24,14 +24,14 @@ dotnet publish tools/LiftUp.Preflight/LiftUp.Preflight.csproj -c $Configuration 
     -p:Version=$Version -p:DebugType=none -o artifacts/publish | Out-Host
 if ($LASTEXITCODE -ne 0) { throw "Veröffentlichen des Prüfwerkzeugs fehlgeschlagen." }
 
-Write-Host "3/4 WiX bereitstellen"
+Write-Host "3/5 WiX bereitstellen"
 if (-not (Get-Command wix -ErrorAction SilentlyContinue)) {
     dotnet tool install --global wix --version 5.0.2 | Out-Host
     $env:PATH = "$env:PATH;$env:USERPROFILE\.dotnet\tools"
 }
 wix extension add -g WixToolset.UI.wixext/5.0.2 2>&1 | Out-Host
 
-Write-Host "4/4 MSI bauen"
+Write-Host "4/5 MSI bauen"
 $publishDir = (Resolve-Path artifacts/publish).Path
 wix build installer/LiftUp.wxs `
     -d Version=$Version `
@@ -46,7 +46,30 @@ wix build installer/LiftUp.wxs `
     -culture de-de `
     -o artifacts/LiftUp-Setup.msi | Out-Host
 
-$hash = (Get-FileHash artifacts/LiftUp-Setup.msi -Algorithm SHA256).Hash.ToLowerInvariant()
-"$hash  LiftUp-Setup.msi" | Out-File -FilePath artifacts/SHA256SUMS.txt -Encoding ascii
+Write-Host "5/5 Installationsprogramm bauen (lädt die .NET-Desktop-Runtime bei Bedarf nach)"
+wix extension add -g WixToolset.Bal.wixext/5.0.2 2>&1 | Out-Host
+wix extension add -g WixToolset.Netfx.wixext/5.0.2 2>&1 | Out-Host
 
-Write-Host "Fertig: artifacts/LiftUp-Setup.msi ($Version)"
+# Die Bal-Erweiterung heißt als Assembly "BootstrapperApplications"; deshalb den Pfad übergeben.
+$balExtension = (Get-ChildItem "$env:USERPROFILE\.wix\extensions\WixToolset.Bal.wixext" -Recurse -Filter *.dll |
+    Select-Object -First 1).FullName
+if (-not $balExtension) { throw "Bal-Erweiterung nicht gefunden." }
+
+wix build installer/Bundle.wxs `
+    -d Version=$Version `
+    -d MsiPath="$((Resolve-Path artifacts/LiftUp-Setup.msi).Path)" `
+    -d IconPath="$(Resolve-Path src/LiftUp.App/Assets/LiftUp.ico).Path" `
+    -d LicensePath="$(Resolve-Path installer/License.rtf).Path" `
+    -ext "$balExtension" `
+    -ext WixToolset.Netfx.wixext `
+    -culture de-de `
+    -o artifacts/LiftUp-Setup.exe | Out-Host
+if ($LASTEXITCODE -ne 0) { throw "Installationsprogramm fehlgeschlagen." }
+
+$lines = foreach ($file in @("LiftUp-Setup.msi", "LiftUp-Setup.exe")) {
+    $hash = (Get-FileHash "artifacts/$file" -Algorithm SHA256).Hash.ToLowerInvariant()
+    "$hash  $file"
+}
+$lines | Out-File -FilePath artifacts/SHA256SUMS.txt -Encoding ascii
+
+Write-Host "Fertig: artifacts/LiftUp-Setup.exe und artifacts/LiftUp-Setup.msi ($Version)"

@@ -96,12 +96,34 @@ jobs:
             -culture de-de `
             -o artifacts/LiftUp-Setup.msi 2>&1 | Tee-Object -FilePath logs/06-msi.log
 
+      - name: Installationsprogramm bauen
+        shell: pwsh
+        run: |
+          wix extension add -g WixToolset.Bal.wixext/5.0.2 2>&1 | Tee-Object -FilePath logs/07-bundle.log
+          wix extension add -g WixToolset.Netfx.wixext/5.0.2 2>&1 | Tee-Object -Append -FilePath logs/07-bundle.log
+          # Die Bal-Erweiterung heißt als Assembly "BootstrapperApplications"; deshalb den Pfad übergeben.
+          $bal = (Get-ChildItem "$env:USERPROFILE\.wix\extensions\WixToolset.Bal.wixext" -Recurse -Filter *.dll |
+            Select-Object -First 1).FullName
+          if (-not $bal) { throw "Bal-Erweiterung nicht gefunden." }
+          wix build installer/Bundle.wxs `
+            -d Version=${{ steps.version.outputs.value }} `
+            -d MsiPath="$((Resolve-Path artifacts/LiftUp-Setup.msi).Path)" `
+            -d IconPath="$((Resolve-Path src/LiftUp.App/Assets/LiftUp.ico).Path)" `
+            -d LicensePath="$((Resolve-Path installer/License.rtf).Path)" `
+            -ext "$bal" `
+            -ext WixToolset.Netfx.wixext `
+            -culture de-de `
+            -o artifacts/LiftUp-Setup.exe 2>&1 | Tee-Object -Append -FilePath logs/07-bundle.log
+
       - name: Prüfsumme schreiben
         shell: pwsh
         run: |
-          $hash = (Get-FileHash artifacts/LiftUp-Setup.msi -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  LiftUp-Setup.msi" | Out-File -FilePath artifacts/SHA256SUMS.txt -Encoding ascii
-          Get-ChildItem artifacts | Out-File -FilePath logs/07-artifacts.log
+          $lines = foreach ($file in @("LiftUp-Setup.msi", "LiftUp-Setup.exe")) {
+            $hash = (Get-FileHash "artifacts/$file" -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $file"
+          }
+          $lines | Out-File -FilePath artifacts/SHA256SUMS.txt -Encoding ascii
+          Get-ChildItem artifacts | Out-File -FilePath logs/08-artifacts.log
 
       # Der Release-Action legt den Tag sonst am Default-Branch an; hier wird er fest
       # auf den tatsächlich veröffentlichten Commit gesetzt.
@@ -119,6 +141,7 @@ jobs:
           target_commitish: ${{ github.sha }}
           name: LiftUp ${{ steps.version.outputs.value }}
           files: |
+            artifacts/LiftUp-Setup.exe
             artifacts/LiftUp-Setup.msi
             artifacts/SHA256SUMS.txt
           generate_release_notes: true
