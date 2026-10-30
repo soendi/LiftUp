@@ -12,9 +12,9 @@
           IconSourceFile="$(var.IconPath)">
 
     <BootstrapperApplication>
-      <bal:WixStandardBootstrapperApplication Theme="rtfLicense" />
+      <bal:WixStandardBootstrapperApplication Theme="rtfLicense"
+                                             LicenseFile="$(var.LicensePath)" />
     </BootstrapperApplication>
-    <WixVariable Id="WixStdbaLicenseRtf" Value="$(var.LicensePath)" />
 
     <!-- Sucht die .NET 8 Desktop Runtime (x64). Ist sie vorhanden, wird nichts geladen. -->
     <netfx:DotNetCoreSearch RuntimeType="desktop"

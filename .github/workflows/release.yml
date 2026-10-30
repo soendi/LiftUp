@@ -51,27 +51,26 @@ jobs:
 
       - name: Tests
         shell: pwsh
-        run: >
-          dotnet test tests/LiftUp.Core.Tests/LiftUp.Core.Tests.csproj -c Release
-          2>&1 | Tee-Object -FilePath logs/01-tests.log
+        run: |
+          dotnet test tests/LiftUp.Core.Tests/LiftUp.Core.Tests.csproj -c Release 2>&1 |
+            Tee-Object -FilePath logs/01-tests.log
+          if ($LASTEXITCODE -ne 0) { throw "Tests fehlgeschlagen." }
 
       - name: Veröffentlichen
         shell: pwsh
-        run: >
-          dotnet publish src/LiftUp.App/LiftUp.App.csproj
-          -c Release -r win-x64 --self-contained false
-          -p:Version=${{ steps.version.outputs.value }} -p:DebugType=none
-          -o artifacts/publish
-          2>&1 | Tee-Object -FilePath logs/02-publish-app.log
+        run: |
+          dotnet publish src/LiftUp.App/LiftUp.App.csproj -c Release -r win-x64 --self-contained false `
+            -p:Version=${{ steps.version.outputs.value }} -p:DebugType=none -o artifacts/publish 2>&1 |
+            Tee-Object -FilePath logs/02-publish-app.log
+          if ($LASTEXITCODE -ne 0) { throw "Veröffentlichen fehlgeschlagen." }
 
       - name: Prüfwerkzeug veröffentlichen
         shell: pwsh
-        run: >
-          dotnet publish tools/LiftUp.Preflight/LiftUp.Preflight.csproj
-          -c Release -r win-x64 --self-contained false
-          -p:Version=${{ steps.version.outputs.value }} -p:DebugType=none
-          -o artifacts/publish
-          2>&1 | Tee-Object -FilePath logs/03-publish-preflight.log
+        run: |
+          dotnet publish tools/LiftUp.Preflight/LiftUp.Preflight.csproj -c Release -r win-x64 --self-contained false `
+            -p:Version=${{ steps.version.outputs.value }} -p:DebugType=none -o artifacts/publish 2>&1 |
+            Tee-Object -FilePath logs/03-publish-preflight.log
+          if ($LASTEXITCODE -ne 0) { throw "Veröffentlichen des Prüfwerkzeugs fehlgeschlagen." }
 
       - name: WiX installieren
         shell: pwsh
@@ -95,6 +94,7 @@ jobs:
             -ext WixToolset.UI.wixext `
             -culture de-de `
             -o artifacts/LiftUp-Setup.msi 2>&1 | Tee-Object -FilePath logs/06-msi.log
+          if ($LASTEXITCODE -ne 0) { throw "MSI-Bau fehlgeschlagen." }
 
       - name: Installationsprogramm bauen
         shell: pwsh
@@ -114,6 +114,7 @@ jobs:
             -ext WixToolset.Netfx.wixext `
             -culture de-de `
             -o artifacts/LiftUp-Setup.exe 2>&1 | Tee-Object -Append -FilePath logs/07-bundle.log
+          if ($LASTEXITCODE -ne 0) { throw "Installationsprogramm fehlgeschlagen." }
 
       - name: Prüfsumme schreiben
         shell: pwsh
