@@ -12,7 +12,7 @@ namespace LiftUp.Core.Data;
 /// </summary>
 public sealed class Database
 {
-    public const int CurrentSchemaVersion = 5;
+    public const int CurrentSchemaVersion = 6;
 
     private readonly string _connectionString;
 
@@ -132,6 +132,9 @@ public sealed class Database
         // Version 3 bis 5 legen nur neue Tabellen an; das erledigt das Schema per IF NOT EXISTS.
         MigrateDocumentTypes(connection);
 
+        // Version 6 ergänzt den Bearbeiter im Änderungsprotokoll.
+        MigrateChangeLogActor(connection);
+
         using var command = Db.Command(connection, "UPDATE SchemaInfo SET Version = $version;");
         command.With("$version", CurrentSchemaVersion);
         command.ExecuteNonQuery();
@@ -188,6 +191,34 @@ public sealed class Database
             """);
         rename.With("$archive", (int)Permission.ViewArchivedProjects);
         rename.ExecuteNonQuery();
+    }
+
+    /// <summary>
+    /// Version 6: hält im Änderungsprotokoll fest, wer eine Änderung ausgelöst hat.
+    /// Bestehende Einträge bleiben ohne Bearbeiter.
+    /// </summary>
+    private static void MigrateChangeLogActor(SqliteConnection connection)
+    {
+        var hasColumn = false;
+        using (var info = Db.Command(connection, "PRAGMA table_info(ChangeLog);"))
+        using (var reader = info.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                if (string.Equals(reader.GetString(1), "OriginUser", StringComparison.OrdinalIgnoreCase))
+                {
+                    hasColumn = true;
+                }
+            }
+        }
+
+        if (hasColumn)
+        {
+            return;
+        }
+
+        using var alter = Db.Command(connection, "ALTER TABLE ChangeLog ADD COLUMN OriginUser TEXT NULL;");
+        alter.ExecuteNonQuery();
     }
 
     /// <summary>Übernimmt vorhandene Typnamen bestehender Vorlagen in die Typenliste.</summary>
@@ -453,7 +484,8 @@ public sealed class Database
             ChangedUtc     TEXT NOT NULL,
             OriginDeviceId TEXT NOT NULL,
             RowVersion     INTEGER NOT NULL,
-            SyncedUtc      TEXT NULL
+            SyncedUtc      TEXT NULL,
+            OriginUser     TEXT NULL
         );
 
         CREATE TABLE IF NOT EXISTS ProjectNumberSequences (

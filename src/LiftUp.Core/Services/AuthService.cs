@@ -17,12 +17,9 @@ public sealed class AuthService
     private readonly Database _database;
     private readonly UserRepository _users = new();
     private readonly RoleRepository _roles = new();
-    private readonly ChangeLogWriter _changes;
-
     public AuthService(Database database)
     {
         _database = database;
-        _changes = new ChangeLogWriter(database);
     }
 
     public LoginResult Login(string userName, string password)
@@ -80,8 +77,10 @@ public sealed class AuthService
         var hash = PasswordHasher.Hash(newPassword);
         using var transaction = connection.BeginTransaction();
         var rowVersion = _users.UpdatePassword(connection, transaction, user.Id, hash.HashBase64, hash.SaltBase64, hash.Iterations, mustChange: false);
-        _changes.Record(connection, transaction, "User", user.Id.ToString("D"), "PasswordChanged",
-            new { user.UserName, PasswordChanged = true }, rowVersion);
+        // Der Bearbeiter ist hier der Benutzer selbst; eine Sitzung gibt es an dieser Stelle nicht.
+        new ChangeLogWriter(_database, user.UserName)
+            .Record(connection, transaction, "User", user.Id.ToString("D"), "PasswordChanged",
+                new { user.UserName, PasswordChanged = true }, rowVersion);
         transaction.Commit();
 
         // Sitzung mit aktualisierten Werten zurückgeben (MustChangePassword ist jetzt false).

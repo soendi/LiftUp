@@ -20,7 +20,7 @@ public sealed class TemplateService
     {
         _database = database;
         _actor = actor;
-        _changes = new ChangeLogWriter(database);
+        _changes = new ChangeLogWriter(database, _actor.UserName);
     }
 
     public IReadOnlyList<TemplateListItem> GetAll(bool includeInactive = true, string? documentType = null)

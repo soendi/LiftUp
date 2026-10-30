@@ -56,6 +56,16 @@ Benutzer verwalten, Rollen und Rechte verwalten. Die Prüfung passiert in der Co
 (`Session.Require`), nicht nur in der Oberfläche – ein Aufruf ohne Recht wirft
 `PermissionDeniedException`.
 
+### Änderungsprotokoll
+
+- Jede schreibende Aktion landet in `ChangeLog`: Bereich, Vorgang, betroffener Datensatz, Bearbeiter,
+  Arbeitsplatz und Zeitpunkt. Das Protokoll dient gleichzeitig als Outbox für den späteren Abgleich.
+- Der Reiter „Protokoll“ zeigt die Einträge, neueste zuerst, filterbar nach Bereich, Bearbeiter,
+  Zeitraum und Freitext. Die Detailanzeige zeigt die gespeicherte Nutzlast.
+- Sichtbar ist der Reiter für Rollen mit dem Recht „Änderungsprotokoll ansehen“; Administrator und
+  Projektleiter haben es voreingestellt.
+- Passwörter und Hashes stehen nie in der Nutzlast.
+
 ### Projekte
 
 - Projekt anlegen, bearbeiten, löschen (Nr., Name, Kunde, Beschreibung, Status, Projektordner).
@@ -70,6 +80,8 @@ Benutzer verwalten, Rollen und Rechte verwalten. Die Prüfung passiert in der Co
 ## Datenmodell
 
 Tabellen: `Users`, `Roles`, `Projects`, `ChangeLog`, `Settings`, `SchemaInfo`.
+`ChangeLog` führt zusätzlich den Bearbeiter (`OriginUser`) und die Geräte-Id, damit sich Einträge
+ihrem Ursprung zuordnen lassen.
 
 Jede fachliche Tabelle führt:
 
@@ -337,8 +349,12 @@ Einmal auf einem frischen Windows-Rechner durchgehen. Was hier nicht abgehakt is
 - [ ] Erstanmeldung `admin`/`admin` erzwingt einen Passwortwechsel.
 - [ ] Je einen Benutzer pro Rolle anlegen: Administrator, Projektleiter, Mitarbeiter, Leser.
 - [ ] Mit jeder Rolle anmelden: Leser sieht keine bearbeitenden Schaltflächen, Mitarbeiter pflegt Projekte,
-      Administrator sieht Benutzer und Sicherung.
+      Administrator sieht Benutzer, Sicherung und Protokoll, Projektleiter sieht das Protokoll ebenfalls.
 - [ ] Falsches Passwort: Meldung prüfen und notieren, was passiert.
+- [ ] Reiter „Protokoll“: Einträge erscheinen mit Bearbeiter, Zeit und Objekt; Filter nach Bereich,
+      Bearbeiter, Zeitraum und Freitext greifen; als Leser ist der Reiter nicht vorhanden.
+- [ ] Eine Datenbank aus einer Vorversion öffnen: die Spalte `OriginUser` wird ergänzt, alte Einträge
+      zeigen „unbekannt“.
 
 **Projekte**
 

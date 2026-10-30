@@ -21,7 +21,7 @@ public sealed class ProjectService
     {
         _database = database;
         _actor = actor;
-        _changes = new ChangeLogWriter(database);
+        _changes = new ChangeLogWriter(database, _actor.UserName);
     }
 
     /// <summary>Projektübersicht; ohne Archivbereich sind archivierte Projekte ausgeblendet.</summary>

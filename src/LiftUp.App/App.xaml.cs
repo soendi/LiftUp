@@ -77,5 +77,6 @@ public sealed class AppServices(Database database)
     public CloudBackupService CloudBackups { get; } = new(database);
     public ImageService Images => new(Database, CurrentSession);
     public SnippetService Snippets => new(Database, CurrentSession);
+    public ChangeLogService ChangeLog => new(Database, CurrentSession);
     public DocumentService Documents => new(Database, CurrentSession, new Documents.WebView2PdfRenderer());
 }

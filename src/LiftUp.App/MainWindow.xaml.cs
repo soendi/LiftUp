@@ -50,6 +50,11 @@ public partial class MainWindow : Window
             Tabs.Items.Add(new TabItem { Header = "Sicherung", Content = new BackupsView(_services) });
         }
 
+        if (session.Can(Permission.ViewChangeLog))
+        {
+            Tabs.Items.Add(new TabItem { Header = "Protokoll", Content = new ChangeLogView(_services) });
+        }
+
         if (session.Can(Permission.ManageRoles))
         {
             Tabs.Items.Add(new TabItem { Header = "Rollen und Rechte", Content = new RolesView(_services) });

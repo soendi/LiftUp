@@ -22,7 +22,7 @@ public sealed class ChangeLogEntry
 /// Transaktion wie die eigentliche Änderung, damit lokal nichts verloren geht.
 /// Passwörter und Hashes gehören niemals in die Nutzlast.
 /// </summary>
-public sealed class ChangeLogWriter(Database database)
+public sealed class ChangeLogWriter(Database database, string? actorName = null)
 {
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
@@ -43,8 +43,9 @@ public sealed class ChangeLogWriter(Database database)
         long rowVersion)
     {
         using var command = Db.Command(connection, """
-            INSERT INTO ChangeLog (EntityType, EntityId, Operation, Payload, ChangedUtc, OriginDeviceId, RowVersion)
-            VALUES ($entityType, $entityId, $operation, $payload, $changedUtc, $origin, $rowVersion);
+            INSERT INTO ChangeLog
+                (EntityType, EntityId, Operation, Payload, ChangedUtc, OriginDeviceId, RowVersion, OriginUser)
+            VALUES ($entityType, $entityId, $operation, $payload, $changedUtc, $origin, $rowVersion, $originUser);
             """, transaction);
         command.With("$entityType", entityType)
             .With("$entityId", entityId)
@@ -52,7 +53,8 @@ public sealed class ChangeLogWriter(Database database)
             .With("$payload", JsonSerializer.Serialize(payload, SerializerOptions))
             .With("$changedUtc", DateTime.UtcNow.ToDb())
             .With("$origin", DeviceId)
-            .With("$rowVersion", rowVersion);
+            .With("$rowVersion", rowVersion)
+            .With("$originUser", string.IsNullOrWhiteSpace(actorName) ? (object)DBNull.Value : actorName);
         command.ExecuteNonQuery();
     }
 

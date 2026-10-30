@@ -4,9 +4,6 @@ on:
   push:
     tags:
       - "v*"
-    # Erlaubt einen Release direkt aus dem Arbeitsbranch, solange Tags nicht pushbar sind.
-    branches:
-      - "freebuff/444d1acf47b98bf84d8c9e9c"
   workflow_dispatch:
     inputs:
       version:

@@ -21,7 +21,7 @@ public sealed class ImageService
     {
         _database = database;
         _actor = actor;
-        _changes = new ChangeLogWriter(database);
+        _changes = new ChangeLogWriter(database, _actor.UserName);
 
         var baseDirectory = Path.GetDirectoryName(database.FilePath) ?? Path.GetTempPath();
         _libraryRoot = libraryRoot ?? Path.Combine(baseDirectory, "bilder");

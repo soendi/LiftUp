@@ -23,7 +23,7 @@ public sealed partial class UserService
     {
         _database = database;
         _actor = actor;
-        _changes = new ChangeLogWriter(database);
+        _changes = new ChangeLogWriter(database, _actor.UserName);
     }
 
     public IReadOnlyList<UserListItem> GetUsers(string? search = null)

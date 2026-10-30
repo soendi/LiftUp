@@ -16,7 +16,7 @@ public sealed class RoleService
     {
         _database = database;
         _actor = actor;
-        _changes = new ChangeLogWriter(database);
+        _changes = new ChangeLogWriter(database, _actor.UserName);
     }
 
     /// <summary>Rollenliste – für Zuweisungen auch ohne Verwaltungsrecht lesbar.</summary>

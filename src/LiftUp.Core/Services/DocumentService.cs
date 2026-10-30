@@ -27,7 +27,7 @@ public sealed class DocumentService
         _database = database;
         _actor = actor;
         _renderer = renderer;
-        _changes = new ChangeLogWriter(database);
+        _changes = new ChangeLogWriter(database, _actor.UserName);
     }
 
     /// <summary>HTML für die Vorschau, ohne etwas zu schreiben.</summary>

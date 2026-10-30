@@ -16,7 +16,7 @@ public sealed class DocumentTypeService
     {
         _database = database;
         _actor = actor;
-        _changes = new ChangeLogWriter(database);
+        _changes = new ChangeLogWriter(database, _actor.UserName);
     }
 
     public IReadOnlyList<DocumentType> GetAll(bool includeArchived = false)

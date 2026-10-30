@@ -16,7 +16,7 @@ public sealed class SnippetService
     {
         _database = database;
         _actor = actor;
-        _changes = new ChangeLogWriter(database);
+        _changes = new ChangeLogWriter(database, _actor.UserName);
     }
 
     public IReadOnlyList<TextSnippetListItem> GetAll(bool includeArchived = false)
