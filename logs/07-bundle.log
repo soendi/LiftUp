@@ -1,0 +1,1 @@
+D:\a\LiftUp\LiftUp\installer\Bundle.wxs(29) : error WIX0103: Cannot find the WixBundlePayload file 'SourceDir\windowsdesktop-runtime-8.0-win-x64.exe'. The following paths were checked: SourceDir\windowsdesktop-runtime-8.0-win-x64.exe

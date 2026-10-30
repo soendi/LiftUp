@@ -1,0 +1,6 @@
+  Determining projects to restore...
+  Restored D:\a\LiftUp\LiftUp\tools\LiftUp.Preflight\LiftUp.Preflight.csproj (in 433 ms).
+  1 of 2 projects are up-to-date for restore.
+  LiftUp.Core -> D:\a\LiftUp\LiftUp\src\LiftUp.Core\bin\Release\net8.0\LiftUp.Core.dll
+  LiftUp.Preflight -> D:\a\LiftUp\LiftUp\tools\LiftUp.Preflight\bin\Release\net8.0\win-x64\LiftUp.Preflight.dll
+  LiftUp.Preflight -> D:\a\LiftUp\LiftUp\artifacts\publish\
