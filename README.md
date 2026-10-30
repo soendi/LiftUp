@@ -111,6 +111,27 @@ src/LiftUp.App/
 tests/LiftUp.Core.Tests/
 ```
 
+## Projektverwaltung
+
+Projekte haben Nummer, Name, Kunde, Ansprechpartner, Beschreibung, Verantwortlichen und Status.
+Die **Projektnummer wird automatisch** im Format `2026-0001` vergeben (eigener Nummernkreis je Jahr,
+in derselben Transaktion wie das Anlegen). Eine vorhandene Nummer kann stattdessen eingetragen werden.
+
+Beim Anlegen entsteht der Projektordner samt Unterordnern `01_Dokumente`, `02_Bilder`, `03_PDF`
+und `04_Vorlagen`; bei bestehenden Ordnern werden nur fehlende Unterordner ergänzt. Der Pfad darf
+auf jedem Laufwerk liegen (lokal, Netzlaufwerk, Wechseldatenträger).
+
+Die Übersicht bietet Suche (Name, Nummer, Kunde, Ansprechpartner, Verantwortlicher, Beschreibung),
+Statusfilter und Sortierung nach Projekt, Nummer, Kunde, Verantwortlichem, Status oder Änderungsdatum.
+
+**Archiv:** Archivieren ändert ausschließlich den Status und hält Zeitpunkt und Benutzer fest.
+Dateien und Ordner werden weder verschoben noch gelöscht. Archivierte Projekte verschwinden aus der
+normalen Übersicht und erscheinen über „Archiv anzeigen“; dort lassen sie sich wiederherstellen.
+
+**Rollen:** Administrator, Projektleiter, Mitarbeiter, Leser. Leser sehen Projekte und Archiv,
+Projektleiter dürfen zusätzlich archivieren, löschen und Dokumente erzeugen. Die frühere Rolle
+„Betrachter“ heißt bei bestehenden Datenbanken automatisch „Leser“ (Schema-Migration auf Version 2).
+
 ## Installation und Updates
 
 ### Installer bauen

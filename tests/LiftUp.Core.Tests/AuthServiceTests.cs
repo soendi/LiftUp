@@ -65,7 +65,7 @@ public sealed class AuthServiceTests
     {
         using var fixture = new TestDatabase();
         var admin = fixture.LoginAsAdmin();
-        var role = new RoleService(fixture.Database, admin).GetAll().Single(item => item.Name == "Betrachter");
+        var role = new RoleService(fixture.Database, admin).GetAll().Single(item => item.Name == "Leser");
         var users = new UserService(fixture.Database, admin);
 
         var user = users.Create("testuser", "Test Benutzer", role.Id, "Startpasswort1", mustChangePassword: false);

@@ -1,18 +1,20 @@
 using LiftUp.Core.Data;
 using LiftUp.Core.Domain;
 using LiftUp.Core.Repositories;
+using Microsoft.Data.Sqlite;
 
 namespace LiftUp.Core.Services;
 
 /// <summary>
-/// Projektverwaltung inklusive Projektordner. Gelöscht wird weich (IsDeleted),
-/// damit der spätere Abgleich mit PostgreSQL Löschungen nachvollziehen kann.
+/// Projektverwaltung inklusive Projektordner und Archiv. Gelöscht wird weich (IsDeleted),
+/// damit der spätere Abgleich mit der zentralen Datenbank Löschungen nachvollziehen kann.
 /// </summary>
 public sealed class ProjectService
 {
     private readonly Database _database;
     private readonly Session _actor;
     private readonly ProjectRepository _projects = new();
+    private readonly UserRepository _users = new();
     private readonly ChangeLogWriter _changes;
 
     public ProjectService(Database database, Session actor)
@@ -22,11 +24,27 @@ public sealed class ProjectService
         _changes = new ChangeLogWriter(database);
     }
 
-    public IReadOnlyList<ProjectListItem> Search(string? search)
+    /// <summary>Projektübersicht; ohne Archivbereich sind archivierte Projekte ausgeblendet.</summary>
+    public IReadOnlyList<ProjectListItem> Search(ProjectQuery query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        _actor.Require(Permission.ViewProjects);
+        if (query.Scope != ProjectScope.Active)
+        {
+            _actor.Require(Permission.ViewArchivedProjects);
+        }
+
+        using var connection = _database.Open();
+        return _projects.Search(connection, null, query);
+    }
+
+    /// <summary>Auswählbare Verantwortliche für den Projektdialog.</summary>
+    public IReadOnlyList<UserListItem> GetResponsibleChoices()
     {
         _actor.Require(Permission.ViewProjects);
         using var connection = _database.Open();
-        return _projects.Search(connection, null, search);
+        return _users.GetListItems(connection, null, null).Where(user => user.IsActive).ToArray();
     }
 
     public Project GetProject(Guid id)
@@ -42,20 +60,28 @@ public sealed class ProjectService
         _actor.Require(Permission.CreateProjects);
         ArgumentNullException.ThrowIfNull(input);
 
-        var prepared = Prepare(input, existingProjectId: null);
+        var prepared = Prepare(input);
         var now = DateTime.UtcNow;
 
         using var connection = _database.Open();
         using var transaction = connection.BeginTransaction();
 
-        EnsureUnique(connection, transaction, prepared, existingProjectId: null);
+        // Automatische Nummern vergibt die Datenbank selbst; eine vorgegebene Nummer
+        // muss eindeutig sein.
+        var number = prepared.Number ?? _projects.NextNumber(connection, transaction, now.Year);
+        var responsibleName = ResolveResponsibleName(connection, transaction, prepared.ResponsibleUserId);
+
+        EnsureUnique(connection, transaction, prepared, number, existingProjectId: null);
 
         var project = new Project
         {
             Name = prepared.Name,
-            Number = prepared.Number,
+            Number = number,
             Customer = prepared.Customer,
+            Contact = prepared.Contact,
             Description = prepared.Description,
+            ResponsibleUserId = prepared.ResponsibleUserId,
+            ResponsibleName = responsibleName,
             FolderPath = prepared.FolderPath,
             Status = prepared.Status,
             CreatedUtc = now,
@@ -64,6 +90,12 @@ public sealed class ProjectService
             UpdatedBy = _actor.UserName,
         };
 
+        if (project.Status == ProjectStatus.Archived)
+        {
+            project.ArchivedUtc = now;
+            project.ArchivedBy = _actor.UserName;
+        }
+
         _projects.Insert(connection, transaction, project);
         _changes.Record(connection, transaction, "Project", project.Id.ToString("D"), "Create",
             new
@@ -71,7 +103,8 @@ public sealed class ProjectService
                 project.Name,
                 project.Number,
                 project.Customer,
-                project.Description,
+                project.Contact,
+                project.ResponsibleName,
                 project.FolderPath,
                 Status = (int)project.Status,
             },
@@ -82,7 +115,7 @@ public sealed class ProjectService
         // verwaiste Ordnerstruktur zurück, wenn die Datenbank ablehnt.
         if (prepared.CreateFolderIfMissing)
         {
-            FolderService.EnsureCreated(project.FolderPath);
+            FolderService.EnsureStandardStructure(project.FolderPath);
         }
 
         return project;
@@ -93,7 +126,7 @@ public sealed class ProjectService
         _actor.Require(Permission.EditProjects);
         ArgumentNullException.ThrowIfNull(input);
 
-        var prepared = Prepare(input, id);
+        var prepared = Prepare(input);
 
         using var connection = _database.Open();
         using var transaction = connection.BeginTransaction();
@@ -101,12 +134,18 @@ public sealed class ProjectService
         var project = _projects.GetById(connection, transaction, id)
                       ?? throw new ValidationException("Das Projekt wurde nicht gefunden.");
 
-        EnsureUnique(connection, transaction, prepared, id);
+        var number = prepared.Number ?? project.Number
+                     ?? _projects.NextNumber(connection, transaction, DateTime.UtcNow.Year);
+
+        EnsureUnique(connection, transaction, prepared, number, id);
 
         project.Name = prepared.Name;
-        project.Number = prepared.Number;
+        project.Number = number;
         project.Customer = prepared.Customer;
+        project.Contact = prepared.Contact;
         project.Description = prepared.Description;
+        project.ResponsibleUserId = prepared.ResponsibleUserId;
+        project.ResponsibleName = ResolveResponsibleName(connection, transaction, prepared.ResponsibleUserId);
         project.FolderPath = prepared.FolderPath;
         project.Status = prepared.Status;
         project.UpdatedUtc = DateTime.UtcNow;
@@ -119,7 +158,8 @@ public sealed class ProjectService
                 project.Name,
                 project.Number,
                 project.Customer,
-                project.Description,
+                project.Contact,
+                project.ResponsibleName,
                 project.FolderPath,
                 Status = (int)project.Status,
             },
@@ -128,10 +168,61 @@ public sealed class ProjectService
 
         if (prepared.CreateFolderIfMissing)
         {
-            FolderService.EnsureCreated(project.FolderPath);
+            FolderService.EnsureStandardStructure(project.FolderPath);
         }
 
         return project;
+    }
+
+    /// <summary>
+    /// Archiviert ein Projekt: nur der Status ändert sich, Dateien und Ordner bleiben
+    /// unberührt. Zeitpunkt und Benutzer werden festgehalten.
+    /// </summary>
+    public void Archive(Guid id) => SetArchiveState(id, archive: true);
+
+    public void Restore(Guid id) => SetArchiveState(id, archive: false);
+
+    private void SetArchiveState(Guid id, bool archive)
+    {
+        _actor.Require(Permission.ArchiveProjects);
+
+        using var connection = _database.Open();
+        using var transaction = connection.BeginTransaction();
+
+        var project = _projects.GetById(connection, transaction, id)
+                      ?? throw new ValidationException("Das Projekt wurde nicht gefunden.");
+
+        if (archive && project.Status == ProjectStatus.Archived)
+        {
+            throw new ValidationException("Das Projekt ist bereits archiviert.");
+        }
+
+        if (!archive && project.Status != ProjectStatus.Archived)
+        {
+            throw new ValidationException("Das Projekt ist nicht archiviert.");
+        }
+
+        var now = DateTime.UtcNow;
+        var status = archive ? ProjectStatus.Archived : ProjectStatus.Active;
+        var rowVersion = _projects.SetArchiveState(
+            connection,
+            transaction,
+            id,
+            status,
+            archive ? now : null,
+            archive ? _actor.UserName : null,
+            _actor.UserName);
+
+        _changes.Record(connection, transaction, "Project", id.ToString("D"), archive ? "Archive" : "Restore",
+            new
+            {
+                project.Name,
+                project.Number,
+                Status = (int)status,
+                ArchivedBy = archive ? _actor.UserName : null,
+            },
+            rowVersion);
+        transaction.Commit();
     }
 
     /// <summary>
@@ -163,7 +254,7 @@ public sealed class ProjectService
             : error ?? "Der Ordner konnte nicht in den Papierkorb verschoben werden.";
     }
 
-    private ProjectInput Prepare(ProjectInput input, Guid? existingProjectId)
+    private ProjectInput Prepare(ProjectInput input)
     {
         var name = (input.Name ?? string.Empty).Trim();
         if (name.Length == 0)
@@ -189,32 +280,46 @@ public sealed class ProjectService
             throw new ValidationException("Der Projektordner existiert nicht. Bitte Ordner anlegen lassen oder einen vorhandenen wählen.");
         }
 
-        var number = string.IsNullOrWhiteSpace(input.Number) ? null : input.Number.Trim();
-        var customer = string.IsNullOrWhiteSpace(input.Customer) ? null : input.Customer.Trim();
-        var description = string.IsNullOrWhiteSpace(input.Description) ? null : input.Description.Trim();
-
         return new ProjectInput
         {
             Name = name,
-            Number = number,
-            Customer = customer,
-            Description = description,
+            Number = string.IsNullOrWhiteSpace(input.Number) ? null : input.Number.Trim(),
+            Customer = Trimmed(input.Customer),
+            Contact = Trimmed(input.Contact),
+            Description = Trimmed(input.Description),
+            ResponsibleUserId = input.ResponsibleUserId,
             FolderPath = folderPath,
             Status = input.Status,
             CreateFolderIfMissing = input.CreateFolderIfMissing,
         };
     }
 
+    private static string? Trimmed(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private string? ResolveResponsibleName(SqliteConnection connection, SqliteTransaction? transaction, Guid? userId)
+    {
+        if (userId is null)
+        {
+            return null;
+        }
+
+        var user = _users.GetById(connection, transaction, userId.Value)
+                   ?? throw new ValidationException("Der gewählte Verantwortliche wurde nicht gefunden.");
+
+        return string.IsNullOrWhiteSpace(user.DisplayName) ? user.UserName : user.DisplayName;
+    }
+
     private void EnsureUnique(
-        Microsoft.Data.Sqlite.SqliteConnection connection,
-        Microsoft.Data.Sqlite.SqliteTransaction transaction,
+        SqliteConnection connection,
+        SqliteTransaction? transaction,
         ProjectInput prepared,
+        string number,
         Guid? existingProjectId)
     {
-        if (prepared.Number is not null &&
-            _projects.NumberExists(connection, transaction, prepared.Number, existingProjectId))
+        if (_projects.NumberExists(connection, transaction, number, existingProjectId))
         {
-            throw new ValidationException($"Die Projektnummer \"{prepared.Number}\" ist bereits vergeben.");
+            throw new ValidationException($"Die Projektnummer \"{number}\" ist bereits vergeben.");
         }
 
         if (_projects.FolderExists(connection, transaction, prepared.FolderPath, existingProjectId))

@@ -5,42 +5,66 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <Border Grid.Row="0" Style="{StaticResource LiftUpCard}" Padding="12" Margin="0,0,0,10">
+            <StackPanel Orientation="Horizontal">
+                <Button x:Name="NewButton" Content="Neues Projekt" Style="{StaticResource LiftUpPrimaryButton}" Click="OnNewClick" />
+                <Button x:Name="EditButton" Content="Bearbeiten" Click="OnEditClick" />
+                <Button x:Name="ArchiveButton" Content="Archivieren" Click="OnArchiveClick" />
+                <Button x:Name="RestoreButton" Content="Wiederherstellen" Click="OnRestoreClick" />
+                <Button x:Name="DeleteButton" Content="Löschen" Style="{StaticResource LiftUpDangerButton}" Click="OnDeleteClick" />
+                <Button Content="Aktualisieren" Click="OnRefreshClick" />
+            </StackPanel>
+        </Border>
+
+        <Border Grid.Row="1" Style="{StaticResource LiftUpCard}" Padding="12" Margin="0,0,0,10">
             <Grid>
-                <StackPanel Orientation="Horizontal">
-                    <Button x:Name="NewButton" Content="Neues Projekt" Style="{StaticResource LiftUpPrimaryButton}" Click="OnNewClick" />
-                    <Button x:Name="EditButton" Content="Bearbeiten" Click="OnEditClick" />
-                    <Button x:Name="DeleteButton" Content="Löschen" Style="{StaticResource LiftUpDangerButton}" Click="OnDeleteClick" />
-                    <Button Content="Aktualisieren" Click="OnRefreshClick" />
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" Orientation="Horizontal">
+                    <TextBlock Text="Suche" VerticalAlignment="Center" Margin="0,0,6,0" Style="{StaticResource LiftUpFieldLabel}" />
+                    <TextBox x:Name="SearchBox" Width="220" TextChanged="OnSearchChanged" Margin="0,0,14,0" />
+
+                    <TextBlock Text="Status" VerticalAlignment="Center" Margin="0,0,6,0" Style="{StaticResource LiftUpFieldLabel}" />
+                    <ComboBox x:Name="StatusFilterBox" Width="140" Margin="0,0,14,0"
+                              DisplayMemberPath="Name" SelectionChanged="OnFilterChanged" />
+
+                    <TextBlock Text="Sortierung" VerticalAlignment="Center" Margin="0,0,6,0" Style="{StaticResource LiftUpFieldLabel}" />
+                    <ComboBox x:Name="SortBox" Width="150" DisplayMemberPath="Name"
+                              SelectionChanged="OnFilterChanged" />
                 </StackPanel>
 
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                    <TextBlock Text="Suche" VerticalAlignment="Center" Margin="0,0,6,0" Style="{StaticResource LiftUpFieldLabel}" />
-                    <TextBox x:Name="SearchBox" Width="240" TextChanged="OnSearchChanged" />
-                </StackPanel>
+                <CheckBox x:Name="ArchiveToggle" Grid.Column="1" Content="Archiv anzeigen"
+                          VerticalAlignment="Center" Click="OnArchiveToggleClick" />
             </Grid>
         </Border>
 
         <DataGrid x:Name="ProjectsGrid"
-                  Grid.Row="1"
+                  Grid.Row="2"
                   IsReadOnly="True"
+                  SelectionChanged="OnSelectionChanged"
                   MouseDoubleClick="OnRowDoubleClick">
             <DataGrid.Columns>
                 <DataGridTextColumn Header="Nr." Binding="{Binding Number}" Width="90" />
                 <DataGridTextColumn Header="Projekt" Binding="{Binding Name}" Width="*" />
-                <DataGridTextColumn Header="Kunde" Binding="{Binding Customer}" Width="170" />
-                <DataGridTextColumn Header="Status" Binding="{Binding StatusText}" Width="110" />
-                <DataGridTextColumn Header="Projektordner" Binding="{Binding FolderPath}" Width="280" />
-                <DataGridTextColumn Header="Ordner" Binding="{Binding FolderState}" Width="80" />
-                <DataGridTextColumn Header="Geändert" Binding="{Binding UpdatedText}" Width="130" />
-                <DataGridTextColumn Header="Von" Binding="{Binding UpdatedBy}" Width="110" />
+                <DataGridTextColumn Header="Kunde" Binding="{Binding Customer}" Width="150" />
+                <DataGridTextColumn Header="Ansprechpartner" Binding="{Binding Contact}" Width="130" />
+                <DataGridTextColumn Header="Verantwortlich" Binding="{Binding Responsible}" Width="130" />
+                <DataGridTextColumn Header="Status" Binding="{Binding StatusText}" Width="105" />
+                <DataGridTextColumn Header="Archiviert" Binding="{Binding ArchivedText}" Width="140" />
+                <DataGridTextColumn Header="Projektordner" Binding="{Binding FolderPath}" Width="240" />
+                <DataGridTextColumn Header="Ordner" Binding="{Binding FolderState}" Width="75" />
+                <DataGridTextColumn Header="Geändert" Binding="{Binding UpdatedText}" Width="120" />
             </DataGrid.Columns>
         </DataGrid>
 
-        <TextBlock x:Name="InfoText" Grid.Row="2" Style="{StaticResource LiftUpMutedText}" Margin="2,8,0,0" />
+        <TextBlock x:Name="InfoText" Grid.Row="3" Style="{StaticResource LiftUpMutedText}" Margin="2,8,0,0" />
     </Grid>
 </UserControl>

@@ -32,7 +32,7 @@ public sealed class UserServiceTests
     {
         using var fixture = new TestDatabase();
         var admin = fixture.LoginAsAdmin();
-        var role = new RoleService(fixture.Database, admin).GetAll().Single(item => item.Name == "Betrachter");
+        var role = new RoleService(fixture.Database, admin).GetAll().Single(item => item.Name == "Leser");
         var users = new UserService(fixture.Database, admin);
 
         users.Create("doppelt", "Doppelt", role.Id, "Startpasswort1", mustChangePassword: false);
@@ -58,7 +58,7 @@ public sealed class UserServiceTests
         var admin = fixture.LoginAsAdmin();
         var roles = new RoleService(fixture.Database, admin).GetAll();
         var administrator = roles.Single(item => item.Name == "Administrator");
-        var betrachter = roles.Single(item => item.Name == "Betrachter");
+        var betrachter = roles.Single(item => item.Name == "Leser");
 
         var owner = new UserService(fixture.Database, admin);
         var second = owner.Create("chef", "Chef", administrator.Id, "Startpasswort1", mustChangePassword: false);
@@ -79,7 +79,7 @@ public sealed class UserServiceTests
     public void Ohne_Recht_keine_Benutzerverwaltung()
     {
         using var fixture = new TestDatabase();
-        var viewer = fixture.CreateAndLogin("leser", "Leser12345", "Betrachter");
+        var viewer = fixture.CreateAndLogin("leser", "Leser12345", "Leser");
 
         Assert.Throws<PermissionDeniedException>(() => new UserService(fixture.Database, viewer).GetUsers());
     }
@@ -89,7 +89,7 @@ public sealed class UserServiceTests
     {
         using var fixture = new TestDatabase();
         var admin = fixture.LoginAsAdmin();
-        var role = new RoleService(fixture.Database, admin).GetAll().Single(item => item.Name == "Betrachter");
+        var role = new RoleService(fixture.Database, admin).GetAll().Single(item => item.Name == "Leser");
         var users = new UserService(fixture.Database, admin);
 
         var user = users.Create("resetme", "Reset", role.Id, "Startpasswort1", mustChangePassword: false);

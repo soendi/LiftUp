@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Projekt"
-        Width="640"
+        Width="660"
         SizeToContent="Height"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
@@ -25,26 +25,35 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
                 <TextBlock Grid.Row="0" Grid.Column="0" Text="Projektname *" Style="{StaticResource LiftUpFieldLabel}" VerticalAlignment="Center" />
                 <TextBox Grid.Row="0" Grid.Column="1" x:Name="NameBox" Margin="0,3,0,8" />
 
                 <TextBlock Grid.Row="1" Grid.Column="0" Text="Projektnummer" Style="{StaticResource LiftUpFieldLabel}" VerticalAlignment="Center" />
-                <TextBox Grid.Row="1" Grid.Column="1" x:Name="NumberBox" Margin="0,3,0,8" />
+                <TextBox Grid.Row="1" Grid.Column="1" x:Name="NumberBox" Margin="0,3,0,8" ToolTip="Leer lassen für automatische Vergabe (z. B. 2026-0001)" />
 
                 <TextBlock Grid.Row="2" Grid.Column="0" Text="Kunde" Style="{StaticResource LiftUpFieldLabel}" VerticalAlignment="Center" />
                 <TextBox Grid.Row="2" Grid.Column="1" x:Name="CustomerBox" Margin="0,3,0,8" />
 
-                <TextBlock Grid.Row="3" Grid.Column="0" Text="Status" Style="{StaticResource LiftUpFieldLabel}" VerticalAlignment="Center" />
-                <ComboBox Grid.Row="3" Grid.Column="1" x:Name="StatusBox" Margin="0,3,0,8" DisplayMemberPath="Name" />
+                <TextBlock Grid.Row="3" Grid.Column="0" Text="Ansprechpartner" Style="{StaticResource LiftUpFieldLabel}" VerticalAlignment="Center" />
+                <TextBox Grid.Row="3" Grid.Column="1" x:Name="ContactBox" Margin="0,3,0,8" />
 
-                <TextBlock Grid.Row="4" Grid.Column="0" Text="Beschreibung" Style="{StaticResource LiftUpFieldLabel}" VerticalAlignment="Top" Margin="0,7,0,0" />
-                <TextBox Grid.Row="4" Grid.Column="1" x:Name="DescriptionBox" Height="72" Margin="0,3,0,8"
+                <TextBlock Grid.Row="4" Grid.Column="0" Text="Verantwortlich" Style="{StaticResource LiftUpFieldLabel}" VerticalAlignment="Center" />
+                <ComboBox Grid.Row="4" Grid.Column="1" x:Name="ResponsibleBox" Margin="0,3,0,8"
+                          DisplayMemberPath="Name" SelectedValuePath="Id" />
+
+                <TextBlock Grid.Row="5" Grid.Column="0" Text="Status" Style="{StaticResource LiftUpFieldLabel}" VerticalAlignment="Center" />
+                <ComboBox Grid.Row="5" Grid.Column="1" x:Name="StatusBox" Margin="0,3,0,8" DisplayMemberPath="Name" />
+
+                <TextBlock Grid.Row="6" Grid.Column="0" Text="Beschreibung" Style="{StaticResource LiftUpFieldLabel}" VerticalAlignment="Top" Margin="0,7,0,0" />
+                <TextBox Grid.Row="6" Grid.Column="1" x:Name="DescriptionBox" Height="72" Margin="0,3,0,8"
                          AcceptsReturn="True" TextWrapping="Wrap" VerticalContentAlignment="Top" VerticalScrollBarVisibility="Auto" />
 
-                <TextBlock Grid.Row="5" Grid.Column="0" Text="Projektordner *" Style="{StaticResource LiftUpFieldLabel}" VerticalAlignment="Center" />
-                <Grid Grid.Row="5" Grid.Column="1" Margin="0,3,0,8">
+                <TextBlock Grid.Row="7" Grid.Column="0" Text="Projektordner *" Style="{StaticResource LiftUpFieldLabel}" VerticalAlignment="Center" />
+                <Grid Grid.Row="7" Grid.Column="1" Margin="0,3,0,8">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
@@ -53,14 +62,16 @@
                     <Button Grid.Column="1" Content="Ordner wählen …" Margin="8,0,0,0" Click="OnBrowseClick" />
                 </Grid>
 
-                <TextBlock Grid.Row="6" Grid.Column="1" Style="{StaticResource LiftUpMutedText}"
-                           Text="Beliebiger Pfad auf jedem Laufwerk, z. B. D:\Projekte\Neubau. Fehlt der Ordner, kann er beim Speichern angelegt werden." />
+                <TextBlock Grid.Row="8" Grid.Column="1" Style="{StaticResource LiftUpMutedText}"
+                           Text="Beliebiger Pfad auf jedem Laufwerk, z. B. D:\Projekte\Neubau. Beim Anlegen entstehen die Unterordner Dokumente, Bilder, PDF und Vorlagen." />
             </Grid>
 
             <CheckBox x:Name="CreateFolderCheck"
-                      Content="Ordner anlegen, falls er nicht existiert"
+                      Content="Ordner samt Unterordnern anlegen, falls er nicht existiert"
                       IsChecked="True"
                       Margin="150,10,0,0" />
+
+            <TextBlock x:Name="ArchiveInfoText" Style="{StaticResource LiftUpMutedText}" Margin="0,10,0,0" Visibility="Collapsed" />
 
             <TextBlock x:Name="ErrorText" Foreground="{StaticResource LiftUpDanger}" TextWrapping="Wrap" MinHeight="32" FontSize="12" Margin="0,8,0,0" />
 

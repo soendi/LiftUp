@@ -29,7 +29,7 @@ public sealed class ProjectServiceTests
 
         Assert.True(Directory.Exists(folder));
         Assert.Equal(folder, project.FolderPath);
-        Assert.Single(service.Search(null));
+        Assert.Single(service.Search(new ProjectQuery()));
     }
 
     [Fact]
@@ -43,7 +43,7 @@ public sealed class ProjectServiceTests
         service.Create(Input(folder));
 
         Assert.True(Directory.Exists(folder));
-        Assert.Single(service.Search(null));
+        Assert.Single(service.Search(new ProjectQuery()));
     }
 
     [Fact]
@@ -123,7 +123,7 @@ public sealed class ProjectServiceTests
 
         service.Delete(project.Id, moveFolderToRecycleBin: false);
 
-        Assert.Empty(service.Search(null));
+        Assert.Empty(service.Search(new ProjectQuery()));
         Assert.True(Directory.Exists(folder));
         Assert.Throws<ValidationException>(() => service.GetProject(project.Id));
     }
@@ -138,7 +138,7 @@ public sealed class ProjectServiceTests
         service.Delete(first.Id, moveFolderToRecycleBin: false);
         service.Create(Input(Path.Combine(fixture.Root, "p2"), name: "Zweites", number: "4711"));
 
-        Assert.Single(service.Search(null));
+        Assert.Single(service.Search(new ProjectQuery()));
     }
 
     [Fact]
@@ -170,18 +170,120 @@ public sealed class ProjectServiceTests
         service.Create(Input(Path.Combine(fixture.Root, "a"), name: "Schule Nord"));
         service.Create(Input(Path.Combine(fixture.Root, "b"), name: "Büro Süd"));
 
-        Assert.Single(service.Search("Schule"));
-        Assert.Single(service.Search("Süd"));
-        Assert.Equal(2, service.Search(null).Count);
+        Assert.Single(service.Search(new ProjectQuery { Search = "Schule" }));
+        Assert.Single(service.Search(new ProjectQuery { Search = "Süd" }));
+        Assert.Equal(2, service.Search(new ProjectQuery()).Count);
     }
 
     [Fact]
     public void Ohne_anlege_recht_kein_neues_projekt()
     {
         using var fixture = new TestDatabase();
-        var viewer = fixture.CreateAndLogin("leser", "Leser12345", "Betrachter");
+        var viewer = fixture.CreateAndLogin("leser", "Leser12345", "Leser");
         var service = new ProjectService(fixture.Database, viewer);
 
         Assert.Throws<PermissionDeniedException>(() => service.Create(Input(Path.Combine(fixture.Root, "p"))));
+    }
+
+    [Fact]
+    public void Projektnummer_wird_automatisch_vergeben()
+    {
+        using var fixture = new TestDatabase();
+        var service = new ProjectService(fixture.Database, fixture.LoginAsAdmin());
+
+        var first = service.Create(Input(Path.Combine(fixture.Root, "a"), name: "Erstes"));
+        var second = service.Create(Input(Path.Combine(fixture.Root, "b"), name: "Zweites"));
+
+        Assert.Matches(@"^\d{4}-\d{4}$", first.Number);
+        Assert.NotEqual(first.Number, second.Number);
+    }
+
+    [Fact]
+    public void Projektordner_bekommt_unterordner()
+    {
+        using var fixture = new TestDatabase();
+        var service = new ProjectService(fixture.Database, fixture.LoginAsAdmin());
+        var folder = Path.Combine(fixture.Root, "Projekte", "Haus");
+
+        service.Create(Input(folder, name: "Haus"));
+
+        foreach (var name in ProjectFolders.Standard)
+        {
+            Assert.True(Directory.Exists(Path.Combine(folder, name)), $"Unterordner {name} fehlt");
+        }
+    }
+
+    [Fact]
+    public void Archivieren_blendet_projekt_aus_und_wiederherstellen_holt_es_zurueck()
+    {
+        using var fixture = new TestDatabase();
+        var service = new ProjectService(fixture.Database, fixture.LoginAsAdmin());
+        var folder = Path.Combine(fixture.Root, "p1");
+        var project = service.Create(Input(folder));
+
+        service.Archive(project.Id);
+
+        Assert.Empty(service.Search(new ProjectQuery()));
+        var archived = service.Search(new ProjectQuery { Scope = ProjectScope.Archived });
+        Assert.Single(archived);
+        Assert.True(archived[0].IsArchived);
+        Assert.True(Directory.Exists(folder));
+
+        service.Restore(project.Id);
+
+        Assert.Single(service.Search(new ProjectQuery()));
+        Assert.Empty(service.Search(new ProjectQuery { Scope = ProjectScope.Archived }));
+    }
+
+    [Fact]
+    public void Archivieren_erfordert_recht()
+    {
+        using var fixture = new TestDatabase();
+        var adminService = new ProjectService(fixture.Database, fixture.LoginAsAdmin());
+        var project = adminService.Create(Input(Path.Combine(fixture.Root, "p1")));
+
+        var leser = fixture.CreateAndLogin("leser", "Leser12345", "Leser");
+        var service = new ProjectService(fixture.Database, leser);
+
+        Assert.Throws<PermissionDeniedException>(() => service.Archive(project.Id));
+    }
+
+    [Fact]
+    public void Filter_und_sortierung_liefern_die_erwarteten_projekte()
+    {
+        using var fixture = new TestDatabase();
+        var service = new ProjectService(fixture.Database, fixture.LoginAsAdmin());
+
+        service.Create(Input(Path.Combine(fixture.Root, "a"), name: "Alpha"));
+        var paused = Input(Path.Combine(fixture.Root, "b"), name: "Beta");
+        paused.Status = ProjectStatus.Paused;
+        service.Create(paused);
+
+        var pausedItems = service.Search(new ProjectQuery { Status = ProjectStatus.Paused });
+        Assert.Single(pausedItems);
+        Assert.Equal("Beta", pausedItems[0].Name);
+
+        var sorted = service.Search(new ProjectQuery { Sort = ProjectSort.Number, Descending = true });
+        Assert.Equal(2, sorted.Count);
+        Assert.True(string.CompareOrdinal(sorted[0].Number, sorted[1].Number) > 0);
+    }
+
+    [Fact]
+    public void Verantwortlicher_wird_gespeichert()
+    {
+        using var fixture = new TestDatabase();
+        var admin = fixture.LoginAsAdmin();
+        var service = new ProjectService(fixture.Database, admin);
+
+        var role = new RoleService(fixture.Database, admin).GetAll().Single(item => item.Name == "Mitarbeiter");
+        new UserService(fixture.Database, admin).Create("meier", "Meier Hans", role.Id, "Passwort12345", mustChangePassword: false);
+        var responsible = service.GetResponsibleChoices().Single(user => user.UserName == "meier");
+
+        var input = Input(Path.Combine(fixture.Root, "p1"));
+        input.ResponsibleUserId = responsible.Id;
+        var project = service.Create(input);
+
+        Assert.Equal("Meier Hans", project.ResponsibleName);
+        Assert.Equal(responsible.Id, service.GetProject(project.Id).ResponsibleUserId);
     }
 }

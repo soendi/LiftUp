@@ -6,6 +6,8 @@ namespace LiftUp.App.Views;
 
 public partial class ProjectEditWindow : Window
 {
+    private sealed record ResponsibleOption(Guid? Id, string Name);
+
     private readonly AppServices _services;
     private readonly Guid? _projectId;
 
@@ -15,12 +17,15 @@ public partial class ProjectEditWindow : Window
         _projectId = projectId;
         InitializeComponent();
 
-        StatusBox.ItemsSource = ProjectStatusCatalog.All;
+        StatusBox.ItemsSource = ProjectStatusCatalog.Selectable;
+
+        ResponsibleBox.ItemsSource = BuildResponsibleOptions();
 
         if (projectId is null)
         {
             HeadingText.Text = "Neues Projekt anlegen";
             StatusBox.SelectedValue = ProjectStatus.Active;
+            NumberBox.Text = string.Empty;
             Loaded += (_, _) => NameBox.Focus();
         }
         else
@@ -28,6 +33,24 @@ public partial class ProjectEditWindow : Window
             HeadingText.Text = "Projekt bearbeiten";
             LoadProject(projectId.Value);
         }
+    }
+
+    private IReadOnlyList<ResponsibleOption> BuildResponsibleOptions()
+    {
+        var options = new List<ResponsibleOption> { new(null, "– niemand –") };
+        try
+        {
+            options.AddRange(_services.Projects.GetResponsibleChoices().Select(user =>
+                new ResponsibleOption(
+                    user.Id,
+                    string.IsNullOrWhiteSpace(user.DisplayName) ? user.UserName : user.DisplayName)));
+        }
+        catch (LiftUpException exception)
+        {
+            ErrorText.Text = exception.Message;
+        }
+
+        return options;
     }
 
     private void LoadProject(Guid projectId)
@@ -38,10 +61,30 @@ public partial class ProjectEditWindow : Window
             NameBox.Text = project.Name;
             NumberBox.Text = project.Number ?? string.Empty;
             CustomerBox.Text = project.Customer ?? string.Empty;
+            ContactBox.Text = project.Contact ?? string.Empty;
             DescriptionBox.Text = project.Description ?? string.Empty;
             FolderBox.Text = project.FolderPath;
-            StatusBox.SelectedValue = project.Status;
+            if (project.IsArchived)
+            {
+                StatusBox.ItemsSource = ProjectStatusCatalog.All;
+                StatusBox.SelectedValue = ProjectStatus.Archived;
+            }
+            else
+            {
+                StatusBox.SelectedValue = project.Status;
+            }
             CreateFolderCheck.IsChecked = !Directory.Exists(project.FolderPath);
+
+            ResponsibleBox.SelectedValue = project.ResponsibleUserId;
+
+            if (project.IsArchived)
+            {
+                StatusBox.IsEnabled = false;
+                ArchiveInfoText.Text =
+                    $"Archiviert am {project.ArchivedUtc?.ToLocalTime():dd.MM.yyyy HH:mm} von {project.ArchivedBy}. " +
+                    "Zum Wiederherstellen die Aktion in der Projektübersicht verwenden.";
+                ArchiveInfoText.Visibility = Visibility.Visible;
+            }
         }
         catch (LiftUpException exception)
         {
@@ -74,14 +117,22 @@ public partial class ProjectEditWindow : Window
     {
         ErrorText.Text = string.Empty;
 
+        var status = StatusBox.SelectedValue is ProjectStatus selectedStatus
+            ? selectedStatus
+            : ProjectStatus.Active;
+
         var input = new ProjectInput
         {
             Name = NameBox.Text,
             Number = NumberBox.Text,
             Customer = CustomerBox.Text,
+            Contact = ContactBox.Text,
             Description = DescriptionBox.Text,
+            ResponsibleUserId = ResponsibleBox.SelectedValue is Guid responsibleId && responsibleId != Guid.Empty
+                ? responsibleId
+                : null,
             FolderPath = FolderBox.Text,
-            Status = StatusBox.SelectedValue is ProjectStatus status ? status : ProjectStatus.Active,
+            Status = status,
             CreateFolderIfMissing = CreateFolderCheck.IsChecked == true,
         };
 

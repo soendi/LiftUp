@@ -12,7 +12,7 @@ namespace LiftUp.Core.Data;
 /// </summary>
 public sealed class Database
 {
-    public const int CurrentSchemaVersion = 1;
+    public const int CurrentSchemaVersion = 2;
 
     private readonly string _connectionString;
 
@@ -54,6 +54,9 @@ public sealed class Database
         command.CommandText = Schema;
         command.ExecuteNonQuery();
 
+        // Bestehende Datenbanken um fehlende Spalten und Rollen ergänzen.
+        Migrate(connection);
+
         using var transaction = connection.BeginTransaction();
         SeedRoles(connection, transaction);
         SeedAdministrator(connection, transaction);
@@ -84,6 +87,85 @@ public sealed class Database
         return string.IsNullOrWhiteSpace(value) ? "unbekannt" : value;
     }
 
+    private static int ReadSchemaVersion(SqliteConnection connection)
+    {
+        using var command = Db.Command(connection, "SELECT Version FROM SchemaInfo LIMIT 1;");
+        var value = command.ExecuteScalar();
+        return value is null or DBNull ? 0 : Convert.ToInt32(value);
+    }
+
+    /// <summary>Bringt eine bestehende Datenbank auf den aktuellen Schemastand.</summary>
+    private static void Migrate(SqliteConnection connection)
+    {
+        var version = ReadSchemaVersion(connection);
+        if (version >= CurrentSchemaVersion)
+        {
+            return;
+        }
+
+        if (version <= 1)
+        {
+            MigrateToVersion2(connection);
+        }
+
+        using var command = Db.Command(connection, "UPDATE SchemaInfo SET Version = $version;");
+        command.With("$version", CurrentSchemaVersion);
+        command.ExecuteNonQuery();
+    }
+
+    /// <summary>
+    /// Version 2: Ansprechpartner, Verantwortlicher, Archivstempel und eigene
+    /// Nummernkreise je Jahr. Bestehende Projekte bleiben unverändert.
+    /// </summary>
+    private static void MigrateToVersion2(SqliteConnection connection)
+    {
+        var existing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using (var info = Db.Command(connection, "PRAGMA table_info(Projects);"))
+        using (var reader = info.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                existing.Add(reader.GetString(1));
+            }
+        }
+
+        (string Name, string Definition)[] additions =
+        [
+            ("Contact", "TEXT NULL"),
+            ("ResponsibleUserId", "TEXT NULL"),
+            ("ResponsibleName", "TEXT NULL"),
+            ("ArchivedUtc", "TEXT NULL"),
+            ("ArchivedBy", "TEXT NULL"),
+        ];
+
+        foreach (var (name, definition) in additions)
+        {
+            if (existing.Contains(name))
+            {
+                continue;
+            }
+
+            using var alter = Db.Command(connection, $"ALTER TABLE Projects ADD COLUMN {name} {definition};");
+            alter.ExecuteNonQuery();
+        }
+
+        using var sequence = Db.Command(connection, """
+            CREATE TABLE IF NOT EXISTS ProjectNumberSequences (
+                Year       INTEGER PRIMARY KEY NOT NULL,
+                LastNumber INTEGER NOT NULL DEFAULT 0
+            );
+            """);
+        sequence.ExecuteNonQuery();
+
+        // "Betrachter" heißt künftig "Leser" und darf zusätzlich das Archiv einsehen.
+        using var rename = Db.Command(connection, """
+            UPDATE Roles SET Name = 'Leser', Permissions = Permissions | $archive
+            WHERE Name = 'Betrachter' AND IsSystem = 1;
+            """);
+        rename.With("$archive", (int)Permission.ViewArchivedProjects);
+        rename.ExecuteNonQuery();
+    }
+
     private static void SeedRoles(SqliteConnection connection, SqliteTransaction transaction)
     {
         var roles = new[]
@@ -98,15 +180,26 @@ public sealed class Database
             new Role
             {
                 Name = "Projektleiter",
-                Description = "Darf Projekte anlegen, bearbeiten und einsehen.",
-                Permissions = Permission.ViewProjects | Permission.CreateProjects | Permission.EditProjects,
+                Description = "Darf Projekte anlegen, bearbeiten, löschen und archivieren.",
+                Permissions = Permission.ViewProjects | Permission.CreateProjects | Permission.EditProjects |
+                              Permission.DeleteProjects | Permission.ArchiveProjects | Permission.ViewArchivedProjects |
+                              Permission.ManageTemplates | Permission.ManageSnippets | Permission.ManageImages |
+                              Permission.CreateDocuments | Permission.DeleteDocuments | Permission.ViewChangeLog,
                 IsSystem = true,
             },
             new Role
             {
-                Name = "Betrachter",
-                Description = "Darf Projekte nur einsehen.",
-                Permissions = Permission.ViewProjects,
+                Name = "Mitarbeiter",
+                Description = "Darf Projekte anlegen, bearbeiten und Dokumente erzeugen.",
+                Permissions = Permission.ViewProjects | Permission.CreateProjects | Permission.EditProjects |
+                              Permission.CreateDocuments | Permission.ManageSnippets | Permission.ManageImages,
+                IsSystem = true,
+            },
+            new Role
+            {
+                Name = "Leser",
+                Description = "Darf Projekte und das Archiv einsehen.",
+                Permissions = Permission.ViewProjects | Permission.ViewArchivedProjects,
                 IsSystem = true,
             },
         };
@@ -220,9 +313,14 @@ public sealed class Database
             Number      TEXT NULL COLLATE NOCASE,
             Name        TEXT NOT NULL,
             Customer    TEXT NULL,
+            Contact     TEXT NULL,
             Description TEXT NULL,
+            ResponsibleUserId TEXT NULL,
+            ResponsibleName   TEXT NULL,
             FolderPath  TEXT NOT NULL COLLATE NOCASE,
             Status      INTEGER NOT NULL DEFAULT 0,
+            ArchivedUtc TEXT NULL,
+            ArchivedBy  TEXT NULL,
             CreatedUtc  TEXT NOT NULL,
             CreatedBy   TEXT NULL,
             UpdatedUtc  TEXT NOT NULL,
@@ -243,6 +341,11 @@ public sealed class Database
             SyncedUtc      TEXT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS ProjectNumberSequences (
+            Year       INTEGER PRIMARY KEY NOT NULL,
+            LastNumber INTEGER NOT NULL DEFAULT 0
+        );
+
         CREATE UNIQUE INDEX IF NOT EXISTS UX_Projects_Number
             ON Projects (Number) WHERE Number IS NOT NULL AND IsDeleted = 0;
 
@@ -254,6 +357,6 @@ public sealed class Database
         CREATE INDEX IF NOT EXISTS IX_ChangeLog_Pending ON ChangeLog (SyncedUtc) WHERE SyncedUtc IS NULL;
 
         INSERT INTO SchemaInfo (Version)
-        SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM SchemaInfo);
+        SELECT 2 WHERE NOT EXISTS (SELECT 1 FROM SchemaInfo);
         """;
 }

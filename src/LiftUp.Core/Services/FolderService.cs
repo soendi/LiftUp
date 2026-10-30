@@ -60,6 +60,38 @@ public static class FolderService
         return fullPath;
     }
 
+    /// <summary>
+    /// Legt den Projektordner samt der üblichen Unterordner an. Vorhandene Ordner
+    /// bleiben unangetastet, damit ein bestehender Projektordner nichts verliert.
+    /// </summary>
+    public static IReadOnlyList<string> EnsureStandardStructure(string fullPath)
+    {
+        EnsureCreated(fullPath);
+
+        var created = new List<string>();
+        foreach (var name in Domain.ProjectFolders.Standard)
+        {
+            var path = Path.Combine(fullPath, name);
+            if (Directory.Exists(path))
+            {
+                continue;
+            }
+
+            try
+            {
+                Directory.CreateDirectory(path);
+                created.Add(path);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or NotSupportedException)
+            {
+                throw new Domain.ValidationException(
+                    $"Der Unterordner \"{name}\" konnte nicht angelegt werden: {exception.Message}");
+            }
+        }
+
+        return created;
+    }
+
     public static void EnsureCreated(string fullPath)
     {
         try
