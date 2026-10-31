@@ -76,7 +76,7 @@
             <TextBlock Text="Bildunterschrift" Style="{StaticResource LiftUpFieldLabel}" Margin="0,0,0,4" />
             <TextBox x:Name="CaptionBox" />
             <TextBlock Style="{StaticResource LiftUpMutedText}" TextWrapping="Wrap" Margin="0,2,0,0"
-                       Text="Optional; steht klein unter dem Bild." />
+                       Text="Optional; steht klein unter dem Bild. Im Editor lässt sich die Unterschrift auch direkt anklicken und tippen." />
 
             <Grid Margin="0,14,0,0">
                 <Button Content="Zurücksetzen" HorizontalAlignment="Left" Click="OnResetClick"

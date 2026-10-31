@@ -106,6 +106,12 @@ public partial class HtmlEditor : UserControl
             /* Bilder: anklicken und mit der Maus verschieben */
             .liftup-fig { cursor: grab; -webkit-user-select: none; user-select: none; }
             .liftup-fig img { -webkit-user-drag: none; }
+            /* Die Bildunterschrift wird direkt im Text bearbeitet. */
+            .liftup-fig figcaption {
+                cursor: text;
+                -webkit-user-select: text;
+                user-select: text;
+            }
             .liftup-fig-dragging { opacity: 0.55; }
             body.liftup-dragging { cursor: grabbing; }
             #liftup-drop-line {
@@ -502,6 +508,12 @@ public partial class HtmlEditor : UserControl
                 if (event.button !== 0 || !event.target || !event.target.closest) {
                     return;
                 }
+
+                // Die Unterschrift wird direkt im Text geschrieben, nicht gezogen.
+                if (event.target.closest('figcaption')) {
+                    return;
+                }
+
                 var figure = event.target.closest('figure.liftup-fig');
                 if (!figure) {
                     return;
@@ -691,6 +703,25 @@ public partial class HtmlEditor : UserControl
                     }
                 }
             };
+
+            // Eine leer gelöschte Unterschrift verschwindet samt Block-Regel.
+            document.addEventListener('focusout', function (event) {
+                var caption = event.target;
+                if (!caption || !caption.matches || !caption.matches('figcaption')) {
+                    return;
+                }
+                if (caption.textContent.trim()) {
+                    return;
+                }
+
+                var figure = caption.parentNode;
+                if (figure && figure.classList) {
+                    figure.classList.remove('liftup-fig-captioned');
+                }
+                if (caption.parentNode) {
+                    caption.parentNode.removeChild(caption);
+                }
+            }, true);
 
             window.liftupGetHtml = function () {
                 window.liftupCloseSnippets();
