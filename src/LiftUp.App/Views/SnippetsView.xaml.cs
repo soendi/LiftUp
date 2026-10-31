@@ -57,7 +57,7 @@ public partial class SnippetsView : UserControl
 
             NameBox.Text = snippet.Name;
             CategoryBox.Text = snippet.Category ?? string.Empty;
-            HtmlBox.Text = snippet.Html;
+            BodyEditor.SetHtml(snippet.Html);
 
             ArchiveButton.IsEnabled = true;
             ArchiveButton.Content = snippet.IsArchived ? "Wiederherstellen" : "Archivieren";
@@ -75,7 +75,7 @@ public partial class SnippetsView : UserControl
         _isArchived = false;
         NameBox.Text = string.Empty;
         CategoryBox.Text = string.Empty;
-        HtmlBox.Text = string.Empty;
+        BodyEditor.SetHtml(string.Empty);
         ArchiveButton.IsEnabled = false;
     }
 
@@ -83,18 +83,29 @@ public partial class SnippetsView : UserControl
     {
         ClearEditor();
         SnippetsGrid.SelectedItem = null;
-        HtmlBox.Text = "<p>Text des Bausteins …</p>";
+        BodyEditor.SetHtml("<p>Text des Bausteins …</p>");
         NameBox.Focus();
         InfoText.Text = "Neuer Textbaustein – Namen vergeben und speichern.";
     }
 
-    private void OnSaveClick(object sender, RoutedEventArgs e)
+    private async void OnSaveClick(object sender, RoutedEventArgs e)
     {
+        string html;
+        try
+        {
+            html = await BodyEditor.GetHtmlAsync();
+        }
+        catch (Exception exception)
+        {
+            InfoText.Text = "Der Text konnte nicht gelesen werden: " + exception.Message;
+            return;
+        }
+
         var input = new SnippetInput
         {
             Name = NameBox.Text,
             Category = CategoryBox.Text,
-            Html = HtmlBox.Text,
+            Html = html,
         };
 
         try
@@ -123,10 +134,21 @@ public partial class SnippetsView : UserControl
         }
     }
 
-    private void OnArchiveClick(object sender, RoutedEventArgs e)
+    private async void OnArchiveClick(object sender, RoutedEventArgs e)
     {
         if (_snippetId is null)
         {
+            return;
+        }
+
+        string html;
+        try
+        {
+            html = await BodyEditor.GetHtmlAsync();
+        }
+        catch (Exception exception)
+        {
+            InfoText.Text = "Der Text konnte nicht gelesen werden: " + exception.Message;
             return;
         }
 
@@ -136,7 +158,7 @@ public partial class SnippetsView : UserControl
             {
                 Name = NameBox.Text,
                 Category = CategoryBox.Text,
-                Html = HtmlBox.Text,
+                Html = html,
             };
 
             var snippet = _services.Snippets.Update(_snippetId.Value, input, !_isArchived);

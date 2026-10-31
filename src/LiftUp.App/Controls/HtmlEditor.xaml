@@ -1,0 +1,50 @@
+<UserControl x:Class="LiftUp.App.Controls.HtmlEditor"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf">
+
+    <UserControl.Resources>
+        <Style x:Key="HtmlToolbarButton" TargetType="Button">
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="Padding" Value="10,4" />
+            <Setter Property="Margin" Value="0,0,6,4" />
+        </Style>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <WrapPanel x:Name="ToolbarPanel" Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,6">
+            <Button Content="Fett" FontWeight="Bold" Style="{StaticResource HtmlToolbarButton}" Click="OnBoldClick" ToolTip="Fett (Strg+B)" />
+            <Button Content="Kursiv" FontStyle="Italic" Style="{StaticResource HtmlToolbarButton}" Click="OnItalicClick" ToolTip="Kursiv (Strg+I)" />
+            <Button Style="{StaticResource HtmlToolbarButton}" Click="OnUnderlineClick" ToolTip="Unterstrichen (Strg+U)">
+                <Button.Content>
+                    <TextBlock TextDecorations="Underline">Unterstrichen</TextBlock>
+                </Button.Content>
+            </Button>
+            <Button Content="Aufzählung" Style="{StaticResource HtmlToolbarButton}" Click="OnBulletListClick" ToolTip="Liste mit Punkten" />
+            <Button Content="Nummerierung" Style="{StaticResource HtmlToolbarButton}" Click="OnNumberedListClick" ToolTip="Nummerierte Liste" />
+            <Button Content="Formatierung entfernen" Style="{StaticResource HtmlToolbarButton}" Click="OnClearFormatClick"
+                    ToolTip="Fett, Kursiv und Unterstrichen im markierten Text aufheben" />
+        </WrapPanel>
+
+        <Border Grid.Row="1" Background="White" BorderBrush="{StaticResource LiftUpBorder}" BorderThickness="1" CornerRadius="4">
+            <Grid>
+                <wv2:WebView2 x:Name="Browser" />
+                <TextBox x:Name="FallbackBox"
+                         Visibility="Collapsed"
+                         AcceptsReturn="True"
+                         AcceptsTab="True"
+                         TextWrapping="NoWrap"
+                         VerticalScrollBarVisibility="Auto"
+                         HorizontalScrollBarVisibility="Auto"
+                         FontFamily="Consolas"
+                         FontSize="12"
+                         BorderThickness="0" />
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

@@ -1,6 +1,7 @@
 <UserControl x:Class="LiftUp.App.Views.SnippetsView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:LiftUp.App.Controls">
 
     <Grid>
         <Grid.RowDefinitions>
@@ -56,13 +57,11 @@
                         <TextBox x:Name="CategoryBox" Width="180" />
                     </StackPanel>
 
-                    <TextBox Grid.Row="1" x:Name="HtmlBox" AcceptsReturn="True" AcceptsTab="True"
-                             TextWrapping="NoWrap" VerticalScrollBarVisibility="Auto"
-                             HorizontalScrollBarVisibility="Auto" FontFamily="Consolas" FontSize="12" />
+                    <controls:HtmlEditor Grid.Row="1" x:Name="BodyEditor" />
 
                     <StackPanel Grid.Row="2" Margin="0,8,0,0">
                         <TextBlock Style="{StaticResource LiftUpMutedText}" TextWrapping="Wrap"
-                                   Text="In Vorlagen mit {{snippet:Name}} einsetzen. Formatierung als HTML: &lt;b&gt;, &lt;i&gt;, &lt;u&gt;, &lt;ul&gt;, &lt;ol&gt;, &lt;table&gt;, &lt;a href&gt;." />
+                                   Text="Text markieren und oben formatieren – gespeichert wird das Ergebnis als HTML. In Vorlagen mit {{snippet:Name}} einsetzen." />
                         <Button Content="Speichern" Style="{StaticResource LiftUpPrimaryButton}" HorizontalAlignment="Right"
                                 Margin="0,8,0,0" Click="OnSaveClick" />
                     </StackPanel>
