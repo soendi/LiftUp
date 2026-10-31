@@ -37,7 +37,12 @@ public static class PlaceholderRenderer
         ("{{project.number}}", "Projektnummer"),
         ("{{project.name}}", "Projektname"),
         ("{{project.customer}}", "Kunde"),
-        ("{{project.contact}}", "Ansprechpartner"),
+        ("{{project.address}}", "Anschrift (Straße, PLZ Ort)"),
+        ("{{project.street}}", "Straße und Hausnummer"),
+        ("{{project.zip}}", "Postleitzahl"),
+        ("{{project.city}}", "Ort"),
+        ("{{project.contact}}", "Erste Ansprechperson"),
+        ("{{project.contacts}}", "Alle Ansprechpersonen untereinander"),
         ("{{project.responsible}}", "Verantwortlicher"),
         ("{{project.description}}", "Beschreibung"),
         ("{{project.status}}", "Status"),
@@ -100,7 +105,13 @@ public static class PlaceholderRenderer
             "project.number" or "projekt.nummer" => Encode(project.Number),
             "project.name" or "projekt.name" => Encode(project.Name),
             "project.customer" or "projekt.kunde" => Encode(project.Customer),
-            "project.contact" or "projekt.ansprechpartner" => Encode(project.Contact),
+            "project.street" or "project.customerstreet" or "projekt.strasse" or "projekt.anschrift" => Encode(project.CustomerStreet),
+            "project.zip" or "project.customerzip" or "projekt.plz" => Encode(project.CustomerZip),
+            "project.city" or "project.customercity" or "projekt.ort" => Encode(project.CustomerCity),
+            "project.address" or "project.customeraddress" or "projekt.adresse" => Encode(project.CustomerAddress),
+            "project.contact" or "projekt.ansprechpartner" =>
+                Encode(project.Contact ?? project.Contacts.FirstOrDefault()?.Summary),
+            "project.contacts" or "projekt.ansprechpersonen" => RenderContacts(project.Contacts),
             "project.responsible" or "projekt.verantwortlich" => Encode(project.ResponsibleName),
             "project.description" or "projekt.beschreibung" => Encode(project.Description),
             "project.status" or "projekt.status" => Encode(ProjectStatusCatalog.Describe(project.Status)),
@@ -111,6 +122,17 @@ public static class PlaceholderRenderer
             "user" or "benutzer" => Encode(context.UserName),
             _ => string.Empty,
         };
+    }
+
+    /// <summary>Ansprechpersonen untereinander; jede Zeile ist HTML-kodiert.</summary>
+    private static string RenderContacts(IReadOnlyList<ProjectContact> contacts)
+    {
+        if (contacts.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        return string.Join("<br />", contacts.Select(contact => Encode(contact.Summary)));
     }
 
     /// <summary>

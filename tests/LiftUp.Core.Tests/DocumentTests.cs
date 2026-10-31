@@ -36,7 +36,7 @@ public sealed class DocumentTests
     {
         Name = name,
         Customer = customer,
-        Contact = "Frau Beispiel",
+        Contacts = [new ProjectContactInput { Name = "Frau Beispiel" }],
         FolderPath = folder,
         Status = ProjectStatus.Active,
         CreateFolderIfMissing = true,

@@ -286,4 +286,171 @@ public sealed class ProjectServiceTests
         Assert.Equal("Meier Hans", project.ResponsibleName);
         Assert.Equal(responsible.Id, service.GetProject(project.Id).ResponsibleUserId);
     }
+
+    [Fact]
+    public void Kundenanschrift_und_ansprechpersonen_werden_gespeichert()
+    {
+        using var fixture = new TestDatabase();
+        var service = new ProjectService(fixture.Database, fixture.LoginAsAdmin());
+
+        var input = Input(Path.Combine(fixture.Root, "p1"), name: "Schule Nord");
+        input.Customer = "Stadt Musterstadt";
+        input.CustomerStreet = "Hauptstraße 12";
+        input.CustomerZip = "12345";
+        input.CustomerCity = "Musterstadt";
+        input.Contacts =
+        [
+            new ProjectContactInput
+            {
+                Name = "Frau Meier",
+                Email = "meier@example.com",
+                Phone = "0151 1234",
+                Responsibility = "Bauleitung",
+            },
+            new ProjectContactInput
+            {
+                Name = "Herr Schulz",
+                Email = "schulz@example.com",
+                Phone = "0151 5678",
+                Responsibility = "Buchhaltung",
+            },
+        ];
+
+        var project = service.Create(input);
+        var reloaded = service.GetProject(project.Id);
+
+        Assert.Equal("Hauptstraße 12", reloaded.CustomerStreet);
+        Assert.Equal("12345", reloaded.CustomerZip);
+        Assert.Equal("Musterstadt", reloaded.CustomerCity);
+        Assert.Equal("Hauptstraße 12, 12345 Musterstadt", reloaded.CustomerAddress);
+        Assert.Equal("Frau Meier", reloaded.Contact);
+        Assert.Equal(["Frau Meier", "Herr Schulz"], reloaded.Contacts.Select(contact => contact.Name));
+        Assert.Equal("Bauleitung", reloaded.Contacts[0].Responsibility);
+        Assert.Equal("0151 5678", reloaded.Contacts[1].Phone);
+    }
+
+    [Fact]
+    public void Bearbeiten_ersetzt_die_ansprechpersonen()
+    {
+        using var fixture = new TestDatabase();
+        var service = new ProjectService(fixture.Database, fixture.LoginAsAdmin());
+
+        var create = Input(Path.Combine(fixture.Root, "p1"));
+        create.Contacts = [new ProjectContactInput { Name = "Frau Meier" }];
+        var project = service.Create(create);
+
+        var update = Input(Path.Combine(fixture.Root, "p1"), name: "Umbenannt", number: project.Number);
+        update.Contacts =
+        [
+            new ProjectContactInput { Name = "Herr Schulz", Responsibility = "Technik" },
+            new ProjectContactInput { Name = "Frau Weber", Responsibility = "Buchhaltung" },
+        ];
+        service.Update(project.Id, update);
+
+        var reloaded = service.GetProject(project.Id);
+        Assert.Equal(["Herr Schulz", "Frau Weber"], reloaded.Contacts.Select(contact => contact.Name));
+        Assert.Equal("Herr Schulz", reloaded.Contact);
+        Assert.Equal(2, reloaded.RowVersion);
+    }
+
+    [Fact]
+    public void Ansprechperson_ohne_namen_wird_abgelehnt()
+    {
+        using var fixture = new TestDatabase();
+        var service = new ProjectService(fixture.Database, fixture.LoginAsAdmin());
+
+        var input = Input(Path.Combine(fixture.Root, "p1"));
+        input.Contacts = [new ProjectContactInput { Name = "   ", Email = "niemand@example.com" }];
+
+        var exception = Assert.Throws<ValidationException>(() => service.Create(input));
+        Assert.Contains("Namen", exception.Message);
+    }
+
+    [Fact]
+    public void Leere_ansprechzeilen_werden_ignoriert()
+    {
+        using var fixture = new TestDatabase();
+        var service = new ProjectService(fixture.Database, fixture.LoginAsAdmin());
+
+        var input = Input(Path.Combine(fixture.Root, "p1"));
+        input.Contacts =
+        [
+            new ProjectContactInput { Name = " ", Email = " ", Phone = " ", Responsibility = " " },
+            new ProjectContactInput(),
+        ];
+
+        var project = service.Create(input);
+        var reloaded = service.GetProject(project.Id);
+
+        Assert.Empty(reloaded.Contacts);
+        Assert.Null(reloaded.Contact);
+    }
+
+    [Fact]
+    public void Suche_findet_anschrift_und_ansprechpersonen()
+    {
+        using var fixture = new TestDatabase();
+        var service = new ProjectService(fixture.Database, fixture.LoginAsAdmin());
+
+        var first = Input(Path.Combine(fixture.Root, "a"), name: "Schule Nord");
+        first.CustomerStreet = "Hauptstraße 12";
+        first.Contacts =
+        [
+            new ProjectContactInput
+            {
+                Name = "Frau Meier",
+                Email = "meier@example.com",
+                Responsibility = "Bauleitung",
+            },
+        ];
+        service.Create(first);
+
+        var second = Input(Path.Combine(fixture.Root, "b"), name: "Büro Süd");
+        second.Contacts = [new ProjectContactInput { Name = "Herr Schulz", Responsibility = "Buchhaltung" }];
+        service.Create(second);
+
+        Assert.Single(service.Search(new ProjectQuery { Search = "Hauptstraße" }));
+        Assert.Single(service.Search(new ProjectQuery { Search = "Meier" }));
+        Assert.Single(service.Search(new ProjectQuery { Search = "meier@example.com" }));
+        Assert.Single(service.Search(new ProjectQuery { Search = "Buchhaltung" }));
+    }
+
+    [Fact]
+    public void Datenbank_der_version_6_erhaelt_anschrift_und_ansprechpersonen()
+    {
+        using var fixture = new TestDatabase();
+        var admin = fixture.LoginAsAdmin();
+
+        // Zustand einer Datenbank aus Version 6 nachstellen: keine Anschrift, keine Kontakte.
+        using (var connection = fixture.Database.Open())
+        using (var command = connection.CreateCommand())
+        {
+            command.CommandText = """
+                DROP TABLE ProjectContacts;
+                ALTER TABLE Projects DROP COLUMN CustomerStreet;
+                ALTER TABLE Projects DROP COLUMN CustomerZip;
+                ALTER TABLE Projects DROP COLUMN CustomerCity;
+                UPDATE SchemaInfo SET Version = 6;
+                """;
+            command.ExecuteNonQuery();
+        }
+
+        fixture.Database.EnsureCreated();
+
+        Assert.Equal(Database.CurrentSchemaVersion, fixture.Database.GetSchemaVersion());
+
+        var service = new ProjectService(fixture.Database, admin);
+        var input = Input(Path.Combine(fixture.Root, "p1"));
+        input.CustomerStreet = "Hauptstraße 12";
+        input.CustomerZip = "12345";
+        input.CustomerCity = "Musterstadt";
+        input.Contacts = [new ProjectContactInput { Name = "Frau Meier", Responsibility = "Bauleitung" }];
+
+        var project = service.Create(input);
+        var reloaded = service.GetProject(project.Id);
+
+        Assert.Equal("Musterstadt", reloaded.CustomerCity);
+        Assert.Equal("Frau Meier", reloaded.Contact);
+        Assert.Single(reloaded.Contacts);
+    }
 }

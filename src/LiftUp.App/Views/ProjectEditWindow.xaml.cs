@@ -1,5 +1,7 @@
+using System.Collections.ObjectModel;
 using System.IO;
 using System.Windows;
+using System.Windows.Controls;
 using LiftUp.Core.Domain;
 
 namespace LiftUp.App.Views;
@@ -8,8 +10,18 @@ public partial class ProjectEditWindow : Window
 {
     private sealed record ResponsibleOption(Guid? Id, string Name);
 
+    /// <summary>Bearbeitbare Zeile der Ansprechpersonen-Tabelle.</summary>
+    public sealed class ContactRow
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+        public string Phone { get; set; } = string.Empty;
+        public string Responsibility { get; set; } = string.Empty;
+    }
+
     private readonly AppServices _services;
     private readonly Guid? _projectId;
+    private readonly ObservableCollection<ContactRow> _contacts = [];
 
     public ProjectEditWindow(AppServices services, Guid? projectId)
     {
@@ -18,8 +30,8 @@ public partial class ProjectEditWindow : Window
         InitializeComponent();
 
         StatusBox.ItemsSource = ProjectStatusCatalog.Selectable;
-
         ResponsibleBox.ItemsSource = BuildResponsibleOptions();
+        ContactsGrid.ItemsSource = _contacts;
 
         if (projectId is null)
         {
@@ -61,9 +73,30 @@ public partial class ProjectEditWindow : Window
             NameBox.Text = project.Name;
             NumberBox.Text = project.Number ?? string.Empty;
             CustomerBox.Text = project.Customer ?? string.Empty;
-            ContactBox.Text = project.Contact ?? string.Empty;
+            StreetBox.Text = project.CustomerStreet ?? string.Empty;
+            ZipBox.Text = project.CustomerZip ?? string.Empty;
+            CityBox.Text = project.CustomerCity ?? string.Empty;
             DescriptionBox.Text = project.Description ?? string.Empty;
             FolderBox.Text = project.FolderPath;
+
+            _contacts.Clear();
+            foreach (var contact in project.Contacts)
+            {
+                _contacts.Add(new ContactRow
+                {
+                    Name = contact.Name,
+                    Email = contact.Email ?? string.Empty,
+                    Phone = contact.Phone ?? string.Empty,
+                    Responsibility = contact.Responsibility ?? string.Empty,
+                });
+            }
+
+            // Projekte aus älteren Versionen kennen nur eine Ansprechperson; sie wird zur ersten Zeile.
+            if (_contacts.Count == 0 && !string.IsNullOrWhiteSpace(project.Contact))
+            {
+                _contacts.Add(new ContactRow { Name = project.Contact });
+            }
+
             if (project.IsArchived)
             {
                 StatusBox.ItemsSource = ProjectStatusCatalog.All;
@@ -113,9 +146,42 @@ public partial class ProjectEditWindow : Window
         }
     }
 
+    private void OnAddContactClick(object sender, RoutedEventArgs e)
+    {
+        var row = new ContactRow();
+        _contacts.Add(row);
+        ContactsGrid.SelectedItem = row;
+        ContactsGrid.ScrollIntoView(row);
+        ContactsGrid.CurrentCell = new DataGridCellInfo(row, ContactsGrid.Columns[0]);
+        ContactsGrid.BeginEdit();
+    }
+
+    private void OnRemoveContactClick(object sender, RoutedEventArgs e)
+    {
+        if (ContactsGrid.SelectedItem is ContactRow selected)
+        {
+            _contacts.Remove(selected);
+        }
+        else if (_contacts.Count > 0)
+        {
+            _contacts.RemoveAt(_contacts.Count - 1);
+        }
+    }
+
     private void OnSaveClick(object sender, RoutedEventArgs e)
     {
         ErrorText.Text = string.Empty;
+
+        // Eine gerade bearbeitete Zelle übernimmt ihren Text sonst erst beim Verlassen.
+        try
+        {
+            ContactsGrid.CommitEdit(DataGridEditingUnit.Cell, true);
+            ContactsGrid.CommitEdit(DataGridEditingUnit.Row, true);
+        }
+        catch (InvalidOperationException)
+        {
+            // Nichts in Bearbeitung: kein Grund, das Speichern abzubrechen.
+        }
 
         var status = StatusBox.SelectedValue is ProjectStatus selectedStatus
             ? selectedStatus
@@ -126,7 +192,18 @@ public partial class ProjectEditWindow : Window
             Name = NameBox.Text,
             Number = NumberBox.Text,
             Customer = CustomerBox.Text,
-            Contact = ContactBox.Text,
+            CustomerStreet = StreetBox.Text,
+            CustomerZip = ZipBox.Text,
+            CustomerCity = CityBox.Text,
+            Contacts = _contacts
+                .Select(row => new ProjectContactInput
+                {
+                    Name = row.Name,
+                    Email = row.Email,
+                    Phone = row.Phone,
+                    Responsibility = row.Responsibility,
+                })
+                .ToArray(),
             Description = DescriptionBox.Text,
             ResponsibleUserId = ResponsibleBox.SelectedValue is Guid responsibleId && responsibleId != Guid.Empty
                 ? responsibleId

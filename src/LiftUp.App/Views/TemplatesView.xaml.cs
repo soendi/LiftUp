@@ -218,7 +218,19 @@ public partial class TemplatesView : UserControl
             Number = "2026-0001",
             Name = "Beispielprojekt",
             Customer = "Muster Bau GmbH",
-            Contact = "Frau Beispiel",
+            CustomerStreet = "Hauptstraße 12",
+            CustomerZip = "12345",
+            CustomerCity = "Musterstadt",
+            Contacts =
+            [
+                new ProjectContact
+                {
+                    Name = "Frau Beispiel",
+                    Responsibility = "Bauleitung",
+                    Phone = "0151 1234",
+                    Email = "beispiel@example.com",
+                },
+            ],
             Description = "Beispielbeschreibung für die Vorschau.",
             ResponsibleName = _services.CurrentSession.DisplayName,
             Status = ProjectStatus.Active,

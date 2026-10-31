@@ -81,7 +81,8 @@ Benutzer verwalten, Rollen und Rechte verwalten. Die Prüfung passiert in der Co
 
 Tabellen: `Users`, `Roles`, `Projects`, `ChangeLog`, `Settings`, `SchemaInfo`.
 `ChangeLog` führt zusätzlich den Bearbeiter (`OriginUser`) und die Geräte-Id, damit sich Einträge
-ihrem Ursprung zuordnen lassen.
+ihrem Ursprung zuordnen lassen. Ansprechpersonen stehen in `ProjectContacts`, werden beim Bearbeiten
+neu geschrieben und dabei weich gelöscht.
 
 Jede fachliche Tabelle führt:
 
@@ -125,7 +126,10 @@ tests/LiftUp.Core.Tests/
 
 ## Projektverwaltung
 
-Projekte haben Nummer, Name, Kunde, Ansprechpartner, Beschreibung, Verantwortlichen und Status.
+Projekte haben Nummer, Name, Kunde, Beschreibung, Verantwortlichen und Status. Zum Kunden gehören
+die vollständige Anschrift (Straße, PLZ, Ort) und beliebig viele Ansprechpersonen mit Name,
+E-Mail-Adresse, Telefonnummer und Zuständigkeit. Die erste Person gilt als Hauptansprechpartner
+und erscheint als solche in Übersicht und Vorlagen.
 Die **Projektnummer wird automatisch** im Format `2026-0001` vergeben (eigener Nummernkreis je Jahr,
 in derselben Transaktion wie das Anlegen). Eine vorhandene Nummer kann stattdessen eingetragen werden.
 
@@ -133,7 +137,8 @@ Beim Anlegen entsteht der Projektordner samt Unterordnern `01_Dokumente`, `02_Bi
 und `04_Vorlagen`; bei bestehenden Ordnern werden nur fehlende Unterordner ergänzt. Der Pfad darf
 auf jedem Laufwerk liegen (lokal, Netzlaufwerk, Wechseldatenträger).
 
-Die Übersicht bietet Suche (Name, Nummer, Kunde, Ansprechpartner, Verantwortlicher, Beschreibung),
+Die Übersicht bietet Suche (Name, Nummer, Kunde, Anschrift, Ansprechpersonen mit E-Mail und Telefon,
+Verantwortlicher, Beschreibung),
 Statusfilter und Sortierung nach Projekt, Nummer, Kunde, Verantwortlichem, Status oder Änderungsdatum.
 
 **Archiv:** Archivieren ändert ausschließlich den Status und hält Zeitpunkt und Benutzer fest.
@@ -154,7 +159,12 @@ Vorschau mit Beispieldaten und eine Platzhalterliste, aus der per Doppelklick ei
 | `{{project.number}}` | Projektnummer |
 | `{{project.name}}` | Projektname |
 | `{{project.customer}}` | Kunde |
-| `{{project.contact}}` | Ansprechpartner |
+| `{{project.address}}` | Anschrift des Kunden (Straße, PLZ Ort) |
+| `{{project.street}}` | Straße und Hausnummer |
+| `{{project.zip}}` | Postleitzahl |
+| `{{project.city}}` | Ort |
+| `{{project.contact}}` | Erste Ansprechperson |
+| `{{project.contacts}}` | Alle Ansprechpersonen untereinander |
 | `{{project.responsible}}` | Verantwortlicher |
 | `{{project.description}}` | Beschreibung |
 | `{{project.status}}` | Status |
@@ -363,6 +373,11 @@ Einmal auf einem frischen Windows-Rechner durchgehen. Was hier nicht abgehakt is
 - [ ] Suche, Filter und Sortierung liefern die erwarteten Treffer.
 - [ ] Archivieren ändert nur den Status; nichts wird verschoben oder gelöscht. Wiederherstellen funktioniert.
 - [ ] Ein Projekt auf einer Freigabe anlegen und mit einem zweiten Benutzer öffnen.
+- [ ] Kundenanschrift (Straße, PLZ, Ort) erfassen; sie erscheint in der Projektübersicht und im PDF.
+- [ ] Zwei Ansprechpersonen mit E-Mail, Telefon und Zuständigkeit eintragen, eine Zeile löschen,
+      speichern und erneut öffnen – die Reihenfolge bleibt erhalten.
+- [ ] Suche nach Ansprechperson (Name, E-Mail, Zuständigkeit) und nach Straße liefert das Projekt.
+- [ ] Ansprechperson ohne Namen, aber mit Telefonnummer: Speichern wird mit Hinweis abgelehnt.
 
 **PDF**
 

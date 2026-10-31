@@ -50,8 +50,35 @@ public sealed class Project
     public string Name { get; set; } = string.Empty;
     public string? Customer { get; set; }
 
-    /// <summary>Ansprechpartner beim Kunden.</summary>
+    /// <summary>Straße und Hausnummer des Kunden.</summary>
+    public string? CustomerStreet { get; set; }
+
+    /// <summary>Postleitzahl des Kunden.</summary>
+    public string? CustomerZip { get; set; }
+
+    /// <summary>Ort des Kunden.</summary>
+    public string? CustomerCity { get; set; }
+
+    /// <summary>
+    /// Name der ersten Ansprechperson. Wird beim Speichern aus <see cref="Contacts"/> gepflegt,
+    /// damit Übersicht, Suche und ältere Vorlagen weiter funktionieren.
+    /// </summary>
     public string? Contact { get; set; }
+
+    /// <summary>Ansprechpersonen beim Kunden, in der eingegebenen Reihenfolge.</summary>
+    public List<ProjectContact> Contacts { get; set; } = [];
+
+    /// <summary>Anschrift in einer Zeile, z. B. „Hauptstraße 12, 12345 Musterstadt“.</summary>
+    public string CustomerAddress
+    {
+        get
+        {
+            var city = string.Join(" ", new[] { CustomerZip, CustomerCity }
+                .Where(part => !string.IsNullOrWhiteSpace(part)));
+            return string.Join(", ", new[] { CustomerStreet, city }
+                .Where(part => !string.IsNullOrWhiteSpace(part)));
+        }
+    }
 
     public string? Description { get; set; }
 
@@ -91,7 +118,16 @@ public sealed class ProjectInput
     public string? Number { get; set; }
 
     public string? Customer { get; set; }
-    public string? Contact { get; set; }
+    public string? CustomerStreet { get; set; }
+    public string? CustomerZip { get; set; }
+    public string? CustomerCity { get; set; }
+
+    /// <summary>Ansprechpersonen; leere Zeilen werden beim Speichern ignoriert.</summary>
+    public IReadOnlyList<ProjectContactInput> Contacts { get; set; } = [];
+
+    /// <summary>Name der ersten Ansprechperson, abgeleitet aus <see cref="Contacts"/>.</summary>
+    public string? PrimaryContact => Contacts.Count > 0 ? Contacts[0].Name : null;
+
     public string? Description { get; set; }
     public Guid? ResponsibleUserId { get; set; }
     public string FolderPath { get; set; } = string.Empty;
@@ -99,6 +135,43 @@ public sealed class ProjectInput
 
     /// <summary>Ordner samt Unterordnern anlegen, wenn er noch nicht existiert.</summary>
     public bool CreateFolderIfMissing { get; set; } = true;
+}
+
+/// <summary>Ansprechperson beim Kunden.</summary>
+public sealed class ProjectContact
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid ProjectId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Email { get; set; }
+    public string? Phone { get; set; }
+
+    /// <summary>Zuständigkeit, z. B. Bauleitung, Buchhaltung, Technik.</summary>
+    public string? Responsibility { get; set; }
+
+    public int SortOrder { get; set; }
+
+    /// <summary>Einzeilige Darstellung für Listen und Platzhalter.</summary>
+    public string Summary
+    {
+        get
+        {
+            var parts = new List<string> { Name };
+            if (!string.IsNullOrWhiteSpace(Responsibility)) parts.Add(Responsibility);
+            if (!string.IsNullOrWhiteSpace(Phone)) parts.Add(Phone);
+            if (!string.IsNullOrWhiteSpace(Email)) parts.Add(Email);
+            return string.Join(" · ", parts);
+        }
+    }
+}
+
+/// <summary>Eingabe einer Ansprechperson aus dem Projektdialog.</summary>
+public sealed class ProjectContactInput
+{
+    public string Name { get; set; } = string.Empty;
+    public string? Email { get; set; }
+    public string? Phone { get; set; }
+    public string? Responsibility { get; set; }
 }
 
 public enum ProjectSort

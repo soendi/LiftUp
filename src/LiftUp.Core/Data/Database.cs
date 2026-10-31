@@ -12,7 +12,7 @@ namespace LiftUp.Core.Data;
 /// </summary>
 public sealed class Database
 {
-    public const int CurrentSchemaVersion = 6;
+    public const int CurrentSchemaVersion = 7;
 
     private readonly string _connectionString;
 
@@ -135,6 +135,9 @@ public sealed class Database
         // Version 6 ergänzt den Bearbeiter im Änderungsprotokoll.
         MigrateChangeLogActor(connection);
 
+        // Version 7 ergänzt die Kundenanschrift und eigene Ansprechpersonen.
+        MigrateCustomerContacts(connection);
+
         using var command = Db.Command(connection, "UPDATE SchemaInfo SET Version = $version;");
         command.With("$version", CurrentSchemaVersion);
         command.ExecuteNonQuery();
@@ -221,6 +224,60 @@ public sealed class Database
         alter.ExecuteNonQuery();
     }
 
+    /// <summary>
+    /// Version 7: Kundenanschrift am Projekt und beliebig viele Ansprechpersonen.
+    /// Bestehende Projekte behalten ihren einzelnen Ansprechpartner im Feld <c>Contact</c>.
+    /// </summary>
+    private static void MigrateCustomerContacts(SqliteConnection connection)
+    {
+        var existing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using (var info = Db.Command(connection, "PRAGMA table_info(Projects);"))
+        using (var reader = info.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                existing.Add(reader.GetString(1));
+            }
+        }
+
+        (string Name, string Definition)[] additions =
+        [
+            ("CustomerStreet", "TEXT NULL"),
+            ("CustomerZip", "TEXT NULL"),
+            ("CustomerCity", "TEXT NULL"),
+        ];
+
+        foreach (var (name, definition) in additions)
+        {
+            if (existing.Contains(name))
+            {
+                continue;
+            }
+
+            using var alter = Db.Command(connection, $"ALTER TABLE Projects ADD COLUMN {name} {definition};");
+            alter.ExecuteNonQuery();
+        }
+
+        using var create = Db.Command(connection, """
+            CREATE TABLE IF NOT EXISTS ProjectContacts (
+                Id             TEXT PRIMARY KEY NOT NULL,
+                ProjectId      TEXT NOT NULL REFERENCES Projects(Id),
+                Name           TEXT NOT NULL,
+                Email          TEXT NULL,
+                Phone          TEXT NULL,
+                Responsibility TEXT NULL,
+                SortOrder      INTEGER NOT NULL DEFAULT 0,
+                CreatedUtc     TEXT NOT NULL,
+                CreatedBy      TEXT NULL,
+                RowVersion     INTEGER NOT NULL DEFAULT 1,
+                IsDeleted      INTEGER NOT NULL DEFAULT 0
+            );
+
+            CREATE INDEX IF NOT EXISTS IX_ProjectContacts_Project ON ProjectContacts (ProjectId);
+            """);
+        create.ExecuteNonQuery();
+    }
+
     /// <summary>Übernimmt vorhandene Typnamen bestehender Vorlagen in die Typenliste.</summary>
     private static void MigrateDocumentTypes(SqliteConnection connection)
     {
@@ -303,7 +360,8 @@ public sealed class Database
           <div class="meta">Projekt {{project.number}} · {{date}}</div>
           <table>
             <tr><td class="label">Kunde</td><td>{{project.customer}}</td></tr>
-            <tr><td class="label">Ansprechpartner</td><td>{{project.contact}}</td></tr>
+            <tr><td class="label">Anschrift</td><td>{{project.address}}</td></tr>
+            <tr><td class="label">Ansprechpersonen</td><td>{{project.contacts}}</td></tr>
             <tr><td class="label">Verantwortlich</td><td>{{project.responsible}}</td></tr>
             <tr><td class="label">Status</td><td>{{project.status}}</td></tr>
           </table>
@@ -459,6 +517,9 @@ public sealed class Database
             Number      TEXT NULL COLLATE NOCASE,
             Name        TEXT NOT NULL,
             Customer    TEXT NULL,
+            CustomerStreet TEXT NULL,
+            CustomerZip    TEXT NULL,
+            CustomerCity   TEXT NULL,
             Contact     TEXT NULL,
             Description TEXT NULL,
             ResponsibleUserId TEXT NULL,
@@ -473,6 +534,20 @@ public sealed class Database
             UpdatedBy   TEXT NULL,
             RowVersion  INTEGER NOT NULL DEFAULT 1,
             IsDeleted   INTEGER NOT NULL DEFAULT 0
+        );
+
+        CREATE TABLE IF NOT EXISTS ProjectContacts (
+            Id             TEXT PRIMARY KEY NOT NULL,
+            ProjectId      TEXT NOT NULL REFERENCES Projects(Id),
+            Name           TEXT NOT NULL,
+            Email          TEXT NULL,
+            Phone          TEXT NULL,
+            Responsibility TEXT NULL,
+            SortOrder      INTEGER NOT NULL DEFAULT 0,
+            CreatedUtc     TEXT NOT NULL,
+            CreatedBy      TEXT NULL,
+            RowVersion     INTEGER NOT NULL DEFAULT 1,
+            IsDeleted      INTEGER NOT NULL DEFAULT 0
         );
 
         CREATE TABLE IF NOT EXISTS ChangeLog (
@@ -586,6 +661,7 @@ public sealed class Database
         CREATE INDEX IF NOT EXISTS IX_Projects_Status ON Projects (Status);
         CREATE INDEX IF NOT EXISTS IX_ChangeLog_Pending ON ChangeLog (SyncedUtc) WHERE SyncedUtc IS NULL;
         CREATE INDEX IF NOT EXISTS IX_ProjectDocuments_Project ON ProjectDocuments (ProjectId);
+        CREATE INDEX IF NOT EXISTS IX_ProjectContacts_Project ON ProjectContacts (ProjectId);
 
         INSERT INTO SchemaInfo (Version)
         SELECT 5 WHERE NOT EXISTS (SELECT 1 FROM SchemaInfo);

@@ -51,8 +51,10 @@ public sealed class ProjectService
     {
         _actor.Require(Permission.ViewProjects);
         using var connection = _database.Open();
-        return _projects.GetById(connection, null, id)
+        var project = _projects.GetById(connection, null, id)
                ?? throw new ValidationException("Das Projekt wurde nicht gefunden.");
+        project.Contacts = _projects.GetContacts(connection, null, id);
+        return project;
     }
 
     public Project Create(ProjectInput input)
@@ -78,7 +80,10 @@ public sealed class ProjectService
             Name = prepared.Name,
             Number = number,
             Customer = prepared.Customer,
-            Contact = prepared.Contact,
+            CustomerStreet = prepared.CustomerStreet,
+            CustomerZip = prepared.CustomerZip,
+            CustomerCity = prepared.CustomerCity,
+            Contact = prepared.PrimaryContact,
             Description = prepared.Description,
             ResponsibleUserId = prepared.ResponsibleUserId,
             ResponsibleName = responsibleName,
@@ -97,13 +102,18 @@ public sealed class ProjectService
         }
 
         _projects.Insert(connection, transaction, project);
+        project.Contacts = _projects.ReplaceContacts(
+            connection, transaction, project.Id, prepared.Contacts, _actor.UserName);
         _changes.Record(connection, transaction, "Project", project.Id.ToString("D"), "Create",
             new
             {
                 project.Name,
                 project.Number,
                 project.Customer,
-                project.Contact,
+                CustomerStreet = project.CustomerStreet,
+                CustomerCity = project.CustomerCity,
+                Contact = project.Contact,
+                Contacts = prepared.Contacts.Count,
                 project.ResponsibleName,
                 project.FolderPath,
                 Status = (int)project.Status,
@@ -142,7 +152,10 @@ public sealed class ProjectService
         project.Name = prepared.Name;
         project.Number = number;
         project.Customer = prepared.Customer;
-        project.Contact = prepared.Contact;
+        project.CustomerStreet = prepared.CustomerStreet;
+        project.CustomerZip = prepared.CustomerZip;
+        project.CustomerCity = prepared.CustomerCity;
+        project.Contact = prepared.PrimaryContact;
         project.Description = prepared.Description;
         project.ResponsibleUserId = prepared.ResponsibleUserId;
         project.ResponsibleName = ResolveResponsibleName(connection, transaction, prepared.ResponsibleUserId);
@@ -152,13 +165,18 @@ public sealed class ProjectService
         project.UpdatedBy = _actor.UserName;
 
         var rowVersion = _projects.Update(connection, transaction, project);
+        project.Contacts = _projects.ReplaceContacts(
+            connection, transaction, project.Id, prepared.Contacts, _actor.UserName);
         _changes.Record(connection, transaction, "Project", project.Id.ToString("D"), "Update",
             new
             {
                 project.Name,
                 project.Number,
                 project.Customer,
-                project.Contact,
+                CustomerStreet = project.CustomerStreet,
+                CustomerCity = project.CustomerCity,
+                Contact = project.Contact,
+                Contacts = prepared.Contacts.Count,
                 project.ResponsibleName,
                 project.FolderPath,
                 Status = (int)project.Status,
@@ -285,7 +303,10 @@ public sealed class ProjectService
             Name = name,
             Number = string.IsNullOrWhiteSpace(input.Number) ? null : input.Number.Trim(),
             Customer = Trimmed(input.Customer),
-            Contact = Trimmed(input.Contact),
+            CustomerStreet = Trimmed(input.CustomerStreet),
+            CustomerZip = Trimmed(input.CustomerZip),
+            CustomerCity = Trimmed(input.CustomerCity),
+            Contacts = PrepareContacts(input.Contacts),
             Description = Trimmed(input.Description),
             ResponsibleUserId = input.ResponsibleUserId,
             FolderPath = folderPath,
@@ -296,6 +317,43 @@ public sealed class ProjectService
 
     private static string? Trimmed(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    /// <summary>
+    /// Entfernt leere Zeilen und verlangt einen Namen je Ansprechperson: eine Zeile nur mit
+    /// Telefonnummer wäre im Dokument niemandem zuzuordnen.
+    /// </summary>
+    private static IReadOnlyList<ProjectContactInput> PrepareContacts(IReadOnlyList<ProjectContactInput>? contacts)
+    {
+        var prepared = new List<ProjectContactInput>();
+
+        foreach (var contact in contacts ?? [])
+        {
+            var name = (contact.Name ?? string.Empty).Trim();
+            var email = Trimmed(contact.Email);
+            var phone = Trimmed(contact.Phone);
+            var responsibility = Trimmed(contact.Responsibility);
+
+            if (name.Length == 0 && email is null && phone is null && responsibility is null)
+            {
+                continue;
+            }
+
+            if (name.Length == 0)
+            {
+                throw new ValidationException("Bitte zu jeder Ansprechperson einen Namen angeben.");
+            }
+
+            prepared.Add(new ProjectContactInput
+            {
+                Name = name,
+                Email = email,
+                Phone = phone,
+                Responsibility = responsibility,
+            });
+        }
+
+        return prepared;
+    }
 
     private string? ResolveResponsibleName(SqliteConnection connection, SqliteTransaction? transaction, Guid? userId)
     {
