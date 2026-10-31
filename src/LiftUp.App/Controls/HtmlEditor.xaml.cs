@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
+using LiftUp.Core.Documents;
 using Microsoft.Web.WebView2.Core;
 
 namespace LiftUp.App.Controls;
@@ -501,7 +502,13 @@ public partial class HtmlEditor : UserControl
 
         try
         {
-            using var message = JsonDocument.Parse(e.WebMessageAsJson);
+            var payload = WebMessagePayload.Unwrap(e.WebMessageAsJson);
+            if (payload is null)
+            {
+                return;
+            }
+
+            using var message = JsonDocument.Parse(payload);
             var root = message.RootElement;
 
             if (!root.TryGetProperty("type", out var type) ||
