@@ -15,6 +15,9 @@ public partial class ImagesView : UserControl
     private sealed record ProjectOption(Guid? Id, string Name);
 
     private const string AllCategories = "Alle Kategorien";
+
+    private const string CategoryFilterSetting = "Images.CategoryFilter";
+    private const string TagFilterSetting = "Images.TagFilter";
     /// <summary>Gewählte Schlagworte; leer bedeutet „nicht filtern“.</summary>
     private readonly HashSet<string> _selectedTags = new(StringComparer.CurrentCultureIgnoreCase);
 
@@ -29,6 +32,7 @@ public partial class ImagesView : UserControl
     private FileSystemWatcher? _folderWatcher;
     private bool _syncingFromWatcher;
     private CheckBox? _allTagsCheckBox;
+    private string? _savedCategory;
 
     public ImagesView(AppServices services)
     {
@@ -41,6 +45,7 @@ public partial class ImagesView : UserControl
         Loaded += (_, _) => StartFolderWatcher();
         Unloaded += (_, _) => StopFolderWatcher();
 
+        RestoreFilters();
         LoadProjects();
         LoadImages();
     }
@@ -72,6 +77,8 @@ public partial class ImagesView : UserControl
             _items = _services.Images.Search(SelectedProjectId, SearchBox.Text, ArchiveToggle.IsChecked == true);
 
             var previousCategory = CategoryFilterBox.SelectedItem as string;
+            var desiredCategory = previousCategory ?? _savedCategory;
+            _savedCategory = null;
 
             var categories = new List<string> { AllCategories };
             categories.AddRange(_items
@@ -90,8 +97,8 @@ public partial class ImagesView : UserControl
             _selectedTags.RemoveWhere(tag => !tags.Contains(tag, StringComparer.CurrentCultureIgnoreCase));
 
             CategoryFilterBox.ItemsSource = categories;
-            CategoryFilterBox.SelectedItem = previousCategory is not null && categories.Contains(previousCategory)
-                ? previousCategory
+            CategoryFilterBox.SelectedItem = desiredCategory is not null && categories.Contains(desiredCategory)
+                ? desiredCategory
                 : AllCategories;
 
             UpdateTagFilterButton();
@@ -148,13 +155,7 @@ public partial class ImagesView : UserControl
             return;
         }
 
-        if (!_selectedTags.Remove(tag))
-        {
-            _selectedTags.Add(tag);
-        }
-
-        UpdateTagFilterButton();
-        ApplyCategoryFilter();
+        ToggleTag(tag);
         e.Handled = true;
     }
 
@@ -228,6 +229,7 @@ public partial class ImagesView : UserControl
             _selectedTags.Clear();
             UpdateTagFilterButton();
             ApplyCategoryFilter();
+            SaveFilters();
             RebuildTagPopup();
         };
         _allTagsCheckBox = all;
@@ -277,6 +279,42 @@ public partial class ImagesView : UserControl
 
         UpdateTagFilterButton();
         ApplyCategoryFilter();
+        SaveFilters();
+    }
+
+    /// <summary>Merkt Kategorie- und Schlagwortfilter für den nächsten Start.</summary>
+    private void SaveFilters()
+    {
+        try
+        {
+            _services.Database.SetSetting(
+                CategoryFilterSetting, CategoryFilterBox.SelectedItem as string ?? AllCategories);
+            _services.Database.SetSetting(
+                TagFilterSetting, string.Join(", ", _selectedTags));
+        }
+        catch (Exception exception) when (exception is Microsoft.Data.Sqlite.SqliteException)
+        {
+            // Eine nicht gespeicherte Filterauswahl darf die Ansicht nicht stören.
+        }
+    }
+
+    /// <summary>Stellt die zuletzt gewählten Filter wieder her.</summary>
+    private void RestoreFilters()
+    {
+        try
+        {
+            _savedCategory = _services.Database.GetSetting(CategoryFilterSetting);
+            foreach (var tag in ImageTags.Split(_services.Database.GetSetting(TagFilterSetting)))
+            {
+                _selectedTags.Add(tag);
+            }
+
+            UpdateTagFilterButton();
+        }
+        catch (Exception exception) when (exception is Microsoft.Data.Sqlite.SqliteException)
+        {
+            // Ohne gespeicherte Filter startet die Ansicht mit „Alle“.
+        }
     }
 
     private ImageListItem? Selected => ImagesGrid.SelectedItem as ImageListItem;
@@ -544,7 +582,11 @@ public partial class ImagesView : UserControl
 
     private void OnFilterChanged(object sender, SelectionChangedEventArgs e) => LoadImages();
 
-    private void OnCategoryChanged(object sender, SelectionChangedEventArgs e) => ApplyCategoryFilter();
+    private void OnCategoryChanged(object sender, SelectionChangedEventArgs e)
+    {
+        ApplyCategoryFilter();
+        SaveFilters();
+    }
 
     private void OnSearchChanged(object sender, TextChangedEventArgs e) => LoadImages();
 
