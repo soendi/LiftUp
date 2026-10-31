@@ -40,10 +40,10 @@
 
             <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,10,0,0">
                 <TextBlock Text="Format" VerticalAlignment="Center" Margin="0,0,6,0" Style="{StaticResource LiftUpFieldLabel}" />
-                <ComboBox x:Name="FormatBox" Width="80" Margin="0,0,12,0" />
+                <ComboBox x:Name="FormatBox" DisplayMemberPath="Name" Width="80" Margin="0,0,12,0" />
 
                 <TextBlock Text="Ausrichtung" VerticalAlignment="Center" Margin="0,0,6,0" Style="{StaticResource LiftUpFieldLabel}" />
-                <ComboBox x:Name="OrientationBox" Width="110" Margin="0,0,12,0" />
+                <ComboBox x:Name="OrientationBox" DisplayMemberPath="Name" Width="110" Margin="0,0,12,0" />
 
                 <TextBlock Text="Rand (mm)" VerticalAlignment="Center" Margin="0,0,6,0" Style="{StaticResource LiftUpFieldLabel}" />
                 <TextBox x:Name="MarginBox" Width="60" Text="15" />
