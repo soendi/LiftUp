@@ -21,6 +21,8 @@ public partial class PdfView : UserControl
     private static readonly OrientationOption[] Orientations = [new(false, "Hochformat"), new(true, "Querformat")];
 
     private readonly AppServices _services;
+    private MissingPlaceholders _missing = MissingPlaceholders.Empty;
+    private bool _previewShown;
 
     public PdfView(AppServices services)
     {
@@ -78,6 +80,12 @@ public partial class PdfView : UserControl
 
     private void OnTypeChanged(object sender, SelectionChangedEventArgs e) => LoadTemplates();
 
+    private void OnTemplateChanged(object sender, SelectionChangedEventArgs e)
+    {
+        _previewShown = false;
+        UpdateMissing();
+    }
+
     private void LoadTemplates()
     {
         try
@@ -120,7 +128,11 @@ public partial class PdfView : UserControl
 
     private ProjectDocument? SelectedDocument => DocumentsGrid.SelectedItem as ProjectDocument;
 
-    private void OnProjectChanged(object sender, SelectionChangedEventArgs e) => LoadDocuments();
+    private void OnProjectChanged(object sender, SelectionChangedEventArgs e)
+    {
+        LoadDocuments();
+        UpdateMissing();
+    }
 
     private void OnDocumentSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -235,26 +247,122 @@ public partial class PdfView : UserControl
         LoadDocuments();
     }
 
-    private async void OnPreviewClick(object sender, RoutedEventArgs e)
+    private async void OnPreviewClick(object sender, RoutedEventArgs e) => await ShowPreviewAsync();
+
+    private async Task<bool> ShowPreviewAsync()
     {
         if (ProjectBox.SelectedItem is not ProjectOption project ||
             TemplateBox.SelectedItem is not TemplateListItem template)
         {
             InfoText.Text = "Bitte Projekt und Vorlage wählen.";
-            return;
+            return false;
         }
+
+        UpdateMissing();
 
         try
         {
             var html = _services.Documents.RenderHtml(project.Id, template.Id);
             await PreviewBrowser.EnsureCoreWebView2Async();
             PreviewBrowser.NavigateToString(html);
-            InfoText.Text = $"Vorschau: {template.Name} (Version {template.CurrentVersion})";
+            _previewShown = true;
+            InfoText.Text = _missing.Any
+                ? $"Vorschau: {template.Name} (Version {template.CurrentVersion}) – Angaben fehlen, siehe Hinweis."
+                : $"Vorschau: {template.Name} (Version {template.CurrentVersion})";
+            return true;
         }
         catch (Exception exception)
         {
             InfoText.Text = "Vorschau fehlgeschlagen: " + exception.Message;
+            return false;
         }
+    }
+
+    /// <summary>
+    /// Prüft die gewählte Vorlage auf fehlende Bilder und Textbausteine und zeigt die
+    /// Warnung über der Vorschau – noch bevor jemand ein PDF erzeugt.
+    /// </summary>
+    private void UpdateMissing()
+    {
+        if (ProjectBox.SelectedItem is not ProjectOption project ||
+            TemplateBox.SelectedItem is not TemplateListItem template)
+        {
+            _missing = MissingPlaceholders.Empty;
+            WarningBorder.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        try
+        {
+            _missing = _services.Documents.FindMissingPlaceholders(project.Id, template.Id);
+        }
+        catch (LiftUpException)
+        {
+            // Ohne Recht oder ohne lesbare Vorlage gibt es hier nichts zu warnen.
+            _missing = MissingPlaceholders.Empty;
+            WarningBorder.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        if (!_missing.Any)
+        {
+            WarningBorder.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        WarningText.Text = $"Fehlende Angaben: {DescribeMissing(_missing)}. "
+            + "Diese Platzhalter bleiben in der Vorschau und im erzeugten PDF leer.";
+        WarningBorder.Visibility = Visibility.Visible;
+    }
+
+    private static string DescribeMissing(MissingPlaceholders missing)
+    {
+        var parts = new List<string>();
+        if (missing.Images.Count > 0)
+        {
+            parts.Add($"{missing.Images.Count} Bild{(missing.Images.Count == 1 ? "" : "er")}");
+        }
+
+        if (missing.Snippets.Count > 0)
+        {
+            parts.Add($"{missing.Snippets.Count} Textbaustein{(missing.Snippets.Count == 1 ? "" : "e")}");
+        }
+
+        var names = string.Join(", ", missing.Images.Concat(missing.Snippets)
+            .Select(name => $"„{name}“"));
+
+        return $"{string.Join(" und ", parts)} ({names})";
+    }
+
+    private async void OnFixPlaceholdersClick(object sender, RoutedEventArgs e)
+    {
+        if (ProjectBox.SelectedItem is not ProjectOption project ||
+            TemplateBox.SelectedItem is not TemplateListItem template)
+        {
+            return;
+        }
+
+        var dialog = new MissingPlaceholdersWindow(_services, project.Id, template.Id, _missing)
+        {
+            Owner = Window.GetWindow(this),
+        };
+
+        if (dialog.ShowDialog() != true)
+        {
+            UpdateMissing();
+            return;
+        }
+
+        UpdateMissing();
+
+        if (_previewShown)
+        {
+            await ShowPreviewAsync();
+        }
+
+        InfoText.Text = dialog.PlaceholdersRemoved
+            ? "Platzhalter entfernt – Vorschau und PDF sind wieder vollständig nutzbar."
+            : "Angaben ergänzt – Vorschau und PDF sind wieder vollständig nutzbar.";
     }
 
     private async void OnCreateClick(object sender, RoutedEventArgs e)

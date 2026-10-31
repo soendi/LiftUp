@@ -28,7 +28,8 @@
                               DisplayMemberPath="Display" SelectionChanged="OnTypeChanged" />
 
                     <TextBlock Text="Vorlage" VerticalAlignment="Center" Margin="0,0,6,0" Style="{StaticResource LiftUpFieldLabel}" />
-                    <ComboBox x:Name="TemplateBox" Width="190" DisplayMemberPath="Name" />
+                    <ComboBox x:Name="TemplateBox" Width="190" DisplayMemberPath="Name"
+                              SelectionChanged="OnTemplateChanged" />
                 </StackPanel>
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="14,0,0,0">
@@ -56,9 +57,31 @@
                 <ColumnDefinition Width="440" />
             </Grid.ColumnDefinitions>
 
-            <Border Grid.Column="0" Style="{StaticResource LiftUpCard}" Margin="0,0,10,0">
-                <wv2:WebView2 x:Name="PreviewBrowser" />
-            </Border>
+            <Grid Grid.Column="0" Margin="0,0,10,0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <Border x:Name="WarningBorder" Grid.Row="0" Style="{StaticResource LiftUpCard}"
+                        Padding="12" Margin="0,0,0,10" Visibility="Collapsed">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock x:Name="WarningText" FontWeight="SemiBold" TextWrapping="Wrap"
+                                   VerticalAlignment="Center" />
+                        <Button Grid.Column="1" Content="Beheben …" Click="OnFixPlaceholdersClick"
+                                Margin="10,0,0,0" VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+
+                <Border Grid.Row="1" Style="{StaticResource LiftUpCard}">
+                    <wv2:WebView2 x:Name="PreviewBrowser" />
+                </Border>
+            </Grid>
 
             <Border Grid.Column="1" Style="{StaticResource LiftUpCard}" Padding="10">
                 <Grid>
