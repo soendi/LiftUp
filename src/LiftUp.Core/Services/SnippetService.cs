@@ -103,6 +103,26 @@ public sealed class SnippetService
         return snippet;
     }
 
+    /// <summary>
+    /// Entfernt den Textbaustein endgültig. Bereits erzeugte PDFs behalten ihren Inhalt,
+    /// weil dort der fertige Text steht.
+    /// </summary>
+    public void Delete(Guid id)
+    {
+        _actor.Require(Permission.ManageSnippets);
+
+        using var connection = _database.Open();
+        using var transaction = connection.BeginTransaction();
+
+        var snippet = _snippets.GetById(connection, transaction, id)
+                      ?? throw new ValidationException("Der Textbaustein wurde nicht gefunden.");
+
+        _snippets.Delete(connection, transaction, id);
+        _changes.Record(connection, transaction, "Snippet", id.ToString("D"), "Delete",
+            new { snippet.Name, snippet.Category }, snippet.RowVersion + 1);
+        transaction.Commit();
+    }
+
     private static string RequireName(string? name)
     {
         var trimmed = (name ?? string.Empty).Trim();

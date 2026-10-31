@@ -106,6 +106,41 @@ public static class FolderService
     }
 
     /// <summary>
+    /// Löscht eine einzelne Datei; unter Windows landet sie im Papierkorb, damit ein
+    /// versehentliches Löschen rückgängig gemacht werden kann.
+    /// </summary>
+    public static bool TryDeleteFile(string fullPath, out string? error)
+    {
+        error = null;
+        if (!File.Exists(fullPath))
+        {
+            return true;
+        }
+
+        try
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                Microsoft.VisualBasic.FileIO.FileSystem.DeleteFile(
+                    fullPath,
+                    Microsoft.VisualBasic.FileIO.UIOption.OnlyErrorDialogs,
+                    Microsoft.VisualBasic.FileIO.RecycleOption.SendToRecycleBin);
+            }
+            else
+            {
+                File.Delete(fullPath);
+            }
+
+            return true;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or OperationCanceledException)
+        {
+            error = $"Die Datei konnte nicht gelöscht werden: {exception.Message}";
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Verschiebt einen Ordner in den Papierkorb. Nur unter Windows möglich und nur,
     /// wenn der Benutzer das ausdrücklich verlangt hat.
     /// </summary>

@@ -146,6 +146,13 @@ public sealed class ImageRepository
         command.ExecuteNonQuery();
     }
 
+    public void Delete(SqliteConnection connection, SqliteTransaction? transaction, Guid id)
+    {
+        using var command = Db.Command(connection, "DELETE FROM Images WHERE Id = $id;", transaction);
+        command.With("$id", id.ToString("D"));
+        command.ExecuteNonQuery();
+    }
+
     public long SetArchived(SqliteConnection connection, SqliteTransaction? transaction, Guid id, bool archived)
     {
         using var command = Db.Command(connection, """

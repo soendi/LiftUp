@@ -196,6 +196,26 @@ public sealed class TemplateService
         transaction.Commit();
     }
 
+    /// <summary>
+    /// Entfernt die Vorlage aus der Auswahl. Bereits erzeugte PDFs bleiben unverändert,
+    /// weil sie auf ihre Versionsnummer verweisen.
+    /// </summary>
+    public void Delete(Guid templateId)
+    {
+        _actor.Require(Permission.ManageTemplates);
+
+        using var connection = _database.Open();
+        using var transaction = connection.BeginTransaction();
+
+        var template = _templates.GetById(connection, transaction, templateId)
+                       ?? throw new ValidationException("Die Vorlage wurde nicht gefunden.");
+
+        var rowVersion = _templates.SoftDelete(connection, transaction, templateId);
+        _changes.Record(connection, transaction, "Template", templateId.ToString("D"), "Delete",
+            new { template.Name, template.DocumentType, template.CurrentVersion }, rowVersion);
+        transaction.Commit();
+    }
+
     public void SetActive(Guid templateId, bool active)
     {
         _actor.Require(Permission.ManageTemplates);

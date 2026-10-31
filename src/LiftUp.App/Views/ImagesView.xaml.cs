@@ -94,6 +94,7 @@ public partial class ImagesView : UserControl
     {
         var selected = Selected;
         ArchiveButton.IsEnabled = selected is not null;
+        DeleteButton.IsEnabled = selected is not null;
         ArchiveButton.Content = selected?.IsArchived == true ? "Wiederherstellen" : "Archivieren";
 
         PreviewImage.Source = null;
@@ -173,6 +174,41 @@ public partial class ImagesView : UserControl
         {
             _services.Images.SetArchived(selected.Id, !selected.IsArchived);
             LoadImages();
+        }
+        catch (LiftUpException exception)
+        {
+            InfoText.Text = exception.Message;
+        }
+    }
+
+    private void OnDeleteClick(object sender, RoutedEventArgs e)
+    {
+        var selected = Selected;
+        if (selected is null)
+        {
+            return;
+        }
+
+        var answer = MessageBox.Show(
+            $"Bild \"{selected.Name}\" wirklich löschen?\n\n" +
+            "Der Eintrag und die Kopie im Bibliotheksordner werden entfernt. " +
+            "Bereits erzeugte PDFs behalten das eingebettete Bild.",
+            "Bild löschen", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+        if (answer != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        try
+        {
+            var warning = _services.Images.Delete(selected.Id);
+            LoadImages();
+            InfoText.Text = warning ?? $"Gelöscht: {selected.Name}";
+
+            if (warning is not null)
+            {
+                MessageBox.Show(warning, "Bild löschen", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
         }
         catch (LiftUpException exception)
         {

@@ -101,6 +101,7 @@ public partial class TemplatesView : UserControl
             TypeBox.SelectedItem = (TypeBox.ItemsSource as IEnumerable<DocumentType>)?
                 .FirstOrDefault(type => string.Equals(type.Name, template.DocumentType, StringComparison.OrdinalIgnoreCase));
             ToggleActiveButton.IsEnabled = true;
+            DeleteButton.IsEnabled = true;
             ToggleActiveButton.Content = template.IsActive ? "Deaktivieren" : "Aktivieren";
 
             var versions = _services.Templates.GetVersions(templateId);
@@ -222,6 +223,7 @@ public partial class TemplatesView : UserControl
         HtmlBox.Text = string.Empty;
         VersionBox.ItemsSource = null;
         ToggleActiveButton.IsEnabled = false;
+        DeleteButton.IsEnabled = false;
         _sectionRows.Clear();
     }
 
@@ -381,6 +383,40 @@ public partial class TemplatesView : UserControl
         catch (Exception exception)
         {
             InfoText.Text = "Abschnitte konnten nicht gespeichert werden: " + exception.Message;
+        }
+    }
+
+    private void OnDeleteClick(object sender, RoutedEventArgs e)
+    {
+        if (_templateId is null)
+        {
+            return;
+        }
+
+        var answer = MessageBox.Show(
+            $"Vorlage \"{NameBox.Text}\" wirklich löschen?\n\n" +
+            "Die Vorlage verschwindet aus der Auswahl. Bereits erzeugte PDFs bleiben erhalten.",
+            "Vorlage löschen", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+        if (answer != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        try
+        {
+            _services.Templates.Delete(_templateId.Value);
+            _templateId = null;
+            ClearEditor();
+            LoadTemplates();
+            InfoText.Text = "Vorlage gelöscht.";
+        }
+        catch (LiftUpException exception)
+        {
+            InfoText.Text = exception.Message;
+        }
+        catch (Exception exception)
+        {
+            InfoText.Text = "Löschen fehlgeschlagen: " + exception.Message;
         }
     }
 

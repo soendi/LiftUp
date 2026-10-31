@@ -36,7 +36,8 @@
 
                     <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
                         <Button Content="Neu" Click="OnNewClick" />
-                        <Button x:Name="ArchiveButton" Content="Archivieren" Click="OnArchiveClick" IsEnabled="False" Margin="0" />
+                        <Button x:Name="ArchiveButton" Content="Archivieren" Click="OnArchiveClick" IsEnabled="False" />
+                        <Button x:Name="DeleteButton" Content="Löschen" Click="OnDeleteClick" IsEnabled="False" Margin="0" />
                     </StackPanel>
                 </Grid>
             </Border>

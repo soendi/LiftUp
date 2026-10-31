@@ -60,6 +60,7 @@ public partial class SnippetsView : UserControl
             BodyEditor.SetHtml(snippet.Html);
 
             ArchiveButton.IsEnabled = true;
+            DeleteButton.IsEnabled = true;
             ArchiveButton.Content = snippet.IsArchived ? "Wiederherstellen" : "Archivieren";
             InfoText.Text = $"Version {snippet.Version}, geändert {snippet.UpdatedUtc.ToLocalTime():dd.MM.yyyy HH:mm}";
         }
@@ -77,6 +78,7 @@ public partial class SnippetsView : UserControl
         CategoryBox.Text = string.Empty;
         BodyEditor.SetHtml(string.Empty);
         ArchiveButton.IsEnabled = false;
+        DeleteButton.IsEnabled = false;
     }
 
     private void OnNewClick(object sender, RoutedEventArgs e)
@@ -168,6 +170,40 @@ public partial class SnippetsView : UserControl
         catch (LiftUpException exception)
         {
             InfoText.Text = exception.Message;
+        }
+    }
+
+    private void OnDeleteClick(object sender, RoutedEventArgs e)
+    {
+        if (_snippetId is null)
+        {
+            return;
+        }
+
+        var answer = MessageBox.Show(
+            $"Textbaustein \"{NameBox.Text}\" wirklich löschen?\n\n" +
+            "Der Baustein wird endgültig entfernt. Bereits erzeugte PDFs behalten ihren Text.",
+            "Textbaustein löschen", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+        if (answer != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        try
+        {
+            _services.Snippets.Delete(_snippetId.Value);
+            _snippetId = null;
+            _isArchived = false;
+            LoadSnippets();
+            InfoText.Text = "Textbaustein gelöscht.";
+        }
+        catch (LiftUpException exception)
+        {
+            InfoText.Text = exception.Message;
+        }
+        catch (Exception exception)
+        {
+            InfoText.Text = "Löschen fehlgeschlagen: " + exception.Message;
         }
     }
 }

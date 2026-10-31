@@ -113,6 +113,28 @@ public sealed class DocumentService
             .ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Entfernt ein erzeugtes Dokument. Der Eintrag wird weich gelöscht (der Abgleich kann
+    /// die Löschung nachvollziehen), die PDF-Datei landet unter Windows im Papierkorb.
+    /// </summary>
+    public string? DeleteDocument(Guid documentId)
+    {
+        _actor.Require(Permission.DeleteDocuments);
+
+        using var connection = _database.Open();
+        using var transaction = connection.BeginTransaction();
+
+        var document = _documents.GetById(connection, transaction, documentId)
+                       ?? throw new ValidationException("Das Dokument wurde nicht gefunden.");
+
+        var rowVersion = _documents.SoftDelete(connection, transaction, documentId);
+        _changes.Record(connection, transaction, "Document", documentId.ToString("D"), "Delete",
+            new { document.FileName, document.TemplateName, document.ProjectId }, rowVersion);
+        transaction.Commit();
+
+        return FolderService.TryDeleteFile(document.FilePath, out var error) ? null : error;
+    }
+
     public IReadOnlyList<ProjectDocument> GetDocuments(Guid projectId)
     {
         _actor.Require(Permission.ViewProjects);

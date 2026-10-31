@@ -166,6 +166,19 @@ public sealed class TemplateRepository
         return Convert.ToInt64(command.ExecuteScalar());
     }
 
+    /// <summary>Löscht die Vorlage weich, damit der Abgleich die Löschung sieht.</summary>
+    public long SoftDelete(SqliteConnection connection, SqliteTransaction? transaction, Guid id)
+    {
+        using var command = Db.Command(connection, """
+            UPDATE Templates
+            SET IsDeleted = 1, UpdatedUtc = $updatedUtc, RowVersion = RowVersion + 1
+            WHERE Id = $id AND IsDeleted = 0
+            RETURNING RowVersion;
+            """, transaction);
+        command.With("$id", id.ToString("D")).With("$updatedUtc", DateTime.UtcNow.ToDb());
+        return Convert.ToInt64(command.ExecuteScalar());
+    }
+
     public void InsertVersion(SqliteConnection connection, SqliteTransaction? transaction, TemplateVersion version)
     {
         using var command = Db.Command(connection, """

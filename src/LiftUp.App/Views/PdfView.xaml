@@ -83,7 +83,8 @@
                         <Button x:Name="OpenButton" Content="Öffnen" Click="OnOpenClick" IsEnabled="False" />
                         <Button x:Name="FolderButton" Content="Im Ordner zeigen" Click="OnShowFolderClick" IsEnabled="False" />
                         <Button x:Name="EditDocumentButton" Content="Bearbeiten …" Click="OnEditDocumentClick" IsEnabled="False" />
-                        <Button x:Name="SendMailButton" Content="E-Mail senden …" Click="OnSendMailClick" IsEnabled="False" Margin="0" />
+                        <Button x:Name="SendMailButton" Content="E-Mail senden …" Click="OnSendMailClick" IsEnabled="False" />
+                        <Button x:Name="DeleteDocumentButton" Content="Löschen" Click="OnDeleteDocumentClick" IsEnabled="False" Margin="0" />
                     </StackPanel>
                 </Grid>
             </Border>

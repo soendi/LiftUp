@@ -62,6 +62,49 @@ public sealed class DocumentRepository
 
         return documents;
     }
+
+    public ProjectDocument? GetById(SqliteConnection connection, SqliteTransaction? transaction, Guid id)
+    {
+        using var command = Db.Command(connection, """
+            SELECT Id, ProjectId, TemplateId, TemplateName, TemplateVersion, FileName, FilePath,
+                   SizeBytes, CreatedUtc, CreatedBy, SectionsJson
+            FROM ProjectDocuments
+            WHERE Id = $id AND IsDeleted = 0;
+            """, transaction);
+        command.With("$id", id.ToString("D"));
+        using var reader = command.ExecuteReader();
+        if (!reader.Read())
+        {
+            return null;
+        }
+
+        return new ProjectDocument
+        {
+            Id = reader.Guid(0),
+            ProjectId = reader.Guid(1),
+            TemplateId = reader.Guid(2),
+            TemplateName = reader.Text(3),
+            TemplateVersion = reader.Int32(4),
+            FileName = reader.Text(5),
+            FilePath = reader.Text(6),
+            SizeBytes = reader.Int64(7),
+            CreatedUtc = reader.Date(8),
+            CreatedBy = reader.Text(9),
+            SectionsJson = reader.TextOrNull(10),
+        };
+    }
+
+    public long SoftDelete(SqliteConnection connection, SqliteTransaction? transaction, Guid id)
+    {
+        using var command = Db.Command(connection, """
+            UPDATE ProjectDocuments
+            SET IsDeleted = 1, RowVersion = RowVersion + 1
+            WHERE Id = $id AND IsDeleted = 0
+            RETURNING RowVersion;
+            """, transaction);
+        command.With("$id", id.ToString("D"));
+        return Convert.ToInt64(command.ExecuteScalar());
+    }
 }
 
 public sealed class SnippetRepository
@@ -167,6 +210,13 @@ public sealed class SnippetRepository
             .With("$updatedUtc", DateTime.UtcNow.ToDb())
             .With("$updatedBy", snippet.UpdatedBy);
         return Convert.ToInt64(command.ExecuteScalar());
+    }
+
+    public void Delete(SqliteConnection connection, SqliteTransaction? transaction, Guid id)
+    {
+        using var command = Db.Command(connection, "DELETE FROM TextSnippets WHERE Id = $id;", transaction);
+        command.With("$id", id.ToString("D"));
+        command.ExecuteNonQuery();
     }
 
     private static TextSnippet Map(SqliteDataReader reader) => new()

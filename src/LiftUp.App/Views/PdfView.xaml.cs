@@ -129,6 +129,49 @@ public partial class PdfView : UserControl
         FolderButton.IsEnabled = selected is not null;
         EditDocumentButton.IsEnabled = selected is not null && selected.HasSections;
         SendMailButton.IsEnabled = selected is not null && selected.FileExists;
+        DeleteDocumentButton.IsEnabled = selected is not null;
+    }
+
+    /// <summary>
+    /// Entfernt ein erzeugtes Dokument. Die PDF-Datei landet unter Windows im Papierkorb,
+    /// der der Eintrag verschwindet aus der Liste.
+    /// </summary>
+    private void OnDeleteDocumentClick(object sender, RoutedEventArgs e)
+    {
+        var selected = SelectedDocument;
+        if (selected is null)
+        {
+            return;
+        }
+
+        var answer = MessageBox.Show(
+            $"Dokument \"{selected.FileName}\" wirklich löschen?\n\n" +
+            "Der Eintrag wird entfernt, die PDF-Datei in den Papierkorb gelegt.",
+            "Dokument löschen", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+        if (answer != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        try
+        {
+            var warning = _services.Documents.DeleteDocument(selected.Id);
+            LoadDocuments();
+            InfoText.Text = warning ?? $"Gelöscht: {selected.FileName}";
+
+            if (warning is not null)
+            {
+                MessageBox.Show(warning, "Dokument löschen", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+        catch (LiftUpException exception)
+        {
+            InfoText.Text = exception.Message;
+        }
+        catch (Exception exception)
+        {
+            InfoText.Text = "Löschen fehlgeschlagen: " + exception.Message;
+        }
     }
 
     /// <summary>Öffnet ein früheres Dokument erneut, um die Abschnitte zu ändern.</summary>

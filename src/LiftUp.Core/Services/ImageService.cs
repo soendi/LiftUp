@@ -126,6 +126,28 @@ public sealed class ImageService
         transaction.Commit();
     }
 
+    /// <summary>
+    /// Entfernt ein Bild samt Kopie im Bibliotheksordner. Liefert eine Warnung, wenn der
+    /// Eintrag gelöscht ist, die Datei aber nicht entfernt werden konnte.
+    /// </summary>
+    public string? Delete(Guid id)
+    {
+        _actor.Require(Permission.ManageImages);
+
+        using var connection = _database.Open();
+        using var transaction = connection.BeginTransaction();
+
+        var image = _images.GetById(connection, transaction, id)
+                    ?? throw new ValidationException("Das Bild wurde nicht gefunden.");
+
+        _images.Delete(connection, transaction, id);
+        _changes.Record(connection, transaction, "Image", id.ToString("D"), "Delete",
+            new { image.Name, image.Category, image.ProjectId }, image.RowVersion + 1);
+        transaction.Commit();
+
+        return FolderService.TryDeleteFile(image.FilePath, out var error) ? null : error;
+    }
+
     /// <summary>Liefert den HTML-Baustein für ein Bild (Data-URI) oder null.</summary>
     public string? GetImageTag(Guid? projectId, string name)
     {
