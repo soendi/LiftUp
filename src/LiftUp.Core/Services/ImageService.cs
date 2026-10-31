@@ -296,6 +296,100 @@ public sealed class ImageService
         return changed;
     }
 
+    /// <summary>
+    /// Ersetzt die Datei eines fehlenden Bildes durch eine neu ausgewählte Datei. Gibt es
+    /// noch keinen Eintrag mit diesem Namen, wird er angelegt; sonst wird der vorhandene
+    /// Eintrag auf die Kopie im Bibliotheksordner umgestellt. Der Name bleibt, damit
+    /// <c>{{bild:Name}}</c> in der Vorlage weiter passt.
+    /// </summary>
+    public LibraryImage ReplaceFile(Guid? projectId, string name, string sourcePath)
+    {
+        _actor.Require(Permission.ManageImages);
+        var cleanName = RequireName(name);
+
+        if (!File.Exists(sourcePath))
+        {
+            throw new ValidationException("Die ausgewählte Datei wurde nicht gefunden.");
+        }
+
+        var contentType = ImageEmbedding.ContentTypeFor(sourcePath);
+        if (contentType is null)
+        {
+            throw new ValidationException(
+                "Der Dateityp wird nicht unterstützt. Möglich sind PNG, JPG, GIF, WebP, BMP und SVG.");
+        }
+
+        var extension = Path.GetExtension(sourcePath).ToLowerInvariant();
+
+        using var connection = _database.Open();
+        using var transaction = connection.BeginTransaction();
+
+        var existing = _images.Search(connection, transaction, projectId, null, includeArchived: true)
+            .LastOrDefault(image => string.Equals(image.Name, cleanName, StringComparison.OrdinalIgnoreCase));
+
+        var owner = existing is null || existing.IsGlobal ? null : projectId;
+        var folder = owner is null
+            ? Path.Combine(_libraryRoot, "global")
+            : Path.Combine(_libraryRoot, "projekte", owner.Value.ToString("D"));
+        Directory.CreateDirectory(folder);
+
+        var fileName = $"{Guid.NewGuid():N}{extension}";
+        var targetPath = Path.Combine(folder, fileName);
+
+        try
+        {
+            File.Copy(sourcePath, targetPath, overwrite: false);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            throw new ValidationException($"Das Bild konnte nicht übernommen werden: {exception.Message}");
+        }
+
+        var hash = ComputeHash(targetPath);
+        var size = new FileInfo(targetPath).Length;
+
+        if (existing is not null)
+        {
+            var oldPath = existing.FilePath;
+            var category = string.IsNullOrWhiteSpace(existing.Category) ? null : existing.Category;
+
+            if (existing.IsArchived)
+            {
+                _images.SetArchived(connection, transaction, existing.Id, archived: false);
+            }
+
+            var rowVersion = _images.UpdateLocation(
+                connection, transaction, existing.Id, targetPath, fileName, category, size, hash);
+
+            _changes.Record(connection, transaction, "Image", existing.Id.ToString("D"), "Update",
+                new { existing.Name, Replaced = true }, rowVersion);
+            transaction.Commit();
+
+            FolderService.TryDeleteFile(oldPath, out _);
+            return _images.GetById(connection, null, existing.Id)!;
+        }
+
+        var image = new LibraryImage
+        {
+            Name = cleanName,
+            ProjectId = projectId,
+            FileName = fileName,
+            FilePath = targetPath,
+            ContentType = contentType,
+            SizeBytes = size,
+            ContentHash = hash,
+            CreatedUtc = DateTime.UtcNow,
+            CreatedBy = _actor.UserName,
+        };
+
+        _images.Insert(connection, transaction, image);
+        _changes.Record(connection, transaction, "Image", image.Id.ToString("D"), "Create",
+            new { image.Name, Replaced = true }, 1);
+        transaction.Commit();
+
+        return image;
+    }
+
     /// <summary>Liefert den HTML-Baustein für ein Bild (Data-URI) oder null.</summary>
     public string? GetImageTag(Guid? projectId, string name)
     {

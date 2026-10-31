@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using LiftUp.Core.Data;
 using LiftUp.Core.Domain;
 using LiftUp.Core.Repositories;
@@ -163,6 +164,40 @@ public sealed class TemplateService
 
         template.RowVersion = rowVersion;
         return template;
+    }
+
+    /// <summary>
+    /// Entfernt einen Bild-Platzhalter aus der Vorlage und legt dafür eine neue Version an.
+    /// Bereits erzeugte PDFs bleiben unverändert.
+    /// </summary>
+    public DocumentTemplate RemoveImagePlaceholder(Guid templateId, string imageName)
+    {
+        _actor.Require(Permission.ManageTemplates);
+
+        var name = (imageName ?? string.Empty).Trim();
+        if (name.Length == 0)
+        {
+            throw new ValidationException("Bitte einen Bildnamen angeben.");
+        }
+
+        var template = Get(templateId);
+        var version = GetLatestVersion(templateId);
+
+        var pattern = $@"\{{\{{\s*(?:bild|image)\s*:\s*{Regex.Escape(name)}\s*\}}\}}";
+        var html = Regex.Replace(version.Html, pattern, string.Empty, RegexOptions.IgnoreCase);
+
+        if (string.Equals(html, version.Html, StringComparison.Ordinal))
+        {
+            return template;
+        }
+
+        return SaveNewVersion(templateId, new TemplateInput
+        {
+            Name = template.Name,
+            DocumentType = template.DocumentType,
+            Html = html,
+            IsActive = template.IsActive,
+        });
     }
 
     /// <summary>Abschnitte (Untertitel) der Vorlage in der gespeicherten Reihenfolge.</summary>

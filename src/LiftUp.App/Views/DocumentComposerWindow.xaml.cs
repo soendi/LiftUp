@@ -491,7 +491,9 @@ public partial class DocumentComposerWindow : Window
         }
     }
 
-    private async void OnCreatePdfClick(object sender, RoutedEventArgs e)
+    private async void OnCreatePdfClick(object sender, RoutedEventArgs e) => await CreatePdfAsync();
+
+    private async Task CreatePdfAsync()
     {
         var project = SelectedProject;
         if (project is null || TemplateBox.SelectedItem is not TemplateListItem template)
@@ -515,14 +517,21 @@ public partial class DocumentComposerWindow : Window
         if (missingImages.Count > 0)
         {
             InfoText.Text = "PDF nicht erzeugt: In der Vorlage fehlen Bilder.";
-            MessageBox.Show(
-                "Diese Bilder aus der Vorlage fehlen:\n\n"
-                + string.Join("\n", missingImages.Select(name => "• " + name))
-                + "\n\nBitte die Bilder in der Bilderansicht ergänzen, im Projektordner ablegen "
-                + "oder die Platzhalter aus der Vorlage entfernen.",
-                "Bilder fehlen",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
+
+            var fix = new MissingImagesWindow(_services, project.Id, template.Id, missingImages)
+            {
+                Owner = this,
+            };
+
+            if (fix.ShowDialog() == true)
+            {
+                InfoText.Text = fix.PlaceholdersRemoved
+                    ? "Platzhalter entfernt – PDF wird erneut erzeugt …"
+                    : "Bilder ersetzt – PDF wird erneut erzeugt …";
+
+                await CreatePdfAsync();
+            }
+
             return;
         }
 
