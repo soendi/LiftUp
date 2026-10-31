@@ -76,14 +76,28 @@ internal static class Program
             Console.WriteLine();
         }
 
-        var installed = PostgreSqlLocator.IsInstalled(options.Port);
+        var portAnswers = PostgreSqlLocator.PortAnswers("127.0.0.1", options.Port);
+        var serviceName = PostgreSqlLocator.FindServiceName();
 
-        if (installed)
+        if (portAnswers || serviceName is not null)
         {
-            Console.WriteLine("PostgreSQL ist bereits vorhanden – es wird nichts installiert.");
+            Console.WriteLine(portAnswers
+                ? $"PostgreSQL ist bereits vorhanden – Port {options.Port} antwortet, es wird nichts installiert."
+                : $"PostgreSQL ist bereits vorhanden – Dienst \u201E{serviceName}\u201C, es wird nichts installiert.");
+            if (!portAnswers)
+            {
+                Console.WriteLine($"Achtung: Auf Port {options.Port} antwortet kein PostgreSQL. Läuft der Dienst?");
+                Console.WriteLine("Falls der Server auf einem anderen Port läuft, den mit --port angeben.");
+            }
         }
         else
         {
+            if (PostgreSqlLocator.ProgramFolderExists())
+            {
+                Console.WriteLine("Unter „Program Files\\PostgreSQL“ liegen Dateien, aber es läuft kein Dienst.");
+                Console.WriteLine("Das gilt als nicht eingerichtet – PostgreSQL wird installiert.");
+            }
+
             // Nur wenn wirklich installiert wird, braucht das Werkzeug eine Netzanbindung.
             PostgresRelease release;
             try
@@ -390,8 +404,29 @@ internal sealed record SetupOptions
 /// <summary>Erkennt eine vorhandene PostgreSQL-Installation.</summary>
 internal static class PostgreSqlLocator
 {
+    /// <summary>
+    /// Gilt als eingerichtet, wenn der Port antwortet oder ein Dienst läuft. Ein
+    /// übrig gebliebener Ordner allein reicht nicht – sonst blockiert er die
+    /// Installation, ohne dass eine Datenbank erreichbar wäre.
+    /// </summary>
     public static bool IsInstalled(int port) =>
-        PortAnswers("127.0.0.1", port) || ServiceExists() || ProgramFolderExists();
+        PortAnswers("127.0.0.1", port) || ServiceExists();
+
+    /// <summary>Name des ersten PostgreSQL-Dienstes, sonst null.</summary>
+    public static string? FindServiceName()
+    {
+        try
+        {
+            return ServiceController.GetServices()
+                .FirstOrDefault(service => service.ServiceName.StartsWith("postgresql", StringComparison.OrdinalIgnoreCase))
+                ?.ServiceName;
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or UnauthorizedAccessException
+                                              or PlatformNotSupportedException or System.ComponentModel.Win32Exception)
+        {
+            return null;
+        }
+    }
 
     public static bool PortAnswers(string host, int port)
     {
@@ -426,7 +461,7 @@ internal static class PostgreSqlLocator
     /// Ein leerer Restordner – etwa nach einer Deinstallation oder auf einem
     /// vorbereiteten Rechnerimage – darf die Installation nicht blockieren.
     /// </summary>
-    private static bool ProgramFolderExists()
+    public static bool ProgramFolderExists()
     {
         var folder = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
