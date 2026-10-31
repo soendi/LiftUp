@@ -217,7 +217,7 @@ public partial class DocumentComposerWindow : Window
         saveAsSnippet.Click += OnSaveSelectionAsSnippetClick;
 
         var insertImage = new Button { Content = "Bild einfügen", Margin = new Thickness(0) };
-        insertImage.ToolTip = "Bild einfügen – ein Klick auf ein Bild ändert Größe, Seite, Textfluss und Bildunterschrift.";
+        insertImage.ToolTip = "Bild einfügen – ein Klick auf ein Bild ändert Größe, Seite, Textfluss und Bildunterschrift, Ziehen verschiebt es im Text.";
         insertImage.Click += OnInsertImageClick;
 
         var buttonRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };

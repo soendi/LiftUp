@@ -103,6 +103,22 @@ public partial class HtmlEditor : UserControl
                 border-radius: 3px;
                 flex: 0 0 auto;
             }
+            /* Bilder: anklicken und mit der Maus verschieben */
+            .liftup-fig { cursor: grab; -webkit-user-select: none; user-select: none; }
+            .liftup-fig img { -webkit-user-drag: none; }
+            .liftup-fig-dragging { opacity: 0.55; }
+            body.liftup-dragging { cursor: grabbing; }
+            #liftup-drop-line {
+                position: absolute;
+                left: 12px;
+                right: 12px;
+                height: 3px;
+                background: #2D6CDF;
+                border-radius: 2px;
+                pointer-events: none;
+                z-index: 60;
+                display: none;
+            }
             /* liftup-bildstil */
         </style>
         </head>
@@ -393,16 +409,7 @@ public partial class HtmlEditor : UserControl
                 return figure.dataset.liftupId;
             };
 
-            document.addEventListener('click', function (event) {
-                var target = event.target;
-                if (!target || !target.closest) {
-                    return;
-                }
-                var figure = target.closest('figure.liftup-fig');
-                if (!figure) {
-                    return;
-                }
-                event.preventDefault();
+            window.liftupOpenFormat = function (figure) {
                 var caption = figure.querySelector('figcaption');
                 try {
                     window.chrome.webview.postMessage(JSON.stringify({
@@ -417,7 +424,169 @@ public partial class HtmlEditor : UserControl
                 } catch (error) {
                     // Ohne Verbindung zur Anwendung bleibt das Bild unverändert.
                 }
+            };
+
+            window.liftupFigureClasses = function (figure, place) {
+                var size = figure.dataset.liftupSize || 'medium';
+                var flow = figure.dataset.liftupFlow || 'inline';
+                figure.dataset.liftupPlace = place;
+                figure.className = 'liftup-fig liftup-fig-' + size + ' liftup-fig-' + place + ' liftup-fig-' + flow;
+            };
+
+            // Blöcke sind die Elemente direkt unter <body>; dazwischen wird das Bild abgelegt.
+            window.liftupFindBlock = function (element) {
+                while (element && element !== document.body) {
+                    if (element.parentNode === document.body) {
+                        return element;
+                    }
+                    element = element.parentNode;
+                }
+                return null;
+            };
+
+            window.liftupDropLine = function () {
+                var line = document.getElementById('liftup-drop-line');
+                if (!line) {
+                    line = document.createElement('div');
+                    line.id = 'liftup-drop-line';
+                    document.body.appendChild(line);
+                }
+                return line;
+            };
+
+            window.liftupDropTarget = function (x, y) {
+                var element = document.elementFromPoint(x, y);
+                if (!element) {
+                    return null;
+                }
+
+                var strip = document.getElementById('liftup-below');
+                if (strip && strip.contains(element)) {
+                    return { strip: strip, y: strip.getBoundingClientRect().top };
+                }
+
+                var block = window.liftupFindBlock(element);
+                if (!block) {
+                    return null;
+                }
+
+                var rect = block.getBoundingClientRect();
+                var after = y > rect.top + rect.height / 2;
+                return { block: block, after: after, y: after ? rect.bottom : rect.top };
+            };
+
+            window.liftupShowDropLine = function (target) {
+                var line = window.liftupDropLine();
+                if (!target) {
+                    line.style.display = 'none';
+                    return;
+                }
+                line.style.display = 'block';
+                line.style.top = (target.y + window.scrollY - 2) + 'px';
+            };
+
+            window.liftupDrag = null;
+
+            document.addEventListener('pointerdown', function (event) {
+                if (event.button !== 0 || !event.target || !event.target.closest) {
+                    return;
+                }
+                var figure = event.target.closest('figure.liftup-fig');
+                if (!figure) {
+                    return;
+                }
+
+                window.liftupDrag = {
+                    figure: figure,
+                    startX: event.clientX,
+                    startY: event.clientY,
+                    moved: false
+                };
+                document.addEventListener('pointermove', window.liftupPointerMove, true);
+                document.addEventListener('pointerup', window.liftupPointerUp, true);
             });
+
+            window.liftupPointerMove = function (event) {
+                var drag = window.liftupDrag;
+                if (!drag) {
+                    return;
+                }
+
+                if (!drag.moved) {
+                    if (Math.abs(event.clientX - drag.startX) < 6 && Math.abs(event.clientY - drag.startY) < 6) {
+                        return;
+                    }
+                    drag.moved = true;
+                    document.body.classList.add('liftup-dragging');
+                    drag.figure.classList.add('liftup-fig-dragging');
+                    drag.figure.style.pointerEvents = 'none';
+                }
+
+                event.preventDefault();
+                window.liftupShowDropLine(window.liftupDropTarget(event.clientX, event.clientY));
+            };
+
+            window.liftupPointerUp = function (event) {
+                var drag = window.liftupDrag;
+                if (!drag) {
+                    return;
+                }
+
+                document.removeEventListener('pointermove', window.liftupPointerMove, true);
+                document.removeEventListener('pointerup', window.liftupPointerUp, true);
+                window.liftupDrag = null;
+
+                // Ohne Bewegung war es ein Klick: Größe, Seite, Textfluss, Unterschrift.
+                if (!drag.moved) {
+                    window.liftupOpenFormat(drag.figure);
+                    return;
+                }
+
+                drag.figure.classList.remove('liftup-fig-dragging');
+                drag.figure.style.pointerEvents = '';
+                document.body.classList.remove('liftup-dragging');
+                window.liftupShowDropLine(null);
+                window.liftupMoveFigure(drag.figure, event.clientX, event.clientY);
+            };
+
+            window.liftupMoveFigure = function (figure, x, y) {
+                var id = window.liftupFigId(figure);
+                var anchor = document.querySelector('[data-liftup-anchor="' + id + '"]');
+                var target = window.liftupDropTarget(x, y);
+                var strip = document.getElementById('liftup-below');
+
+                if (target && target.strip) {
+                    // In den Streifen „unter dem Text“ gezogen.
+                    if (!anchor && figure.parentNode) {
+                        anchor = document.createElement('span');
+                        anchor.setAttribute('data-liftup-anchor', id);
+                        figure.parentNode.insertBefore(anchor, figure);
+                    }
+                    if (figure.dataset.liftupPlace !== 'below') {
+                        window.liftupFigureClasses(figure, 'below');
+                    }
+                    target.strip.appendChild(figure);
+                } else if (target && target.block && target.block !== figure) {
+                    // Aus dem Streifen herausgezogen: das Bild steht wieder im Text.
+                    if (figure.dataset.liftupPlace === 'below') {
+                        window.liftupFigureClasses(figure, 'center');
+                        if (anchor && anchor.parentNode) {
+                            anchor.parentNode.removeChild(anchor);
+                        }
+                    }
+                    if (target.after) {
+                        target.block.parentNode.insertBefore(figure, target.block.nextSibling);
+                    } else {
+                        target.block.parentNode.insertBefore(figure, target.block);
+                    }
+                } else if (!target) {
+                    document.body.appendChild(figure);
+                }
+
+                if (strip && strip.children.length === 0 && strip.parentNode) {
+                    strip.parentNode.removeChild(strip);
+                }
+            };
 
             window.liftupBelowStrip = function () {
                 var strip = document.getElementById('liftup-below');
