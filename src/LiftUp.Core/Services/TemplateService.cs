@@ -170,20 +170,30 @@ public sealed class TemplateService
     /// Entfernt einen Bild-Platzhalter aus der Vorlage und legt dafür eine neue Version an.
     /// Bereits erzeugte PDFs bleiben unverändert.
     /// </summary>
-    public DocumentTemplate RemoveImagePlaceholder(Guid templateId, string imageName)
+    public DocumentTemplate RemoveImagePlaceholder(Guid templateId, string imageName) =>
+        RemovePlaceholder(templateId, "bild|image", imageName, "Bildnamen");
+
+    /// <summary>
+    /// Entfernt einen Textbaustein-Platzhalter aus der Vorlage und legt dafür eine neue
+    /// Version an. Bereits erzeugte PDFs bleiben unverändert.
+    /// </summary>
+    public DocumentTemplate RemoveSnippetPlaceholder(Guid templateId, string snippetName) =>
+        RemovePlaceholder(templateId, "snippet", snippetName, "Namen des Textbausteins");
+
+    private DocumentTemplate RemovePlaceholder(Guid templateId, string prefixes, string name, string what)
     {
         _actor.Require(Permission.ManageTemplates);
 
-        var name = (imageName ?? string.Empty).Trim();
-        if (name.Length == 0)
+        var clean = (name ?? string.Empty).Trim();
+        if (clean.Length == 0)
         {
-            throw new ValidationException("Bitte einen Bildnamen angeben.");
+            throw new ValidationException($"Bitte einen {what} angeben.");
         }
 
         var template = Get(templateId);
         var version = GetLatestVersion(templateId);
 
-        var pattern = $@"\{{\{{\s*(?:bild|image)\s*:\s*{Regex.Escape(name)}\s*\}}\}}";
+        var pattern = $@"\{{\{{\s*(?:{prefixes})\s*:\s*{Regex.Escape(clean)}\s*\}}\}}";
         var html = Regex.Replace(version.Html, pattern, string.Empty, RegexOptions.IgnoreCase);
 
         if (string.Equals(html, version.Html, StringComparison.Ordinal))

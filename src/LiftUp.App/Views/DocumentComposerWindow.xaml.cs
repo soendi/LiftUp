@@ -502,11 +502,11 @@ public partial class DocumentComposerWindow : Window
             return;
         }
 
-        // Fehlende Bilder vor dem Erzeugen melden – geschrieben wird dann nichts.
-        IReadOnlyList<string> missingImages;
+        // Fehlende Bilder und Textbausteine vor dem Erzeugen melden – geschrieben wird dann nichts.
+        MissingPlaceholders missing;
         try
         {
-            missingImages = _services.Documents.FindMissingImages(project.Id, template.Id);
+            missing = _services.Documents.FindMissingPlaceholders(project.Id, template.Id);
         }
         catch (LiftUpException exception)
         {
@@ -514,11 +514,11 @@ public partial class DocumentComposerWindow : Window
             return;
         }
 
-        if (missingImages.Count > 0)
+        if (missing.Any)
         {
-            InfoText.Text = "PDF nicht erzeugt: In der Vorlage fehlen Bilder.";
+            InfoText.Text = "PDF nicht erzeugt: In der Vorlage fehlen Bilder oder Textbausteine.";
 
-            var fix = new MissingImagesWindow(_services, project.Id, template.Id, missingImages)
+            var fix = new MissingPlaceholdersWindow(_services, project.Id, template.Id, missing)
             {
                 Owner = this,
             };

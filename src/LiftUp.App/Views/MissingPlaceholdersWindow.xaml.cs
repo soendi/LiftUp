@@ -8,12 +8,13 @@ using Microsoft.Win32;
 namespace LiftUp.App.Views;
 
 /// <summary>
-/// Repariert fehlende Bilder einer Vorlage: entweder je Bild eine Datei auswählen, die
-/// unter demselben Namen übernommen wird, oder die Platzhalter aus der Vorlage entfernen.
+/// Repariert fehlende Angaben einer Vorlage: Bilder lassen sich je Zeile durch eine Datei
+/// ersetzen, die unter demselben Namen übernommen wird; fehlende Bilder und Textbausteine
+/// können alternativ als Platzhalter aus der Vorlage entfernt werden.
 /// </summary>
-public partial class MissingImagesWindow : Window
+public partial class MissingPlaceholdersWindow : Window
 {
-    public sealed class MissingRow : INotifyPropertyChanged
+    public sealed class ImageRow : INotifyPropertyChanged
     {
         private string? _filePath;
 
@@ -45,7 +46,11 @@ public partial class MissingImagesWindow : Window
     private readonly Guid _projectId;
     private readonly Guid _templateId;
 
-    public MissingImagesWindow(AppServices services, Guid projectId, Guid templateId, IReadOnlyList<string> missing)
+    public MissingPlaceholdersWindow(
+        AppServices services,
+        Guid projectId,
+        Guid templateId,
+        MissingPlaceholders missing)
     {
         _services = services;
         _projectId = projectId;
@@ -53,18 +58,32 @@ public partial class MissingImagesWindow : Window
 
         InitializeComponent();
 
-        Rows = missing.Select(name => new MissingRow { Name = name }).ToArray();
-        RowsList.ItemsSource = Rows;
+        ImageRows = missing.Images.Select(name => new ImageRow { Name = name }).ToArray();
+        SnippetNames = missing.Snippets;
+
+        ImagesList.ItemsSource = ImageRows;
+        SnippetsList.ItemsSource = SnippetNames;
+
+        ImagesHeader.Visibility = ImageRows.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        ImagesList.Visibility = ImagesHeader.Visibility;
+        SnippetsHeader.Visibility = SnippetNames.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        SnippetsList.Visibility = SnippetsHeader.Visibility;
+        SnippetsHint.Visibility = SnippetsHeader.Visibility;
+
+        // Ohne Bilder gibt es nichts zu ersetzen – dann bleibt nur das Entfernen.
+        ApplyButton.Visibility = ImageRows.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    public IReadOnlyList<MissingRow> Rows { get; }
+    public IReadOnlyList<ImageRow> ImageRows { get; }
+
+    public IReadOnlyList<string> SnippetNames { get; }
 
     /// <summary>Wahr, wenn die Platzhalter aus der Vorlage entfernt wurden.</summary>
     public bool PlaceholdersRemoved { get; private set; }
 
     private void OnChooseFileClick(object sender, RoutedEventArgs e)
     {
-        if (sender is not Button { Tag: MissingRow row })
+        if (sender is not Button { Tag: ImageRow row })
         {
             return;
         }
@@ -84,7 +103,7 @@ public partial class MissingImagesWindow : Window
 
     private void OnApplyClick(object sender, RoutedEventArgs e)
     {
-        var chosen = Rows.Where(row => row.FilePath is not null).ToArray();
+        var chosen = ImageRows.Where(row => row.FilePath is not null).ToArray();
         if (chosen.Length == 0)
         {
             HintText.Text = "Bitte zuerst mindestens eine Datei wählen oder die Platzhalter entfernen.";
@@ -113,8 +132,8 @@ public partial class MissingImagesWindow : Window
     private void OnRemovePlaceholdersClick(object sender, RoutedEventArgs e)
     {
         var answer = MessageBox.Show(
-            $"Platzhalter für {Rows.Count} fehlende{(Rows.Count == 1 ? "s" : "")} Bild"
-            + $"{(Rows.Count == 1 ? "" : "er")} aus der Vorlage entfernen?\n\n"
+            FehlendeAngaben()
+            + " als Platzhalter aus der Vorlage entfernen?\n\n"
             + "Die Vorlage erhält dafür eine neue Version; bereits erzeugte PDFs bleiben unverändert.",
             "Platzhalter entfernen", MessageBoxButton.YesNo, MessageBoxImage.Warning);
 
@@ -125,9 +144,14 @@ public partial class MissingImagesWindow : Window
 
         try
         {
-            foreach (var row in Rows)
+            foreach (var row in ImageRows)
             {
                 _services.Templates.RemoveImagePlaceholder(_templateId, row.Name);
+            }
+
+            foreach (var name in SnippetNames)
+            {
+                _services.Templates.RemoveSnippetPlaceholder(_templateId, name);
             }
 
             PlaceholdersRemoved = true;
@@ -141,6 +165,25 @@ public partial class MissingImagesWindow : Window
         {
             HintText.Text = "Platzhalter konnten nicht entfernt werden: " + exception.Message;
         }
+    }
+
+    /// <summary>„2 fehlende Bilder und 1 fehlender Textbaustein“ für die Rückfrage.</summary>
+    private string FehlendeAngaben()
+    {
+        var parts = new List<string>();
+        if (ImageRows.Count > 0)
+        {
+            parts.Add($"{ImageRows.Count} fehlende{(ImageRows.Count == 1 ? "s" : "")} Bild{(ImageRows.Count == 1 ? "" : "er")}");
+        }
+
+        if (SnippetNames.Count > 0)
+        {
+            parts.Add(
+                $"{SnippetNames.Count} fehlende{(SnippetNames.Count == 1 ? "r" : "")} Textbaustein{(SnippetNames.Count == 1 ? "" : "e")}");
+        }
+
+        var text = string.Join(" und ", parts);
+        return text.Length == 0 ? "Alle Platzhalter" : char.ToUpper(text[0]) + text[1..];
     }
 
     private void OnCancelClick(object sender, RoutedEventArgs e) => DialogResult = false;

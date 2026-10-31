@@ -80,14 +80,23 @@ public static class PlaceholderRenderer
     /// Grundlage für die Prüfung vor dem Erzeugen eines PDFs.
     /// </summary>
     public static IReadOnlyList<string> FindImageNames(string? html) =>
+        FindNames(html, ImagePrefix, ImagePrefixEnglish);
+
+    /// <summary>
+    /// Namen der Textbausteine aus <c>{{snippet:Name}}</c>, ohne Doppelte.
+    /// Grundlage für die Prüfung vor dem Erzeugen eines PDFs.
+    /// </summary>
+    public static IReadOnlyList<string> FindSnippetNames(string? html) =>
+        FindNames(html, SnippetPrefix);
+
+    private static IReadOnlyList<string> FindNames(string? html, params string[] prefixes) =>
         FindPlaceholders(html ?? string.Empty)
-            .Select(token => token.StartsWith(ImagePrefix, StringComparison.OrdinalIgnoreCase)
-                ? token[ImagePrefix.Length..]
-                : token.StartsWith(ImagePrefixEnglish, StringComparison.OrdinalIgnoreCase)
-                    ? token[ImagePrefixEnglish.Length..]
-                    : null)
-            .Where(name => !string.IsNullOrWhiteSpace(name))
-            .Select(name => name!.Trim())
+            .Select(token => prefixes
+                .Where(prefix => token.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                .Select(prefix => token[prefix.Length..].Trim())
+                .FirstOrDefault(name => name.Length > 0))
+            .Where(name => name is not null)
+            .Select(name => name!)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
