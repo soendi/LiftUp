@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
 using System.Windows;
@@ -42,9 +43,15 @@ public partial class MissingPlaceholdersWindow : Window
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
     }
 
+    public sealed class SnippetRow
+    {
+        public required string Name { get; init; }
+    }
+
     private readonly AppServices _services;
     private readonly Guid _projectId;
     private readonly Guid _templateId;
+    private readonly ObservableCollection<SnippetRow> _snippetRows;
 
     public MissingPlaceholdersWindow(
         AppServices services,
@@ -59,16 +66,15 @@ public partial class MissingPlaceholdersWindow : Window
         InitializeComponent();
 
         ImageRows = missing.Images.Select(name => new ImageRow { Name = name }).ToArray();
-        SnippetNames = missing.Snippets;
+        _snippetRows = new ObservableCollection<SnippetRow>(
+            missing.Snippets.Select(name => new SnippetRow { Name = name }));
 
         ImagesList.ItemsSource = ImageRows;
-        SnippetsList.ItemsSource = SnippetNames;
+        SnippetsList.ItemsSource = _snippetRows;
 
         ImagesHeader.Visibility = ImageRows.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         ImagesList.Visibility = ImagesHeader.Visibility;
-        SnippetsHeader.Visibility = SnippetNames.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
-        SnippetsList.Visibility = SnippetsHeader.Visibility;
-        SnippetsHint.Visibility = SnippetsHeader.Visibility;
+        RefreshSnippetSection();
 
         // Ohne Bilder gibt es nichts zu ersetzen – dann bleibt nur das Entfernen.
         ApplyButton.Visibility = ImageRows.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -76,10 +82,44 @@ public partial class MissingPlaceholdersWindow : Window
 
     public IReadOnlyList<ImageRow> ImageRows { get; }
 
-    public IReadOnlyList<string> SnippetNames { get; }
-
     /// <summary>Wahr, wenn die Platzhalter aus der Vorlage entfernt wurden.</summary>
     public bool PlaceholdersRemoved { get; private set; }
+
+    /// <summary>Wahr, wenn mindestens ein fehlender Textbaustein angelegt wurde.</summary>
+    public bool SnippetsCreated { get; private set; }
+
+    private void RefreshSnippetSection()
+    {
+        var visible = _snippetRows.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        SnippetsHeader.Visibility = visible;
+        SnippetsList.Visibility = visible;
+        SnippetsHint.Visibility = visible;
+    }
+
+    private void OnCreateSnippetClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: SnippetRow row })
+        {
+            return;
+        }
+
+        var dialog = new SnippetCreateWindow(_services, row.Name) { Owner = this };
+        if (dialog.ShowDialog() != true)
+        {
+            return;
+        }
+
+        SnippetsCreated = true;
+        _snippetRows.Remove(row);
+        RefreshSnippetSection();
+        HintText.Text = $"Textbaustein „{row.Name}“ angelegt.";
+
+        // Nichts mehr zu tun: Dialog schließen, damit das PDF erneut erzeugt wird.
+        if (_snippetRows.Count == 0 && ImageRows.Count == 0)
+        {
+            DialogResult = true;
+        }
+    }
 
     private void OnChooseFileClick(object sender, RoutedEventArgs e)
     {
@@ -149,9 +189,9 @@ public partial class MissingPlaceholdersWindow : Window
                 _services.Templates.RemoveImagePlaceholder(_templateId, row.Name);
             }
 
-            foreach (var name in SnippetNames)
+            foreach (var row in _snippetRows.ToArray())
             {
-                _services.Templates.RemoveSnippetPlaceholder(_templateId, name);
+                _services.Templates.RemoveSnippetPlaceholder(_templateId, row.Name);
             }
 
             PlaceholdersRemoved = true;
@@ -168,18 +208,17 @@ public partial class MissingPlaceholdersWindow : Window
     }
 
     /// <summary>„2 fehlende Bilder und 1 fehlender Textbaustein“ für die Rückfrage.</summary>
-    private string FehlendeAngaben()
-    {
+    private string FehlendeAngaben()    {
         var parts = new List<string>();
         if (ImageRows.Count > 0)
         {
             parts.Add($"{ImageRows.Count} fehlende{(ImageRows.Count == 1 ? "s" : "")} Bild{(ImageRows.Count == 1 ? "" : "er")}");
         }
 
-        if (SnippetNames.Count > 0)
+        if (_snippetRows.Count > 0)
         {
             parts.Add(
-                $"{SnippetNames.Count} fehlende{(SnippetNames.Count == 1 ? "r" : "")} Textbaustein{(SnippetNames.Count == 1 ? "" : "e")}");
+                $"{_snippetRows.Count} fehlende{(_snippetRows.Count == 1 ? "r" : "")} Textbaustein{(_snippetRows.Count == 1 ? "" : "e")}");
         }
 
         var text = string.Join(" und ", parts);

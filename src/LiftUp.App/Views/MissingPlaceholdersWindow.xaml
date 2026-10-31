@@ -54,17 +54,26 @@
             <TextBlock x:Name="SnippetsHeader" Grid.Row="4" FontWeight="SemiBold" Text="Fehlende Textbausteine"
                        Margin="0,10,0,4" />
 
-            <ListBox x:Name="SnippetsList" Grid.Row="5" MaxHeight="120">
+            <ListBox x:Name="SnippetsList" Grid.Row="5" MaxHeight="120" HorizontalContentAlignment="Stretch">
                 <ListBox.ItemTemplate>
                     <DataTemplate>
-                        <TextBlock Text="{Binding}" FontWeight="SemiBold" Margin="0,2" />
+                        <Grid Margin="0,2">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            <Button Grid.Column="1" Content="Anlegen …" Tag="{Binding}"
+                                    Click="OnCreateSnippetClick" Margin="0" />
+                        </Grid>
                     </DataTemplate>
                 </ListBox.ItemTemplate>
             </ListBox>
 
             <TextBlock x:Name="SnippetsHint" Grid.Row="6" Style="{StaticResource LiftUpMutedText}"
                        TextWrapping="Wrap" Margin="0,4,0,0"
-                       Text="Textbausteine lassen sich in der Textbausteinansicht anlegen; der Name muss dem Platzhalter entsprechen." />
+                       Text="Fehlende Textbausteine lassen sich mit „Anlegen …“ direkt erstellen; alternativ lassen sich alle fehlenden Platzhalter aus der Vorlage entfernen." />
 
             <TextBlock x:Name="HintText" Grid.Row="7" Style="{StaticResource LiftUpMutedText}"
                        TextWrapping="Wrap" Margin="0,8,0,0" />

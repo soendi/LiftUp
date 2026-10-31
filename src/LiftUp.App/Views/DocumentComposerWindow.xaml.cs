@@ -527,7 +527,9 @@ public partial class DocumentComposerWindow : Window
             {
                 InfoText.Text = fix.PlaceholdersRemoved
                     ? "Platzhalter entfernt – PDF wird erneut erzeugt …"
-                    : "Bilder ersetzt – PDF wird erneut erzeugt …";
+                    : fix.SnippetsCreated
+                        ? "Textbaustein angelegt – PDF wird erneut erzeugt …"
+                        : "Bilder ersetzt – PDF wird erneut erzeugt …";
 
                 await CreatePdfAsync();
             }
