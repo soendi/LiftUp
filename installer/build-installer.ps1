@@ -36,10 +36,10 @@ $publishDir = (Resolve-Path artifacts/publish).Path
 wix build installer/LiftUp.wxs `
     -d Version=$Version `
     -d PublishDir="$publishDir" `
-    -d IconPath="$(Resolve-Path src/LiftUp.App/Assets/LiftUp.ico).Path" `
-    -d LicensePath="$(Resolve-Path installer/License.rtf).Path" `
-    -d BannerPath="$(Resolve-Path installer/assets/banner.bmp).Path" `
-    -d DialogPath="$(Resolve-Path installer/assets/dialog.bmp).Path" `
+    -d IconPath="$((Resolve-Path src/LiftUp.App/Assets/LiftUp.ico).Path)" `
+    -d LicensePath="$((Resolve-Path installer/License.rtf).Path)" `
+    -d BannerPath="$((Resolve-Path installer/assets/banner.bmp).Path)" `
+    -d DialogPath="$((Resolve-Path installer/assets/dialog.bmp).Path)" `
     -d GitHubOwner="soendi" `
     -d GitHubRepo="LiftUp" `
     -ext WixToolset.UI.wixext `
@@ -68,8 +68,8 @@ wix build installer/Bundle.wxs `
     -d Version=$Version `
     -d MsiPath="$((Resolve-Path artifacts/LiftUp-Setup.msi).Path)" `
     -d DotNetInstaller="$((Resolve-Path $runtimePath).Path)" `
-    -d IconPath="$(Resolve-Path src/LiftUp.App/Assets/LiftUp.ico).Path" `
-    -d LicensePath="$(Resolve-Path installer/License.rtf).Path" `
+    -d IconPath="$((Resolve-Path src/LiftUp.App/Assets/LiftUp.ico).Path)" `
+    -d LicensePath="$((Resolve-Path installer/License.rtf).Path)" `
     -ext "$balExtension" `
     -ext WixToolset.Netfx.wixext `
     -culture de-de `
@@ -85,8 +85,8 @@ Write-Host "7/7 Server-Installationsprogramm bauen"
 wix build installer/Server.wxs `
     -d Version=$Version `
     -d PublishDir="$((Resolve-Path artifacts/server).Path)" `
-    -d IconPath="$(Resolve-Path src/LiftUp.App/Assets/LiftUp.ico).Path" `
-    -d LicensePath="$(Resolve-Path installer/License.rtf).Path" `
+    -d IconPath="$((Resolve-Path src/LiftUp.App/Assets/LiftUp.ico).Path)" `
+    -d LicensePath="$((Resolve-Path installer/License.rtf).Path)" `
     -ext WixToolset.UI.wixext `
     -culture de-de `
     -o artifacts/LiftUp-Setup-Server.msi | Out-Host
@@ -96,8 +96,8 @@ wix build installer/ServerBundle.wxs `
     -d Version=$Version `
     -d MsiPath="$((Resolve-Path artifacts/LiftUp-Setup-Server.msi).Path)" `
     -d DotNetInstaller="$((Resolve-Path $runtimePath).Path)" `
-    -d IconPath="$(Resolve-Path src/LiftUp.App/Assets/LiftUp.ico).Path" `
-    -d LicensePath="$(Resolve-Path installer/License.rtf).Path" `
+    -d IconPath="$((Resolve-Path src/LiftUp.App/Assets/LiftUp.ico).Path)" `
+    -d LicensePath="$((Resolve-Path installer/License.rtf).Path)" `
     -ext "$balExtension" `
     -ext WixToolset.Netfx.wixext `
     -culture de-de `

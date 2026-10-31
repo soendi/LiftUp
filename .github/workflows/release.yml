@@ -141,8 +141,8 @@ jobs:
           wix build installer/Server.wxs `
             -d Version=${{ steps.version.outputs.value }} `
             -d PublishDir="$((Resolve-Path artifacts/server).Path)" `
-            -d IconPath="$(Resolve-Path src/LiftUp.App/Assets/LiftUp.ico).Path" `
-            -d LicensePath="$(Resolve-Path installer/License.rtf).Path" `
+            -d IconPath="$((Resolve-Path src/LiftUp.App/Assets/LiftUp.ico).Path)" `
+            -d LicensePath="$((Resolve-Path installer/License.rtf).Path)" `
             -ext WixToolset.UI.wixext `
             -culture de-de `
             -o artifacts/LiftUp-Setup-Server.msi 2>&1 | Tee-Object -FilePath logs/10-server-msi.log
@@ -157,8 +157,8 @@ jobs:
             -d Version=${{ steps.version.outputs.value }} `
             -d MsiPath="$((Resolve-Path artifacts/LiftUp-Setup-Server.msi).Path)" `
             -d DotNetInstaller="$((Resolve-Path artifacts/dotnet/windowsdesktop-runtime-8.0-win-x64.exe).Path)" `
-            -d IconPath="$(Resolve-Path src/LiftUp.App/Assets/LiftUp.ico).Path" `
-            -d LicensePath="$(Resolve-Path installer/License.rtf).Path" `
+            -d IconPath="$((Resolve-Path src/LiftUp.App/Assets/LiftUp.ico).Path)" `
+            -d LicensePath="$((Resolve-Path installer/License.rtf).Path)" `
             -ext "$bal" `
             -ext WixToolset.Netfx.wixext `
             -culture de-de `
