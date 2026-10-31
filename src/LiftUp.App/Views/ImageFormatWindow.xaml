@@ -78,11 +78,15 @@
             <TextBlock Style="{StaticResource LiftUpMutedText}" TextWrapping="Wrap" Margin="0,2,0,0"
                        Text="Optional; steht klein unter dem Bild." />
 
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
-                <Button Content="Abbrechen" Click="OnCancelClick" />
-                <Button Content="Übernehmen" IsDefault="True" Style="{StaticResource LiftUpPrimaryButton}"
-                        Margin="0" Click="OnApplyClick" />
-            </StackPanel>
+            <Grid Margin="0,14,0,0">
+                <Button Content="Zurücksetzen" HorizontalAlignment="Left" Click="OnResetClick"
+                        ToolTip="Größe, Seite und Textfluss auf die Vorgabe setzen und die Bildunterschrift entfernen." />
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button Content="Abbrechen" Click="OnCancelClick" />
+                    <Button Content="Übernehmen" IsDefault="True" Style="{StaticResource LiftUpPrimaryButton}"
+                            Margin="0" Click="OnApplyClick" />
+                </StackPanel>
+            </Grid>
         </StackPanel>
     </Border>
 </Window>

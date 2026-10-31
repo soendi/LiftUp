@@ -13,6 +13,18 @@ public partial class ImageFormatWindow : Window
     {
         InitializeComponent();
 
+        Show(format);
+
+        Loaded += (_, _) =>
+        {
+            CaptionBox.Focus();
+            CaptionBox.SelectAll();
+        };
+    }
+
+    /// <summary>Zeigt die übergebenen Angaben im Dialog an.</summary>
+    private void Show(ImageFormat format)
+    {
         SizeSmall.IsChecked = format.Size == ImageSize.Small;
         SizeMedium.IsChecked = format.Size == ImageSize.Medium;
         SizeLarge.IsChecked = format.Size == ImageSize.Large;
@@ -29,12 +41,13 @@ public partial class ImageFormatWindow : Window
         FlowTopBottom.IsChecked = format.Flow == ImageFlow.TopAndBottom;
 
         CaptionBox.Text = format.Caption ?? string.Empty;
+    }
 
-        Loaded += (_, _) =>
-        {
-            CaptionBox.Focus();
-            CaptionBox.SelectAll();
-        };
+    /// <summary>Setzt Größe, Seite und Textfluss auf die Vorgabe und leert die Bildunterschrift.</summary>
+    private void OnResetClick(object sender, RoutedEventArgs e)
+    {
+        Show(ImageFormat.Default);
+        CaptionBox.Focus();
     }
 
     /// <summary>Die im Dialog gewählten Angaben.</summary>
