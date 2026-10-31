@@ -1,9 +1,11 @@
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using LiftUp.App.Documents;
 using LiftUp.Core.Documents;
 using Microsoft.Win32;
@@ -27,6 +29,7 @@ public partial class TemplatesView : UserControl
 
     private readonly AppServices _services;
     private readonly ObservableCollection<SectionRow> _sectionRows = [];
+    private readonly DispatcherTimer _missingTimer = new() { Interval = TimeSpan.FromMilliseconds(400) };
     private IReadOnlyList<ImageChoice> _imageMatches = [];
     private int _imageTokenStart;
     private int _imageTokenLength;
@@ -47,6 +50,15 @@ public partial class TemplatesView : UserControl
         // Die Bildsuche hängt am Textfeld: Nach „&“ erscheint eine Liste mit Vorschau.
         HtmlBox.TextChanged += OnHtmlBoxTextChanged;
         HtmlBox.PreviewKeyDown += OnHtmlBoxPreviewKeyDown;
+
+        // Fehlende Bilder und Textbausteine schon beim Bearbeiten markieren; die kurze
+        // Verzögerung erspart die Prüfung bei jedem Tastendruck.
+        _missingTimer.Tick += (_, _) =>
+        {
+            _missingTimer.Stop();
+            UpdateMissingPlaceholders();
+        };
+        HtmlBox.TextChanged += (_, _) => ScheduleMissingCheck();
 
         LoadDocumentTypes();
         LoadTemplates();
@@ -483,6 +495,84 @@ public partial class TemplatesView : UserControl
         ImagePopup.HorizontalOffset = caretRect.Left;
         ImagePopup.VerticalOffset = caretRect.Bottom + 2;
         ImagePopup.IsOpen = true;
+    }
+
+    private void ScheduleMissingCheck()
+    {
+        _missingTimer.Stop();
+        _missingTimer.Start();
+    }
+
+    /// <summary>
+    /// Prüft den Text im Editor auf Bilder und Textbausteine, die es nicht (mehr) gibt –
+    /// noch bevor die Vorlage gespeichert oder ein Dokument erzeugt wird. Vorlagen hängen
+    /// an keinem Projekt, deshalb zählt hier die gesamte Bildbibliothek.
+    /// </summary>
+    private void UpdateMissingPlaceholders()
+    {
+        var imageNames = PlaceholderRenderer.FindImageNames(HtmlBox.Text);
+        var snippetNames = PlaceholderRenderer.FindSnippetNames(HtmlBox.Text);
+
+        if (imageNames.Count == 0 && snippetNames.Count == 0)
+        {
+            MissingBorder.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        HashSet<string> knownImages;
+        HashSet<string> knownSnippets;
+        try
+        {
+            knownImages = _services.Images.Search(null, null, allProjects: true)
+                .Where(image => !image.IsArchived && File.Exists(image.FilePath))
+                .Select(image => image.Name)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            knownSnippets = _services.Snippets.GetAll()
+                .Select(snippet => snippet.Name)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        }
+        catch (LiftUpException)
+        {
+            MissingBorder.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var missingImages = imageNames.Where(name => !knownImages.Contains(name)).ToArray();
+        var missingSnippets = snippetNames.Where(name => !knownSnippets.Contains(name)).ToArray();
+
+        if (missingImages.Length == 0 && missingSnippets.Length == 0)
+        {
+            MissingBorder.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var parts = new List<string>();
+        if (missingImages.Length > 0)
+        {
+            parts.Add($"{missingImages.Length} Bild{(missingImages.Length == 1 ? "" : "er")}");
+        }
+
+        if (missingSnippets.Length > 0)
+        {
+            parts.Add($"{missingSnippets.Length} Textbaustein{(missingSnippets.Length == 1 ? "" : "e")}");
+        }
+
+        var details = new List<string>();
+        if (missingImages.Length > 0)
+        {
+            details.Add("Bilder: " + string.Join(", ", missingImages.Select(name => $"„{name}“")));
+        }
+
+        if (missingSnippets.Length > 0)
+        {
+            details.Add("Textbausteine: " + string.Join(", ", missingSnippets.Select(name => $"„{name}“")));
+        }
+
+        MissingTitle.Text = $"Fehlende Angaben: {string.Join(" und ", parts)}";
+        MissingText.Text = string.Join(" · ", details)
+            + " – diese Stellen bleiben in der Vorschau und im erzeugten PDF leer.";
+        MissingBorder.Visibility = Visibility.Visible;
     }
 
     private IReadOnlyList<ImageChoice> SearchImages(string query)

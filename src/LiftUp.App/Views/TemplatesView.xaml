@@ -49,6 +49,7 @@
                         <RowDefinition Height="*" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
                     <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
@@ -69,7 +70,16 @@
                         <Button Content="Als neue Version speichern" Style="{StaticResource LiftUpPrimaryButton}" Margin="0" Click="OnSaveClick" />
                     </StackPanel>
 
-                    <Grid Grid.Row="2">
+                    <Border x:Name="MissingBorder" Grid.Row="2" Style="{StaticResource LiftUpCard}"
+                            Padding="10" Margin="0,0,0,8" Visibility="Collapsed">
+                        <StackPanel>
+                            <TextBlock x:Name="MissingTitle" FontWeight="SemiBold" TextWrapping="Wrap" />
+                            <TextBlock x:Name="MissingText" Style="{StaticResource LiftUpMutedText}" TextWrapping="Wrap"
+                                       Margin="0,4,0,0" />
+                        </StackPanel>
+                    </Border>
+
+                    <Grid Grid.Row="3">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="300" />
@@ -85,7 +95,7 @@
                         </Border>
                     </Grid>
 
-                    <Expander Grid.Row="4" Header="Abschnitte (Untertitel) – beim Dokument als Tabs" Margin="0,8,0,0" IsExpanded="False">
+                    <Expander Grid.Row="5" Header="Abschnitte (Untertitel) – beim Dokument als Tabs" Margin="0,8,0,0" IsExpanded="False">
                         <Grid Margin="0,6,0,0">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" />
@@ -110,7 +120,7 @@
                         </Grid>
                     </Expander>
 
-                    <Expander Grid.Row="3" Header="Platzhalter (Doppelklick fügt ein)" Margin="0,8,0,0" IsExpanded="True">
+                    <Expander Grid.Row="4" Header="Platzhalter (Doppelklick fügt ein)" Margin="0,8,0,0" IsExpanded="True">
                         <ListBox x:Name="PlaceholderList" Height="120" MouseDoubleClick="OnPlaceholderDoubleClick">
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
