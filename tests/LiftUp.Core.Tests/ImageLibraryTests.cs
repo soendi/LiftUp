@@ -123,6 +123,67 @@ public sealed class ImageLibraryTests
     }
 
     [Fact]
+    public void Fehlende_datei_wird_als_solche_gemeldet()
+    {
+        using var fixture = new TestDatabase();
+        var images = Images(fixture, fixture.LoginAsAdmin());
+        var image = images.Import(CreateImage(fixture, "a.png"), new ImageInput { Name = "Logo" });
+
+        File.Delete(image.FilePath);
+
+        var listed = Assert.Single(images.Search(null, null));
+        Assert.False(listed.FileExists);
+        Assert.Equal("fehlt", listed.FileStatusText);
+    }
+
+    [Fact]
+    public void Fehlende_eintraege_lassen_sich_entfernen()
+    {
+        using var fixture = new TestDatabase();
+        var images = Images(fixture, fixture.LoginAsAdmin());
+        var missing = images.Import(CreateImage(fixture, "a.png"), new ImageInput { Name = "Weg" });
+        images.Import(CreateImage(fixture, "b.png"), new ImageInput { Name = "Da" });
+
+        File.Delete(missing.FilePath);
+
+        Assert.Equal(1, images.RemoveMissing(null));
+        var remaining = Assert.Single(images.Search(null, null));
+        Assert.Equal("Da", remaining.Name);
+        Assert.True(remaining.FileExists);
+    }
+
+    [Fact]
+    public void Fehlende_eintraege_bleiben_im_gewaehlten_bereich()
+    {
+        using var fixture = new TestDatabase();
+        var session = fixture.LoginAsAdmin();
+        var images = Images(fixture, session);
+        var project = CreateProject(fixture, session, "Projekt Eins");
+
+        var global = images.Import(CreateImage(fixture, "global.png"), new ImageInput { Name = "Global" });
+        var projectImage = images.Import(
+            CreateImage(fixture, "projekt.png"),
+            new ImageInput { Name = "Plan", ProjectId = project.Id });
+
+        File.Delete(global.FilePath);
+        File.Delete(projectImage.FilePath);
+
+        // Die Ansicht „Projekt“ zeigt globale und Projektbilder – aufgeräumt wird genau dieser Bereich.
+        Assert.Equal(2, images.RemoveMissing(project.Id));
+        Assert.Empty(images.Search(project.Id, null));
+        Assert.Empty(images.Search(null, null));
+    }
+
+    [Fact]
+    public void Aufraeumen_erfordert_das_recht_bilder_zu_verwalten()
+    {
+        using var fixture = new TestDatabase();
+        var leser = fixture.CreateAndLogin("leser", "Leser12345", "Leser");
+
+        Assert.Throws<PermissionDeniedException>(() => Images(fixture, leser).RemoveMissing(null));
+    }
+
+    [Fact]
     public void Bearbeiten_erfordert_das_recht_bilder_zu_verwalten()
     {
         using var fixture = new TestDatabase();

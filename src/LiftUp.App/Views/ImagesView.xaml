@@ -20,7 +20,9 @@
                 <StackPanel Grid.Column="0" Orientation="Horizontal">
                     <Button Content="Bilder importieren …" Style="{StaticResource LiftUpPrimaryButton}"
                             Click="OnImportClick" />
-                    <Button Content="Ordner einlesen" Click="OnScanFolderClick" Margin="0" />
+                    <Button Content="Ordner einlesen" Click="OnScanFolderClick" />
+                    <Button x:Name="RemoveMissingButton" Content="Fehlende entfernen" IsEnabled="False"
+                            Click="OnRemoveMissingClick" Margin="0" />
                 </StackPanel>
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="14,0,0,0">
@@ -57,6 +59,18 @@
                     <DataGridTextColumn Header="Kategorie" Binding="{Binding Category}" Width="130" />
                     <DataGridTextColumn Header="Schlagworte" Binding="{Binding Tags}" Width="170" />
                     <DataGridTextColumn Header="Bereich" Binding="{Binding ScopeText}" Width="90" />
+                    <DataGridTextColumn Header="Datei" Binding="{Binding FileStatusText}" Width="85">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding FileExists}" Value="False">
+                                        <Setter Property="Foreground" Value="#B42318" />
+                                        <Setter Property="FontWeight" Value="SemiBold" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
                     <DataGridTextColumn Header="Größe" Binding="{Binding SizeText}" Width="90" />
                     <DataGridTextColumn Header="Status" Binding="{Binding StatusText}" Width="90" />
                 </DataGrid.Columns>

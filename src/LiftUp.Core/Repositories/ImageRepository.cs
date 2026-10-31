@@ -82,6 +82,7 @@ public sealed class ImageRepository
                 FilePath = reader.Text(5),
                 SizeText = size < 1024 ? $"{size} B" : $"{size / 1024.0:0.0} KB",
                 IsArchived = reader.Bool(7),
+                FileExists = File.Exists(reader.Text(5)),
                 CreatedText = reader.Date(8).ToLocalTime().ToString("dd.MM.yyyy HH:mm"),
             });
         }

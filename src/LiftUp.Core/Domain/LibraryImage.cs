@@ -48,8 +48,13 @@ public sealed class ImageListItem
     public string SizeText { get; init; } = string.Empty;
     public bool IsArchived { get; init; }
     public bool IsGlobal { get; init; }
+
+    /// <summary>Falsch, wenn die Datei nicht mehr am gespeicherten Pfad liegt.</summary>
+    public bool FileExists { get; init; } = true;
+
     public string ScopeText => IsGlobal ? "global" : "Projekt";
     public string StatusText => IsArchived ? "archiviert" : "aktiv";
+    public string FileStatusText => FileExists ? "vorhanden" : "fehlt";
     public string Placeholder => $"{{{{bild:{Name}}}}}";
     public string CreatedText { get; init; } = string.Empty;
 }

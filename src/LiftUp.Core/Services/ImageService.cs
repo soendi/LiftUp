@@ -199,6 +199,42 @@ public sealed class ImageService
         return FolderService.TryDeleteFile(image.FilePath, out var error) ? null : error;
     }
 
+    /// <summary>
+    /// Entfernt alle Einträge, deren Bilddatei nicht mehr vorhanden ist – etwa weil sie
+    /// im Projektordner gelöscht oder verschoben wurde. Liefert die Anzahl der entfernten
+    /// Einträge. Der Bereich entspricht der Bilderansicht (global und Projekt).
+    /// </summary>
+    public int RemoveMissing(Guid? projectId, bool allProjects = false)
+    {
+        _actor.Require(Permission.ManageImages);
+
+        using var connection = _database.Open();
+        using var transaction = connection.BeginTransaction();
+
+        var candidates = _images.Search(connection, transaction, projectId, null, includeArchived: true, allProjects);
+        var removed = 0;
+
+        foreach (var image in candidates)
+        {
+            if (File.Exists(image.FilePath))
+            {
+                continue;
+            }
+
+            _images.Delete(connection, transaction, image.Id);
+            _changes.Record(connection, transaction, "Image", image.Id.ToString("D"), "Delete",
+                new { image.Name, image.Category, Missing = true }, 1);
+            removed++;
+        }
+
+        if (removed > 0)
+        {
+            transaction.Commit();
+        }
+
+        return removed;
+    }
+
     /// <summary>Liefert den HTML-Baustein für ein Bild (Data-URI) oder null.</summary>
     public string? GetImageTag(Guid? projectId, string name)
     {

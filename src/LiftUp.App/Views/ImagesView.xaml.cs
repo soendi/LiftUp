@@ -108,6 +108,16 @@ public partial class ImagesView : UserControl
 
         var result = filtered.ToArray();
         ImagesGrid.ItemsSource = result;
+
+        var missing = result.Count(item => !item.FileExists);
+        RemoveMissingButton.IsEnabled = missing > 0;
+        RemoveMissingButton.Content = missing switch
+        {
+            0 => "Fehlende entfernen",
+            1 => "1 fehlende Datei aufräumen",
+            _ => $"{missing} fehlende Dateien aufräumen",
+        };
+
         InfoText.Text = result.Length == 1 ? "1 Bild" : $"{result.Length} Bilder";
     }
 
@@ -139,6 +149,43 @@ public partial class ImagesView : UserControl
         {
             InfoText.Text = exception.Message;
             return 0;
+        }
+    }
+
+    /// <summary>Entfernt Einträge, deren Bilddatei nicht mehr existiert.</summary>
+    private void OnRemoveMissingClick(object sender, RoutedEventArgs e)
+    {
+        var missing = _items.Count(item => !item.FileExists);
+        if (missing == 0)
+        {
+            InfoText.Text = "Alle Bilddateien sind vorhanden.";
+            return;
+        }
+
+        var answer = MessageBox.Show(
+            missing == 1
+                ? "Ein Eintrag verweist auf eine Datei, die nicht mehr existiert. Eintrag entfernen?"
+                : $"{missing} Einträge verweisen auf Dateien, die nicht mehr existieren. Einträge entfernen?",
+            "Fehlende Bilder entfernen", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+        if (answer != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        try
+        {
+            var removed = _services.Images.RemoveMissing(SelectedProjectId);
+            LoadImages();
+            InfoText.Text = removed switch
+            {
+                0 => "Es waren keine fehlenden Dateien mehr vorhanden.",
+                1 => "1 fehlender Eintrag entfernt.",
+                _ => $"{removed} fehlende Einträge entfernt.",
+            };
+        }
+        catch (LiftUpException exception)
+        {
+            InfoText.Text = exception.Message;
         }
     }
 
@@ -198,8 +245,14 @@ public partial class ImagesView : UserControl
         PreviewImage.Source = null;
         PlaceholderText.Text = string.Empty;
 
-        if (selected is null || !File.Exists(selected.FilePath))
+        if (selected is null)
         {
+            return;
+        }
+
+        if (!File.Exists(selected.FilePath))
+        {
+            PlaceholderText.Text = $"Die Bilddatei fehlt:\n{selected.FilePath}\n\nÜber „Fehlende entfernen“ lässt sich der Eintrag aufräumen.";
             return;
         }
 
