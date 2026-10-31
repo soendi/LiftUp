@@ -36,12 +36,19 @@ public partial class DocumentComposerWindow : Window
     private readonly List<SectionDraft> _sections = [];
     private readonly Guid? _presetProjectId;
     private readonly Guid? _presetTemplateId;
+    private IReadOnlyList<DocumentSectionContent>? _presetSections;
+    private string? _lastPdfPath;
 
-    public DocumentComposerWindow(AppServices services, Guid? projectId = null, Guid? templateId = null)
+    public DocumentComposerWindow(
+        AppServices services,
+        Guid? projectId = null,
+        Guid? templateId = null,
+        IReadOnlyList<DocumentSectionContent>? sections = null)
     {
         _services = services;
         _presetProjectId = projectId;
         _presetTemplateId = templateId;
+        _presetSections = sections;
 
         InitializeComponent();
 
@@ -145,6 +152,18 @@ public partial class DocumentComposerWindow : Window
             return;
         }
 
+        if (_presetSections is { Count: > 0 } preset)
+        {
+            _presetSections = null;
+            foreach (var section in preset)
+            {
+                AddSection(section.Title, section.Html);
+            }
+
+            InfoText.Text = $"Gespeicherte Abschnitte aus „{template.Name}“ geladen. Änderungen ergeben ein neues PDF.";
+            return;
+        }
+
         if (defined.Count == 0)
         {
             AddSection("Inhalt");
@@ -160,7 +179,7 @@ public partial class DocumentComposerWindow : Window
         InfoText.Text = $"{template.Name}: {defined.Count} Abschnitt(e), jeder beginnt im PDF auf einer neuen Seite.";
     }
 
-    private void AddSection(string title)
+    private void AddSection(string title, string? html = null)
     {
         var heading = new TextBlock
         {
@@ -192,6 +211,10 @@ public partial class DocumentComposerWindow : Window
         buttonRow.Children.Add(insertImage);
 
         var editor = new HtmlEditor();
+        if (!string.IsNullOrWhiteSpace(html))
+        {
+            editor.SetHtml(html);
+        }
 
         var grid = new Grid();
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -372,6 +395,8 @@ public partial class DocumentComposerWindow : Window
                 new PdfPageSettings(format, landscape, margin));
 
             InfoText.Text = $"Gespeichert: {document.FilePath}";
+            _lastPdfPath = document.FilePath;
+            SendMailButton.IsEnabled = true;
 
             var answer = MessageBox.Show(
                 $"Das Dokument wurde gespeichert:\n{document.FilePath}\n\nJetzt öffnen?",
@@ -390,6 +415,19 @@ public partial class DocumentComposerWindow : Window
         {
             InfoText.Text = "PDF konnte nicht erzeugt werden: " + exception.Message;
         }
+    }
+
+    private void OnSendMailClick(object sender, RoutedEventArgs e)
+    {
+        if (string.IsNullOrWhiteSpace(_lastPdfPath))
+        {
+            InfoText.Text = "Bitte zuerst ein PDF erzeugen.";
+            return;
+        }
+
+        var template = (TemplateBox.SelectedItem as TemplateListItem)?.Name ?? "Dokument";
+        var dialog = new MailWindow(_services, _lastPdfPath, template) { Owner = this };
+        dialog.ShowDialog();
     }
 
     private void OnCloseClick(object sender, RoutedEventArgs e) => Close();

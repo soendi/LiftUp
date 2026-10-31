@@ -127,6 +127,54 @@ public partial class PdfView : UserControl
         var selected = SelectedDocument;
         OpenButton.IsEnabled = selected is not null && selected.FileExists;
         FolderButton.IsEnabled = selected is not null;
+        EditDocumentButton.IsEnabled = selected is not null && selected.HasSections;
+        SendMailButton.IsEnabled = selected is not null && selected.FileExists;
+    }
+
+    /// <summary>Öffnet ein früheres Dokument erneut, um die Abschnitte zu ändern.</summary>
+    private void OnEditDocumentClick(object sender, RoutedEventArgs e)
+    {
+        var selected = SelectedDocument;
+        if (selected is null)
+        {
+            return;
+        }
+
+        if (!selected.HasSections)
+        {
+            InfoText.Text = "Dieses Dokument wurde ohne Abschnitte erzeugt und lässt sich nicht erneut bearbeiten.";
+            return;
+        }
+
+        var dialog = new DocumentComposerWindow(
+            _services,
+            selected.ProjectId,
+            selected.TemplateId,
+            DocumentSections.Deserialize(selected.SectionsJson))
+        {
+            Owner = Window.GetWindow(this),
+        };
+
+        dialog.ShowDialog();
+        LoadDocuments();
+    }
+
+    /// <summary>Versendet ein erzeugtes PDF per E-Mail.</summary>
+    private void OnSendMailClick(object sender, RoutedEventArgs e)
+    {
+        var selected = SelectedDocument;
+        if (selected is null || !selected.FileExists)
+        {
+            InfoText.Text = "Die Datei ist nicht mehr vorhanden.";
+            return;
+        }
+
+        var dialog = new MailWindow(_services, selected.FilePath, $"{selected.TemplateName} {selected.FileName}")
+        {
+            Owner = Window.GetWindow(this),
+        };
+
+        dialog.ShowDialog();
     }
 
     /// <summary>Öffnet den Editor, in dem die Abschnitte der Vorlage ausgefüllt werden.</summary>

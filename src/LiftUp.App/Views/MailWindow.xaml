@@ -1,0 +1,87 @@
+<Window x:Class="LiftUp.App.Views.MailWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="E-Mail senden"
+        Width="660"
+        Height="720"
+        MinWidth="600"
+        MinHeight="620"
+        WindowStartupLocation="CenterOwner"
+        Background="{StaticResource LiftUpBackground}">
+
+    <Border Margin="16" Style="{StaticResource LiftUpCard}">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <StackPanel Grid.Row="0">
+                <TextBlock Text="E-Mail senden" Style="{StaticResource LiftUpSubheading}" />
+                <TextBlock x:Name="AccountText" Style="{StaticResource LiftUpMutedText}" Margin="0,2,0,0" />
+            </StackPanel>
+
+            <Expander Grid.Row="1" Header="Postfach verbinden (Google oder Microsoft 365)" Margin="0,8,0,0" IsExpanded="False">
+                <StackPanel Margin="0,6,0,0">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Anbieter" VerticalAlignment="Center" Margin="0,0,6,0" Style="{StaticResource LiftUpFieldLabel}" />
+                        <ComboBox x:Name="ProviderBox" Width="200" Margin="0,0,14,0"
+                                  DisplayMemberPath="Name" SelectionChanged="OnProviderChanged" />
+
+                        <TextBlock Text="Client-ID" VerticalAlignment="Center" Margin="0,0,6,0" Style="{StaticResource LiftUpFieldLabel}" />
+                        <TextBox x:Name="ClientIdBox" Width="230" />
+                    </StackPanel>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                        <Button x:Name="LoginButton" Content="Anmelden" Click="OnLoginClick" />
+                        <Button x:Name="DisconnectButton" Content="Trennen" Margin="0" Click="OnDisconnectClick" />
+                    </StackPanel>
+
+                    <TextBlock Style="{StaticResource LiftUpMutedText}" Margin="0,8,0,0"
+                               Text="Google: in der Google Cloud Console ein OAuth-Client vom Typ „Desktop“ anlegen und die Client-ID hier eintragen. Microsoft 365: in Azure eine App-Registrierung mit Plattform „Mobile und Desktopanwendungen“ und Weiterleitung http://localhost anlegen, Berechtigung Mail.Send (delegiert) erteilen." />
+                </StackPanel>
+            </Expander>
+
+            <Grid Grid.Row="2" Margin="0,10,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="90" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="An *" Style="{StaticResource LiftUpFieldLabel}" VerticalAlignment="Center" />
+                <TextBox Grid.Row="0" Grid.Column="1" x:Name="ToBox" Margin="0,3,0,8" ToolTip="Mehrere Adressen mit Semikolon trennen" />
+
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="Cc" Style="{StaticResource LiftUpFieldLabel}" VerticalAlignment="Center" />
+                <TextBox Grid.Row="1" Grid.Column="1" x:Name="CcBox" Margin="0,3,0,8" ToolTip="Mehrere Adressen mit Semikolon trennen" />
+
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="Betreff" Style="{StaticResource LiftUpFieldLabel}" VerticalAlignment="Center" />
+                <TextBox Grid.Row="2" Grid.Column="1" x:Name="SubjectBox" Margin="0,3,0,8" />
+
+                <TextBlock Grid.Row="3" Grid.Column="0" Text="Text" Style="{StaticResource LiftUpFieldLabel}" VerticalAlignment="Top" Margin="0,7,0,0" />
+                <TextBox Grid.Row="3" Grid.Column="1" x:Name="BodyBox" Margin="0,3,0,8"
+                         AcceptsReturn="True" TextWrapping="Wrap" VerticalContentAlignment="Top"
+                         VerticalScrollBarVisibility="Auto" />
+
+                <TextBlock Grid.Row="4" Grid.Column="0" Text="Anhang" Style="{StaticResource LiftUpFieldLabel}" VerticalAlignment="Center" />
+                <TextBox Grid.Row="4" Grid.Column="1" x:Name="AttachmentBox" IsReadOnly="True" Margin="0,3,0,0" />
+            </Grid>
+
+            <StackPanel Grid.Row="3" Margin="0,10,0,0">
+                <TextBlock x:Name="InfoText" Style="{StaticResource LiftUpMutedText}" TextWrapping="Wrap" />
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+                    <Button Content="Abbrechen" Click="OnCancelClick" />
+                    <Button x:Name="SendButton" Content="Senden" Style="{StaticResource LiftUpPrimaryButton}" Margin="0" Click="OnSendClick" />
+                </StackPanel>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

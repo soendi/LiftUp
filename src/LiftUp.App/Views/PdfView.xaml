@@ -81,7 +81,9 @@
 
                     <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
                         <Button x:Name="OpenButton" Content="Öffnen" Click="OnOpenClick" IsEnabled="False" />
-                        <Button x:Name="FolderButton" Content="Im Ordner zeigen" Click="OnShowFolderClick" IsEnabled="False" Margin="0" />
+                        <Button x:Name="FolderButton" Content="Im Ordner zeigen" Click="OnShowFolderClick" IsEnabled="False" />
+                        <Button x:Name="EditDocumentButton" Content="Bearbeiten …" Click="OnEditDocumentClick" IsEnabled="False" />
+                        <Button x:Name="SendMailButton" Content="E-Mail senden …" Click="OnSendMailClick" IsEnabled="False" Margin="0" />
                     </StackPanel>
                 </Grid>
             </Border>

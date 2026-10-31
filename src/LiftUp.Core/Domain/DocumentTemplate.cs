@@ -66,6 +66,11 @@ public sealed class ProjectDocument
     public DateTime CreatedUtc { get; init; }
     public string CreatedBy { get; init; } = string.Empty;
 
+    /// <summary>Ausgeflüllte Abschnitte als JSON; leer bei Dokumenten ohne Abschnitte.</summary>
+    public string? SectionsJson { get; init; }
+
+    public bool HasSections => !string.IsNullOrWhiteSpace(SectionsJson);
+
     public string CreatedText => CreatedUtc.ToLocalTime().ToString("dd.MM.yyyy HH:mm");
     public string VersionText => $"v{TemplateVersion}";
     public string SizeText => SizeBytes < 1024

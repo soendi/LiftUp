@@ -3,6 +3,7 @@ using System.Windows;
 using LiftUp.Core.Backup;
 using LiftUp.Core.Backup.Cloud;
 using LiftUp.Core.Data;
+using LiftUp.Core.Mail;
 using LiftUp.Core.Domain;
 using LiftUp.Core.Services;
 using LiftUp.Core.Sync;
@@ -76,6 +77,7 @@ public sealed class AppServices(Database database)
     public BackupService Backups { get; } = new(database);
     public CloudBackupService CloudBackups { get; } = new(database);
     public CompanyProfileService Company => new(Database, CurrentSession);
+    public MailAccountService Mail => new(Database, CurrentSession);
     public ImageService Images => new(Database, CurrentSession);
     public SnippetService Snippets => new(Database, CurrentSession);
     public ChangeLogService ChangeLog => new(Database, CurrentSession);

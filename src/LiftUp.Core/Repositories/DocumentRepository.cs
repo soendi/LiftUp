@@ -11,10 +11,10 @@ public sealed class DocumentRepository
         using var command = Db.Command(connection, """
             INSERT INTO ProjectDocuments
                 (Id, ProjectId, TemplateId, TemplateName, TemplateVersion, FileName, FilePath,
-                 SizeBytes, CreatedUtc, CreatedBy, RowVersion, IsDeleted)
+                 SizeBytes, CreatedUtc, CreatedBy, SectionsJson, RowVersion, IsDeleted)
             VALUES
                 ($id, $projectId, $templateId, $templateName, $templateVersion, $fileName, $filePath,
-                 $sizeBytes, $createdUtc, $createdBy, 1, 0);
+                 $sizeBytes, $createdUtc, $createdBy, $sectionsJson, 1, 0);
             """, transaction);
         command.With("$id", document.Id.ToString("D"))
             .With("$projectId", document.ProjectId.ToString("D"))
@@ -25,7 +25,8 @@ public sealed class DocumentRepository
             .With("$filePath", document.FilePath)
             .With("$sizeBytes", document.SizeBytes)
             .With("$createdUtc", document.CreatedUtc.ToDb())
-            .With("$createdBy", document.CreatedBy);
+            .With("$createdBy", document.CreatedBy)
+            .With("$sectionsJson", document.SectionsJson);
         command.ExecuteNonQuery();
     }
 
@@ -33,7 +34,7 @@ public sealed class DocumentRepository
     {
         using var command = Db.Command(connection, """
             SELECT Id, ProjectId, TemplateId, TemplateName, TemplateVersion, FileName, FilePath,
-                   SizeBytes, CreatedUtc, CreatedBy
+                   SizeBytes, CreatedUtc, CreatedBy, SectionsJson
             FROM ProjectDocuments
             WHERE ProjectId = $projectId AND IsDeleted = 0
             ORDER BY CreatedUtc DESC;
@@ -55,6 +56,7 @@ public sealed class DocumentRepository
                 SizeBytes = reader.Int64(7),
                 CreatedUtc = reader.Date(8),
                 CreatedBy = reader.Text(9),
+                SectionsJson = reader.TextOrNull(10),
             });
         }
 

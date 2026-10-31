@@ -12,7 +12,7 @@ namespace LiftUp.Core.Data;
 /// </summary>
 public sealed class Database
 {
-    public const int CurrentSchemaVersion = 9;
+    public const int CurrentSchemaVersion = 10;
 
     private readonly string _connectionString;
 
@@ -143,6 +143,9 @@ public sealed class Database
 
         // Version 9 ergänzt die Abschnitte (Untertitel) je Vorlage.
         MigrateTemplateSections(connection);
+
+        // Version 10 hält die ausgefüllten Abschnitte am erzeugten Dokument fest.
+        MigrateDocumentSections(connection);
 
         using var command = Db.Command(connection, "UPDATE SchemaInfo SET Version = $version;");
         command.With("$version", CurrentSchemaVersion);
@@ -321,6 +324,34 @@ public sealed class Database
             CREATE INDEX IF NOT EXISTS IX_TemplateSections_Template ON TemplateSections (TemplateId);
             """);
         command.ExecuteNonQuery();
+    }
+
+    /// <summary>
+    /// Version 10: Erzeugte Dokumente merken sich ihre Abschnittsinhalte, damit sie
+    /// später erneut geöffnet, geändert oder versendet werden können.
+    /// </summary>
+    private static void MigrateDocumentSections(SqliteConnection connection)
+    {
+        var hasColumn = false;
+        using (var info = Db.Command(connection, "PRAGMA table_info(ProjectDocuments);"))
+        using (var reader = info.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                if (string.Equals(reader.GetString(1), "SectionsJson", StringComparison.OrdinalIgnoreCase))
+                {
+                    hasColumn = true;
+                }
+            }
+        }
+
+        if (hasColumn)
+        {
+            return;
+        }
+
+        using var alter = Db.Command(connection, "ALTER TABLE ProjectDocuments ADD COLUMN SectionsJson TEXT NULL;");
+        alter.ExecuteNonQuery();
     }
 
     /// <summary>Übernimmt vorhandene Typnamen bestehender Vorlagen in die Typenliste.</summary>
@@ -658,6 +689,7 @@ public sealed class Database
             SizeBytes       INTEGER NOT NULL DEFAULT 0,
             CreatedUtc      TEXT NOT NULL,
             CreatedBy       TEXT NOT NULL,
+            SectionsJson    TEXT NULL,
             RowVersion      INTEGER NOT NULL DEFAULT 1,
             IsDeleted       INTEGER NOT NULL DEFAULT 0
         );

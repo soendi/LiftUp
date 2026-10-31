@@ -68,7 +68,7 @@ public sealed class DocumentService
                       ?? throw new ValidationException("Für diese Vorlage gibt es noch keine Version.");
 
         var html = RenderTitlePage(connection, transaction, project, version);
-        return await SavePdfAsync(connection, transaction, project, template, version, html, settings, cancellationToken)
+        return await SavePdfAsync(connection, transaction, project, template, version, html, null, settings, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -100,7 +100,16 @@ public sealed class DocumentService
         var titlePage = RenderTitlePage(connection, transaction, project, version);
         var html = DocumentComposition.Build(titlePage, sections);
 
-        return await SavePdfAsync(connection, transaction, project, template, version, html, settings, cancellationToken)
+        return await SavePdfAsync(
+                connection,
+                transaction,
+                project,
+                template,
+                version,
+                html,
+                DocumentSections.Serialize(sections),
+                settings,
+                cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -139,6 +148,7 @@ public sealed class DocumentService
         DocumentTemplate template,
         TemplateVersion version,
         string html,
+        string? sectionsJson,
         PdfPageSettings settings,
         CancellationToken cancellationToken)
     {
@@ -163,6 +173,7 @@ public sealed class DocumentService
             SizeBytes = bytes.LongLength,
             CreatedUtc = DateTime.UtcNow,
             CreatedBy = _actor.UserName,
+            SectionsJson = sectionsJson,
         };
 
         _documents.Insert(connection, transaction, document);

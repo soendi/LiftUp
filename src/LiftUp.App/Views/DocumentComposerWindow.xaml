@@ -53,6 +53,7 @@
 
             <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
                 <Button Content="Schließen" Click="OnCloseClick" />
+                <Button x:Name="SendMailButton" Content="Per E-Mail senden …" IsEnabled="False" Click="OnSendMailClick" />
                 <Button Content="PDF erzeugen" Style="{StaticResource LiftUpPrimaryButton}" Margin="0" Click="OnCreatePdfClick" />
             </StackPanel>
         </Grid>
