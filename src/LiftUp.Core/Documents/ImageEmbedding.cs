@@ -29,9 +29,22 @@ public static class ImageEmbedding
             _ => null,
         };
 
-    public static string? ToImageTag(LibraryImage image, string? style = null)
+    public static string? ToImageTag(LibraryImage image, string? style = null) =>
+        ToImageTag(image.FilePath, image.ContentType, image.Name, style);
+
+    /// <summary>
+    /// Bettet eine Bilddatei anhand ihres Pfades ein; der Inhaltstyp wird aus der
+    /// Dateiendung abgeleitet.
+    /// </summary>
+    public static string? ToImageTag(string filePath, string name, string? style = null)
     {
-        if (!File.Exists(image.FilePath))
+        var contentType = ContentTypeFor(filePath);
+        return contentType is null ? null : ToImageTag(filePath, contentType, name, style);
+    }
+
+    private static string? ToImageTag(string filePath, string contentType, string name, string? style)
+    {
+        if (!File.Exists(filePath))
         {
             return null;
         }
@@ -39,7 +52,7 @@ public static class ImageEmbedding
         byte[] bytes;
         try
         {
-            bytes = File.ReadAllBytes(image.FilePath);
+            bytes = File.ReadAllBytes(filePath);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
@@ -47,10 +60,10 @@ public static class ImageEmbedding
         }
 
         var css = string.IsNullOrWhiteSpace(style) ? "max-width:100%;" : style;
-        var alt = EscapeAttribute(image.Name);
+        var alt = EscapeAttribute(name);
         return string.Create(
             CultureInfo.InvariantCulture,
-            $"<img src=\"data:{image.ContentType};base64,{Convert.ToBase64String(bytes)}\" alt=\"{alt}\" style=\"{css}\" />");
+            $"<img src=\"data:{contentType};base64,{Convert.ToBase64String(bytes)}\" alt=\"{alt}\" style=\"{css}\" />");
     }
 
     private static string EscapeAttribute(string value) => value

@@ -93,6 +93,7 @@ public partial class ImagesView : UserControl
     private void OnSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         var selected = Selected;
+        EditButton.IsEnabled = selected is not null;
         ArchiveButton.IsEnabled = selected is not null;
         DeleteButton.IsEnabled = selected is not null;
         ArchiveButton.Content = selected?.IsArchived == true ? "Wiederherstellen" : "Archivieren";
@@ -105,7 +106,9 @@ public partial class ImagesView : UserControl
             return;
         }
 
-        PlaceholderText.Text = selected.Placeholder;
+        PlaceholderText.Text = string.IsNullOrWhiteSpace(selected.Tags)
+            ? selected.Placeholder
+            : $"{selected.Placeholder}\nSchlagworte: {selected.Tags}";
 
         try
         {
@@ -122,35 +125,99 @@ public partial class ImagesView : UserControl
         }
     }
 
+    /// <summary>
+    /// Importiert ein oder mehrere Bilder. Name, Kategorie und Schlagworte werden in
+    /// einem Fenster je Bild festgelegt; Fehler einzelner Dateien brechen den Rest nicht ab.
+    /// </summary>
     private void OnImportClick(object sender, RoutedEventArgs e)
     {
         var dialog = new OpenFileDialog
         {
-            Title = "Bild auswählen",
+            Title = "Bilder auswählen",
             Filter = "Bilder|*.png;*.jpg;*.jpeg;*.gif;*.webp;*.bmp;*.svg;*.tif;*.tiff|Alle Dateien|*.*",
-            Multiselect = false,
+            Multiselect = true,
         };
 
-        if (dialog.ShowDialog(Window.GetWindow(this)) != true)
+        if (dialog.ShowDialog(Window.GetWindow(this)) != true || dialog.FileNames.Length == 0)
         {
             return;
         }
 
-        var input = new ImageInput
+        var properties = new ImagePropertiesWindow(dialog.FileNames, SelectedProjectId)
         {
-            Name = string.IsNullOrWhiteSpace(NameBox.Text)
-                ? Path.GetFileNameWithoutExtension(dialog.FileName)
-                : NameBox.Text,
-            Category = ImportCategoryBox.Text,
-            ProjectId = SelectedProjectId,
+            Owner = Window.GetWindow(this),
         };
+
+        if (properties.ShowDialog() != true)
+        {
+            return;
+        }
+
+        var imported = 0;
+        var errors = new List<string>();
+
+        foreach (var row in properties.Rows)
+        {
+            try
+            {
+                _services.Images.Import(row.FilePath, new ImageInput
+                {
+                    Name = row.Name,
+                    Category = row.Category,
+                    Tags = row.Tags,
+                    ProjectId = SelectedProjectId,
+                });
+                imported++;
+            }
+            catch (Exception exception)
+            {
+                errors.Add($"{Path.GetFileName(row.FilePath)}: {exception.Message}");
+            }
+        }
+
+        LoadImages();
+        InfoText.Text = imported == 1 ? "1 Bild importiert." : $"{imported} Bilder importiert.";
+
+        if (errors.Count > 0)
+        {
+            MessageBox.Show(
+                string.Join("\n", errors),
+                "Import nicht vollständig",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+    }
+
+    /// <summary>Ändert Name, Kategorie und Schlagworte eines bereits importierten Bildes.</summary>
+    private void OnEditClick(object sender, RoutedEventArgs e)
+    {
+        var selected = Selected;
+        if (selected is null)
+        {
+            return;
+        }
 
         try
         {
-            var image = _services.Images.Import(dialog.FileName, input);
-            NameBox.Text = string.Empty;
+            var properties = new ImagePropertiesWindow(_services.Images.Get(selected.Id))
+            {
+                Owner = Window.GetWindow(this),
+            };
+
+            if (properties.ShowDialog() != true || properties.Single is not { } row)
+            {
+                return;
+            }
+
+            _services.Images.Update(selected.Id, new ImageInput
+            {
+                Name = row.Name,
+                Category = row.Category,
+                Tags = row.Tags,
+            });
+
             LoadImages();
-            InfoText.Text = $"Importiert: {image.Name} ({image.SizeText})";
+            InfoText.Text = $"Gespeichert: {row.Name}";
         }
         catch (LiftUpException exception)
         {
@@ -158,7 +225,7 @@ public partial class ImagesView : UserControl
         }
         catch (Exception exception)
         {
-            InfoText.Text = "Import fehlgeschlagen: " + exception.Message;
+            InfoText.Text = "Bearbeiten fehlgeschlagen: " + exception.Message;
         }
     }
 

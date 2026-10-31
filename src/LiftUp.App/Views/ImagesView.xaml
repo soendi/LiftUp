@@ -18,13 +18,8 @@
                 </Grid.ColumnDefinitions>
 
                 <StackPanel Grid.Column="0" Orientation="Horizontal">
-                    <TextBlock Text="Name" VerticalAlignment="Center" Margin="0,0,6,0" Style="{StaticResource LiftUpFieldLabel}" />
-                    <TextBox x:Name="NameBox" Width="150" Margin="0,0,10,0" />
-
-                    <TextBlock Text="Kategorie" VerticalAlignment="Center" Margin="0,0,6,0" Style="{StaticResource LiftUpFieldLabel}" />
-                    <TextBox x:Name="ImportCategoryBox" Width="130" Margin="0,0,10,0" />
-
-                    <Button Content="Bild importieren" Style="{StaticResource LiftUpPrimaryButton}" Click="OnImportClick" />
+                    <Button Content="Bilder importieren …" Style="{StaticResource LiftUpPrimaryButton}"
+                            Click="OnImportClick" Margin="0" />
                 </StackPanel>
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="14,0,0,0">
@@ -55,7 +50,8 @@
                       SelectionChanged="OnSelectionChanged">
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="*" />
-                    <DataGridTextColumn Header="Kategorie" Binding="{Binding Category}" Width="150" />
+                    <DataGridTextColumn Header="Kategorie" Binding="{Binding Category}" Width="130" />
+                    <DataGridTextColumn Header="Schlagworte" Binding="{Binding Tags}" Width="170" />
                     <DataGridTextColumn Header="Bereich" Binding="{Binding ScopeText}" Width="90" />
                     <DataGridTextColumn Header="Größe" Binding="{Binding SizeText}" Width="90" />
                     <DataGridTextColumn Header="Status" Binding="{Binding StatusText}" Width="90" />
@@ -77,10 +73,11 @@
                     <StackPanel Grid.Row="1" Margin="0,8,0,0">
                         <TextBlock x:Name="PlaceholderText" FontFamily="Consolas" FontSize="12" TextWrapping="Wrap" />
                         <TextBlock Style="{StaticResource LiftUpMutedText}" TextWrapping="Wrap" Margin="0,4,0,0"
-                                   Text="Diesen Baustein in eine Vorlage einsetzen – das Bild wird als Data-URI eingebettet." />
+                                   Text="Diesen Baustein in eine Vorlage einsetzen – das Bild wird als Data-URI eingebettet. Im Dokumenteditor geht es auch direkt mit &amp;Name." />
                     </StackPanel>
 
                     <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+                        <Button x:Name="EditButton" Content="Bearbeiten …" Click="OnEditClick" IsEnabled="False" />
                         <Button x:Name="ArchiveButton" Content="Archivieren" Click="OnArchiveClick" IsEnabled="False" />
                         <Button x:Name="DeleteButton" Content="Löschen" Click="OnDeleteClick" IsEnabled="False" Margin="0" />
                     </StackPanel>

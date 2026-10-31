@@ -12,7 +12,7 @@ namespace LiftUp.Core.Data;
 /// </summary>
 public sealed class Database
 {
-    public const int CurrentSchemaVersion = 11;
+    public const int CurrentSchemaVersion = 12;
 
     private readonly string _connectionString;
 
@@ -149,6 +149,9 @@ public sealed class Database
 
         // Version 11 legt Firma, E-Mail und Telefon direkt am Benutzer ab.
         MigrateUserProfile(connection);
+
+        // Version 12 ergänzt Schlagworte an Bildern.
+        MigrateImageTags(connection);
 
         using var command = Db.Command(connection, "UPDATE SchemaInfo SET Version = $version;");
         command.With("$version", CurrentSchemaVersion);
@@ -390,6 +393,31 @@ public sealed class Database
             using var alter = Db.Command(connection, $"ALTER TABLE Users ADD COLUMN {name} {definition};");
             alter.ExecuteNonQuery();
         }
+    }
+
+    /// <summary>
+    /// Version 12: Bilder lassen sich mit Schlagworten versehen. Sie ergänzen Name und
+    /// Kategorie in der Bildsuche, ohne dass bestehende Bilder etwas verlieren.
+    /// </summary>
+    private static void MigrateImageTags(SqliteConnection connection)
+    {
+        var existing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using (var info = Db.Command(connection, "PRAGMA table_info(Images);"))
+        using (var reader = info.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                existing.Add(reader.GetString(1));
+            }
+        }
+
+        if (existing.Contains("Tags"))
+        {
+            return;
+        }
+
+        using var alter = Db.Command(connection, "ALTER TABLE Images ADD COLUMN Tags TEXT NULL;");
+        alter.ExecuteNonQuery();
     }
 
     /// <summary>Übernimmt vorhandene Typnamen bestehender Vorlagen in die Typenliste.</summary>
@@ -762,6 +790,7 @@ public sealed class Database
             Name        TEXT NOT NULL COLLATE NOCASE,
             Category    TEXT NULL,
             Description TEXT NULL,
+            Tags        TEXT NULL,
             ProjectId   TEXT NULL REFERENCES Projects(Id),
             FileName    TEXT NOT NULL,
             FilePath    TEXT NOT NULL,

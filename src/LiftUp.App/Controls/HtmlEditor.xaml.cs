@@ -18,6 +18,12 @@ public partial class HtmlEditor : UserControl
     /// <summary>Ein Treffer der „/“-Suche: Name, Zusatzinfo und einzufügender HTML-Inhalt.</summary>
     public sealed record SnippetChoice(string Name, string Detail, string Html);
 
+    /// <summary>
+    /// Ein Treffer der „&amp;“-Suche: wie <see cref="SnippetChoice"/>, zusätzlich mit einem
+    /// kleinen Vorschaubild als Data-URI.
+    /// </summary>
+    public sealed record ImageChoice(string Name, string Detail, string Html, string Preview);
+
     private const string EditorPage = """
         <!DOCTYPE html>
         <html lang="de">
@@ -64,7 +70,7 @@ public partial class HtmlEditor : UserControl
             .liftup-snippets-row {
                 display: flex;
                 gap: 10px;
-                align-items: baseline;
+                align-items: center;
                 padding: 5px 8px;
                 border-radius: 4px;
                 cursor: pointer;
@@ -79,6 +85,15 @@ public partial class HtmlEditor : UserControl
                 white-space: nowrap;
             }
             .liftup-snippets-empty { padding: 6px 8px; color: #6B7686; }
+            .liftup-snippets-thumb {
+                width: 44px;
+                height: 32px;
+                object-fit: contain;
+                background: #FFFFFF;
+                border: 1px solid #DCE1E8;
+                border-radius: 3px;
+                flex: 0 0 auto;
+            }
         </style>
         </head>
         <body contenteditable="true" spellcheck="false"></body>
@@ -106,6 +121,7 @@ public partial class HtmlEditor : UserControl
             window.liftupSnippetItems = [];
             window.liftupSnippetIndex = 0;
             window.liftupSnippetToken = null;
+            window.liftupSnippetKind = null;
             window.liftupSnippetRequest = 0;
 
             window.liftupEnableSnippets = function (on) {
@@ -128,6 +144,7 @@ public partial class HtmlEditor : UserControl
                 window.liftupSnippetItems = [];
                 window.liftupSnippetIndex = 0;
                 window.liftupSnippetToken = null;
+                window.liftupSnippetKind = null;
             };
 
             window.liftupSnippetTokenAtCaret = function () {
@@ -141,11 +158,34 @@ public partial class HtmlEditor : UserControl
                 }
                 var offset = selection.anchorOffset;
                 var before = node.nodeValue.substring(0, offset);
-                var match = /(^|[\s\u00a0>])\/([^\s\/]{0,40})$/.exec(before);
-                if (!match) {
+
+                // „&&bild“ sucht in allen Projekten, „&bild“ nur im aktiven Projekt.
+                var image = /(^|[\s\u00a0>])(&{1,2})([^\s&]{0,40})$/.exec(before);
+                if (image) {
+                    var prefix = image[2].length;
+                    return {
+                        kind: 'image',
+                        all: prefix === 2,
+                        node: node,
+                        start: offset - prefix - image[3].length,
+                        length: prefix + image[3].length,
+                        query: image[3]
+                    };
+                }
+
+                var snippet = /(^|[\s\u00a0>])\/([^\s\/]{0,40})$/.exec(before);
+                if (!snippet) {
                     return null;
                 }
-                return { node: node, start: offset - match[2].length - 1, query: match[2] };
+
+                return {
+                    kind: 'snippet',
+                    all: false,
+                    node: node,
+                    start: offset - snippet[2].length - 1,
+                    length: snippet[2].length + 1,
+                    query: snippet[2]
+                };
             };
 
             window.liftupCaretRect = function () {
@@ -183,12 +223,22 @@ public partial class HtmlEditor : UserControl
                 if (items.length === 0) {
                     var empty = document.createElement('div');
                     empty.className = 'liftup-snippets-empty';
-                    empty.textContent = 'Keine Textbausteine gefunden';
+                    empty.textContent = window.liftupSnippetKind === 'image'
+                        ? 'Keine Bilder gefunden'
+                        : 'Keine Textbausteine gefunden';
                     panel.appendChild(empty);
                 } else {
                     items.forEach(function (item, position) {
                         var row = document.createElement('div');
                         row.className = 'liftup-snippets-row' + (position === window.liftupSnippetIndex ? ' active' : '');
+
+                        if (item.preview) {
+                            var thumb = document.createElement('img');
+                            thumb.className = 'liftup-snippets-thumb';
+                            thumb.src = item.preview;
+                            thumb.alt = '';
+                            row.appendChild(thumb);
+                        }
 
                         var name = document.createElement('span');
                         name.className = 'liftup-snippets-name';
@@ -224,12 +274,14 @@ public partial class HtmlEditor : UserControl
                     return;
                 }
                 window.liftupSnippetToken = token;
+                window.liftupSnippetKind = token.kind;
                 var requestId = ++window.liftupSnippetRequest;
                 try {
                     window.chrome.webview.postMessage(JSON.stringify({
-                        type: 'snippetQuery',
+                        type: token.kind === 'image' ? 'imageQuery' : 'snippetQuery',
                         requestId: requestId,
-                        query: token.query
+                        query: token.query,
+                        all: !!token.all
                     }));
                 } catch (error) {
                     window.liftupCloseSnippets();
@@ -269,7 +321,7 @@ public partial class HtmlEditor : UserControl
                 }
 
                 var range = document.createRange();
-                var end = token.start + 1 + token.query.length;
+                var end = token.start + token.length;
                 try {
                     range.setStart(token.node, token.start);
                     range.setEnd(token.node, Math.min(end, token.node.nodeValue.length));
@@ -333,6 +385,7 @@ public partial class HtmlEditor : UserControl
     private Task? _initialization;
     private string _pendingHtml = string.Empty;
     private Func<string, IReadOnlyList<SnippetChoice>>? _snippetSearch;
+    private Func<string, bool, IReadOnlyList<ImageChoice>>? _imageSearch;
 
     public HtmlEditor()
     {
@@ -420,6 +473,20 @@ public partial class HtmlEditor : UserControl
         }
     }
 
+    /// <summary>
+    /// Schaltet die Bildsuche ein: nach „&amp;“ sucht der Editor im aktiven Projekt, nach
+    /// „&amp;&amp;“ in allen Projekten. Jeder Treffer zeigt ein Vorschaubild.
+    /// </summary>
+    public void EnableImageAutocomplete(Func<string, bool, IReadOnlyList<ImageChoice>> search)
+    {
+        _imageSearch = search;
+
+        if (_ready && Browser.CoreWebView2 is not null)
+        {
+            _ = EnableSnippetsAsync();
+        }
+    }
+
     private async Task EnableSnippetsAsync()
     {
         try
@@ -477,7 +544,7 @@ public partial class HtmlEditor : UserControl
             _ready = true;
             await ApplyHtmlAsync();
 
-            if (_snippetSearch is not null)
+            if (_snippetSearch is not null || _imageSearch is not null)
             {
                 await EnableSnippetsAsync();
             }
@@ -492,10 +559,10 @@ public partial class HtmlEditor : UserControl
         }
     }
 
-    /// <summary>Beantwortet die „/“-Suche aus dem Editor mit den passenden Bausteinen.</summary>
+    /// <summary>Beantwortet die „/“- und die „&amp;“-Suche aus dem Editor.</summary>
     private void OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
     {
-        if (_snippetSearch is null || Browser.CoreWebView2 is null)
+        if ((_snippetSearch is null && _imageSearch is null) || Browser.CoreWebView2 is null)
         {
             return;
         }
@@ -512,9 +579,14 @@ public partial class HtmlEditor : UserControl
             var root = message.RootElement;
 
             if (!root.TryGetProperty("type", out var type) ||
-                !string.Equals(type.GetString(), "snippetQuery", StringComparison.Ordinal) ||
                 !root.TryGetProperty("requestId", out var requestElement) ||
                 !requestElement.TryGetInt64(out var requestId))
+            {
+                return;
+            }
+
+            var kind = type.GetString();
+            if (kind is not ("snippetQuery" or "imageQuery"))
             {
                 return;
             }
@@ -523,9 +595,30 @@ public partial class HtmlEditor : UserControl
                 ? queryElement.GetString() ?? string.Empty
                 : string.Empty;
 
-            var matches = _snippetSearch(query)
-                .Select(choice => new { name = choice.Name, detail = choice.Detail, html = choice.Html })
-                .ToArray();
+            var all = root.TryGetProperty("all", out var allElement) && allElement.ValueKind == JsonValueKind.True;
+
+            object[] matches = kind switch
+            {
+                "snippetQuery" when _snippetSearch is not null => _snippetSearch(query)
+                    .Select(choice => (object)new
+                    {
+                        name = choice.Name,
+                        detail = choice.Detail,
+                        html = choice.Html,
+                        preview = string.Empty,
+                    })
+                    .ToArray(),
+                "imageQuery" when _imageSearch is not null => _imageSearch(query, all)
+                    .Select(choice => (object)new
+                    {
+                        name = choice.Name,
+                        detail = choice.Detail,
+                        html = choice.Html,
+                        preview = choice.Preview,
+                    })
+                    .ToArray(),
+                _ => [],
+            };
 
             var script = "window.liftupSnippetResults(" + requestId + ", "
                          + JsonSerializer.Serialize(matches) + "); true";

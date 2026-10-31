@@ -1,6 +1,8 @@
 using System.Diagnostics;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media.Imaging;
 using LiftUp.App.Controls;
 using LiftUp.Core.Documents;
 using LiftUp.Core.Domain;
@@ -177,7 +179,7 @@ public partial class DocumentComposerWindow : Window
             AddSection(section.Title);
         }
 
-        InfoText.Text = $"{template.Name}: {defined.Count} Abschnitt(e), jeder beginnt im PDF auf einer neuen Seite.";
+        InfoText.Text = $"{template.Name}: {defined.Count} Abschnitt(e) fließen mit Abstand untereinander; der erste beginnt auf Seite 2. Im Text mit /Textbaustein und &Bild suchen (&&Bild für alle Projekte).";
     }
 
     private void AddSection(string title, string? html = null)
@@ -217,6 +219,7 @@ public partial class DocumentComposerWindow : Window
 
         var editor = new HtmlEditor();
         editor.EnableSnippetAutocomplete(SearchSnippets);
+        editor.EnableImageAutocomplete(SearchImages);
         if (!string.IsNullOrWhiteSpace(html))
         {
             editor.SetHtml(html);
@@ -265,6 +268,88 @@ public partial class DocumentComposerWindow : Window
         {
             InfoText.Text = exception.Message;
             return [];
+        }
+    }
+
+    /// <summary>
+    /// Sucht für die „&amp;“-Eingabe im Editor nach Bildern. „&amp;“ durchsucht die Bilder
+    /// des aktiven Projekts (globale Bibliothek plus Projektbilder), „&amp;&amp;“ alle.
+    /// Jeder Treffer bringt ein kleines Vorschaubild für die Liste mit.
+    /// </summary>
+    private IReadOnlyList<HtmlEditor.ImageChoice> SearchImages(string query, bool allProjects)
+    {
+        var project = SelectedProject;
+        if (project is null)
+        {
+            return [];
+        }
+
+        try
+        {
+            var images = _services.Images.Search(project.Id, query, allProjects: allProjects);
+            var choices = new List<HtmlEditor.ImageChoice>();
+
+            foreach (var image in images)
+            {
+                if (image.IsArchived)
+                {
+                    continue;
+                }
+
+                var html = ImageEmbedding.ToImageTag(image.FilePath, image.Name);
+                if (html is null)
+                {
+                    continue;
+                }
+
+                var detail = string.Join(" · ", new[] { image.Category, image.Tags, image.ScopeText }
+                    .Where(value => !string.IsNullOrWhiteSpace(value)));
+
+                choices.Add(new HtmlEditor.ImageChoice(
+                    image.Name,
+                    detail,
+                    html,
+                    Thumbnail(image.FilePath) ?? string.Empty));
+            }
+
+            return choices;
+        }
+        catch (LiftUpException exception)
+        {
+            InfoText.Text = exception.Message;
+            return [];
+        }
+    }
+
+    /// <summary>Verkleinert ein Bild für die Vorschlagsliste; SVG und TIFF bleiben ohne Vorschau.</summary>
+    private static string? Thumbnail(string path)
+    {
+        try
+        {
+            if (!File.Exists(path) || ImageEmbedding.ContentTypeFor(path) is "image/svg+xml" or "image/tiff")
+            {
+                return null;
+            }
+
+            var bitmap = new BitmapImage();
+            bitmap.BeginInit();
+            bitmap.CacheOption = BitmapCacheOption.OnLoad;
+            bitmap.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
+            bitmap.DecodePixelWidth = 48;
+            bitmap.UriSource = new Uri(path);
+            bitmap.EndInit();
+            bitmap.Freeze();
+
+            var encoder = new PngBitmapEncoder();
+            encoder.Frames.Add(BitmapFrame.Create(bitmap));
+            using var stream = new MemoryStream();
+            encoder.Save(stream);
+
+            return "data:image/png;base64," + Convert.ToBase64String(stream.ToArray());
+        }
+        catch (Exception)
+        {
+            return null;
         }
     }
 

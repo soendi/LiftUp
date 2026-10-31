@@ -29,11 +29,29 @@ public sealed class ImageService
 
     public string LibraryRoot => _libraryRoot;
 
-    public IReadOnlyList<ImageListItem> Search(Guid? projectId, string? search, bool includeArchived = false)
+    /// <summary>
+    /// Sucht Bilder nach Name, Kategorie, Schlagworten und Beschreibung. Jedes Suchwort
+    /// muss passen, damit „logo rot“ auch bei getrennt gespeicherten Schlagworten trifft.
+    /// </summary>
+    public IReadOnlyList<ImageListItem> Search(
+        Guid? projectId,
+        string? search,
+        bool includeArchived = false,
+        bool allProjects = false)
     {
         _actor.Require(Permission.ViewProjects);
         using var connection = _database.Open();
-        return _images.Search(connection, null, projectId, search, includeArchived);
+        return _images.Search(connection, null, projectId, search, includeArchived, allProjects);
+    }
+
+    /// <summary>Liefert ein Bild aus der Bibliothek.</summary>
+    public LibraryImage Get(Guid id)
+    {
+        _actor.Require(Permission.ViewProjects);
+
+        using var connection = _database.Open();
+        return _images.GetById(connection, null, id)
+               ?? throw new ValidationException("Das Bild wurde nicht gefunden.");
     }
 
     public LibraryImage Import(string sourcePath, ImageInput input)
@@ -54,14 +72,9 @@ public sealed class ImageService
                 $"Der Dateityp \"{extension}\" wird nicht unterstützt. Möglich sind PNG, JPG, GIF, WebP, BMP und SVG.");
         }
 
-        var name = string.IsNullOrWhiteSpace(input.Name)
+        var name = RequireName(string.IsNullOrWhiteSpace(input.Name)
             ? Path.GetFileNameWithoutExtension(sourcePath)
-            : input.Name.Trim();
-
-        if (name.Length == 0)
-        {
-            throw new ValidationException("Bitte einen Namen für das Bild angeben.");
-        }
+            : input.Name);
 
         using var connection = _database.Open();
         using var transaction = connection.BeginTransaction();
@@ -91,8 +104,9 @@ public sealed class ImageService
         var image = new LibraryImage
         {
             Name = name,
-            Category = string.IsNullOrWhiteSpace(input.Category) ? null : input.Category.Trim(),
-            Description = string.IsNullOrWhiteSpace(input.Description) ? null : input.Description.Trim(),
+            Category = Clean(input.Category),
+            Description = Clean(input.Description),
+            Tags = NormalizeTags(input.Tags),
             ProjectId = input.ProjectId,
             FileName = fileName,
             FilePath = targetPath,
@@ -104,9 +118,45 @@ public sealed class ImageService
 
         _images.Insert(connection, transaction, image);
         _changes.Record(connection, transaction, "Image", image.Id.ToString("D"), "Create",
-            new { image.Name, image.Category, image.ProjectId }, 1);
+            new { image.Name, image.Category, image.Tags, image.ProjectId }, 1);
         transaction.Commit();
 
+        return image;
+    }
+
+    /// <summary>
+    /// Ändert Name, Kategorie, Schlagworte und Beschreibung eines bereits importierten
+    /// Bildes. Die Datei bleibt, wo sie ist.
+    /// </summary>
+    public LibraryImage Update(Guid id, ImageInput input)
+    {
+        _actor.Require(Permission.ManageImages);
+        ArgumentNullException.ThrowIfNull(input);
+
+        var name = RequireName(input.Name);
+
+        using var connection = _database.Open();
+        using var transaction = connection.BeginTransaction();
+
+        var image = _images.GetById(connection, transaction, id)
+                    ?? throw new ValidationException("Das Bild wurde nicht gefunden.");
+
+        if (_images.NameExists(connection, transaction, name, image.ProjectId, id))
+        {
+            throw new ValidationException($"Es gibt bereits ein Bild mit dem Namen \"{name}\".");
+        }
+
+        image.Name = name;
+        image.Category = Clean(input.Category);
+        image.Description = Clean(input.Description);
+        image.Tags = NormalizeTags(input.Tags);
+
+        var rowVersion = _images.Update(connection, transaction, image);
+        _changes.Record(connection, transaction, "Image", id.ToString("D"), "Update",
+            new { image.Name, image.Category, image.Tags }, rowVersion);
+        transaction.Commit();
+
+        image.RowVersion = rowVersion;
         return image;
     }
 
@@ -156,4 +206,32 @@ public sealed class ImageService
         var match = images.LastOrDefault(image => string.Equals(image.Name, name, StringComparison.OrdinalIgnoreCase));
         return match is null ? null : ImageEmbedding.ToImageTag(match);
     }
+
+    /// <summary>Vereinheitlicht Schlagworte: durch Komma getrennt, ohne Doppelte.</summary>
+    public static string? NormalizeTags(string? tags)
+    {
+        if (string.IsNullOrWhiteSpace(tags))
+        {
+            return null;
+        }
+
+        var values = tags
+            .Split([',', ';', '\n', '\r', '\t'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(value => value.Length > 0)
+            .Distinct(StringComparer.CurrentCultureIgnoreCase)
+            .ToArray();
+
+        return values.Length == 0 ? null : string.Join(", ", values);
+    }
+
+    private static string RequireName(string? name)
+    {
+        var value = (name ?? string.Empty).Trim();
+        return value.Length == 0
+            ? throw new ValidationException("Bitte einen Namen für das Bild angeben.")
+            : value;
+    }
+
+    private static string? Clean(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

@@ -7,26 +7,30 @@ namespace LiftUp.Core.Repositories;
 public sealed class ImageRepository
 {
     private const string Columns =
-        "Id, Name, Category, Description, ProjectId, FileName, FilePath, ContentType, SizeBytes, " +
+        "Id, Name, Category, Description, Tags, ProjectId, FileName, FilePath, ContentType, SizeBytes, " +
         "IsArchived, CreatedUtc, CreatedBy, RowVersion";
 
+    /// <summary>
+    /// Sucht Bilder. Ohne Projekt enthält das Ergebnis die globale Bibliothek, mit Projekt
+    /// zusätzlich dessen eigene Bilder. <paramref name="allProjects"/> hebt die
+    /// Projektgrenze auf (für „&amp;&amp;bild“ im Dokumenteditor).
+    /// </summary>
     public IReadOnlyList<ImageListItem> Search(
         SqliteConnection connection,
         SqliteTransaction? transaction,
         Guid? projectId,
         string? search,
-        bool includeArchived)
+        bool includeArchived,
+        bool allProjects = false)
     {
         var conditions = new List<string>();
 
-        // Ohne Projekt: nur die globale Bibliothek. Mit Projekt: globale plus dessen Bilder.
-        if (projectId is null)
+        if (!allProjects)
         {
-            conditions.Add("ProjectId IS NULL");
-        }
-        else
-        {
-            conditions.Add("(ProjectId IS NULL OR ProjectId = $projectId)");
+            // Ohne Projekt: nur die globale Bibliothek. Mit Projekt: globale plus dessen Bilder.
+            conditions.Add(projectId is null
+                ? "ProjectId IS NULL"
+                : "(ProjectId IS NULL OR ProjectId = $projectId)");
         }
 
         if (!includeArchived)
@@ -34,43 +38,51 @@ public sealed class ImageRepository
             conditions.Add("IsArchived = 0");
         }
 
-        if (!string.IsNullOrWhiteSpace(search))
+        // Jedes Suchwort muss irgendwo passen: Name, Kategorie, Schlagworte oder Beschreibung.
+        var terms = (search ?? string.Empty)
+            .Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToArray();
+
+        for (var index = 0; index < terms.Length; index++)
         {
-            conditions.Add("(Name LIKE $pattern OR Category LIKE $pattern OR Description LIKE $pattern)");
+            conditions.Add(
+                $"(Name LIKE $term{index} OR Category LIKE $term{index} OR Tags LIKE $term{index} " +
+                $"OR Description LIKE $term{index})");
         }
 
         using var command = Db.Command(connection, $"""
-            SELECT Id, Name, Category, ProjectId, FilePath, SizeBytes, IsArchived, CreatedUtc
+            SELECT Id, Name, Category, Tags, ProjectId, FilePath, SizeBytes, IsArchived, CreatedUtc
             FROM Images
             WHERE {string.Join(" AND ", conditions)}
             ORDER BY ProjectId IS NULL DESC, Category COLLATE NOCASE, Name COLLATE NOCASE;
             """, transaction);
 
-        if (projectId is not null)
+        if (!allProjects && projectId is not null)
         {
             command.With("$projectId", projectId.Value.ToString("D"));
         }
 
-        if (!string.IsNullOrWhiteSpace(search))
+        for (var index = 0; index < terms.Length; index++)
         {
-            command.With("$pattern", $"%{search.Trim()}%");
+            command.With($"$term{index}", $"%{terms[index]}%");
         }
 
         using var reader = command.ExecuteReader();
         var items = new List<ImageListItem>();
         while (reader.Read())
         {
-            var size = reader.Int64(5);
+            var size = reader.Int64(6);
             items.Add(new ImageListItem
             {
                 Id = reader.Guid(0),
                 Name = reader.Text(1),
                 Category = reader.Text(2),
-                IsGlobal = reader.IsDBNull(3),
-                FilePath = reader.Text(4),
+                Tags = reader.Text(3),
+                IsGlobal = reader.IsDBNull(4),
+                FilePath = reader.Text(5),
                 SizeText = size < 1024 ? $"{size} B" : $"{size / 1024.0:0.0} KB",
-                IsArchived = reader.Bool(6),
-                CreatedText = reader.Date(7).ToLocalTime().ToString("dd.MM.yyyy HH:mm"),
+                IsArchived = reader.Bool(7),
+                CreatedText = reader.Date(8).ToLocalTime().ToString("dd.MM.yyyy HH:mm"),
             });
         }
 
@@ -128,13 +140,14 @@ public sealed class ImageRepository
     {
         using var command = Db.Command(connection, $"""
             INSERT INTO Images ({Columns}) VALUES
-                ($id, $name, $category, $description, $projectId, $fileName, $filePath, $contentType, $sizeBytes,
+                ($id, $name, $category, $description, $tags, $projectId, $fileName, $filePath, $contentType, $sizeBytes,
                  $archived, $createdUtc, $createdBy, 1);
             """, transaction);
         command.With("$id", image.Id.ToString("D"))
             .With("$name", image.Name)
             .With("$category", image.Category)
             .With("$description", image.Description)
+            .With("$tags", image.Tags)
             .With("$projectId", image.ProjectId?.ToString("D"))
             .With("$fileName", image.FileName)
             .With("$filePath", image.FilePath)
@@ -144,6 +157,23 @@ public sealed class ImageRepository
             .With("$createdUtc", image.CreatedUtc.ToDb())
             .With("$createdBy", image.CreatedBy);
         command.ExecuteNonQuery();
+    }
+
+    public long Update(SqliteConnection connection, SqliteTransaction? transaction, LibraryImage image)
+    {
+        using var command = Db.Command(connection, """
+            UPDATE Images
+            SET Name = $name, Category = $category, Description = $description, Tags = $tags,
+                RowVersion = RowVersion + 1
+            WHERE Id = $id
+            RETURNING RowVersion;
+            """, transaction);
+        command.With("$id", image.Id.ToString("D"))
+            .With("$name", image.Name)
+            .With("$category", image.Category)
+            .With("$description", image.Description)
+            .With("$tags", image.Tags);
+        return Convert.ToInt64(command.ExecuteScalar());
     }
 
     public void Delete(SqliteConnection connection, SqliteTransaction? transaction, Guid id)
@@ -169,14 +199,15 @@ public sealed class ImageRepository
         Name = reader.Text(1),
         Category = reader.TextOrNull(2),
         Description = reader.TextOrNull(3),
-        ProjectId = reader.TextOrNull(4) is { } projectId ? Guid.Parse(projectId) : null,
-        FileName = reader.Text(5),
-        FilePath = reader.Text(6),
-        ContentType = reader.Text(7),
-        SizeBytes = reader.Int64(8),
-        IsArchived = reader.Bool(9),
-        CreatedUtc = reader.Date(10),
-        CreatedBy = reader.TextOrNull(11),
-        RowVersion = reader.Int64(12),
+        Tags = reader.TextOrNull(4),
+        ProjectId = reader.TextOrNull(5) is { } projectId ? Guid.Parse(projectId) : null,
+        FileName = reader.Text(6),
+        FilePath = reader.Text(7),
+        ContentType = reader.Text(8),
+        SizeBytes = reader.Int64(9),
+        IsArchived = reader.Bool(10),
+        CreatedUtc = reader.Date(11),
+        CreatedBy = reader.TextOrNull(12),
+        RowVersion = reader.Int64(13),
     };
 }

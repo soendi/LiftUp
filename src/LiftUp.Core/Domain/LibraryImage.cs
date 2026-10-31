@@ -8,6 +8,9 @@ public sealed class LibraryImage
     public string? Category { get; set; }
     public string? Description { get; set; }
 
+    /// <summary>Schlagworte, durch Komma getrennt – für die Suche mit „&amp;bild“.</summary>
+    public string? Tags { get; set; }
+
     /// <summary>Null bedeutet: globale Bibliothek, sonst projektbezogen.</summary>
     public Guid? ProjectId { get; set; }
 
@@ -31,6 +34,7 @@ public sealed class ImageInput
     public string Name { get; set; } = string.Empty;
     public string? Category { get; set; }
     public string? Description { get; set; }
+    public string? Tags { get; set; }
     public Guid? ProjectId { get; set; }
 }
 
@@ -39,6 +43,7 @@ public sealed class ImageListItem
     public Guid Id { get; init; }
     public string Name { get; init; } = string.Empty;
     public string Category { get; init; } = string.Empty;
+    public string Tags { get; init; } = string.Empty;
     public string FilePath { get; init; } = string.Empty;
     public string SizeText { get; init; } = string.Empty;
     public bool IsArchived { get; init; }
