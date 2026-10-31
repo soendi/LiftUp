@@ -44,7 +44,7 @@
                           DisplayMemberPath="Name" SelectedValuePath="Id" />
 
                 <TextBlock Grid.Row="3" Grid.Column="0" Text="Status" Style="{StaticResource LiftUpFieldLabel}" VerticalAlignment="Center" />
-                <ComboBox Grid.Row="3" Grid.Column="1" x:Name="StatusBox" Margin="0,3,0,8" DisplayMemberPath="Name" />
+                <ComboBox Grid.Row="3" Grid.Column="1" x:Name="StatusBox" Margin="0,3,0,8" DisplayMemberPath="Name" SelectedValuePath="Value" />
 
                 <TextBlock Grid.Row="4" Grid.Column="0" Text="Beschreibung" Style="{StaticResource LiftUpFieldLabel}" VerticalAlignment="Top" Margin="0,7,0,0" />
                 <TextBox Grid.Row="4" Grid.Column="1" x:Name="DescriptionBox" Height="64" Margin="0,3,0,8"
