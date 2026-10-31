@@ -55,7 +55,7 @@
             </Grid.ColumnDefinitions>
 
             <DataGrid x:Name="ImagesGrid" Grid.Column="0" IsReadOnly="True" Margin="0,0,10,0"
-                      SelectionChanged="OnSelectionChanged">
+                      SelectionMode="Extended" SelectionChanged="OnSelectionChanged">
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="*" />
                     <DataGridTextColumn Header="Kategorie" Binding="{Binding Category}" Width="130" />
@@ -116,11 +116,13 @@
                                    Text="Diesen Baustein in eine Vorlage einsetzen – das Bild wird als Data-URI eingebettet. Im Dokumenteditor geht es auch direkt mit &amp;Name." />
                     </StackPanel>
 
-                    <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+                    <WrapPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+                        <Button x:Name="BulkTagsButton" Content="Schlagworte …" Click="OnBulkTagsClick" IsEnabled="False"
+                                ToolTip="Schlagworte für alle markierten Bilder setzen oder entfernen" />
                         <Button x:Name="EditButton" Content="Bearbeiten …" Click="OnEditClick" IsEnabled="False" />
                         <Button x:Name="ArchiveButton" Content="Archivieren" Click="OnArchiveClick" IsEnabled="False" />
                         <Button x:Name="DeleteButton" Content="Löschen" Click="OnDeleteClick" IsEnabled="False" Margin="0" />
-                    </StackPanel>
+                    </WrapPanel>
                 </Grid>
             </Border>
         </Grid>

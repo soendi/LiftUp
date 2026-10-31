@@ -222,6 +222,23 @@ public sealed class ImageRepository
         return Convert.ToInt64(command.ExecuteScalar());
     }
 
+    /// <summary>Ersetzt die Schlagworte eines Bildes (Sammelbearbeitung).</summary>
+    public long UpdateTags(
+        SqliteConnection connection,
+        SqliteTransaction? transaction,
+        Guid id,
+        string? tags)
+    {
+        using var command = Db.Command(connection, """
+            UPDATE Images
+            SET Tags = $tags, RowVersion = RowVersion + 1
+            WHERE Id = $id
+            RETURNING RowVersion;
+            """, transaction);
+        command.With("$id", id.ToString("D")).With("$tags", tags);
+        return Convert.ToInt64(command.ExecuteScalar());
+    }
+
     public void Delete(SqliteConnection connection, SqliteTransaction? transaction, Guid id)
     {
         using var command = Db.Command(connection, "DELETE FROM Images WHERE Id = $id;", transaction);

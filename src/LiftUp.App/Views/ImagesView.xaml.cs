@@ -108,6 +108,7 @@ public partial class ImagesView : UserControl
 
         var result = filtered.ToArray();
         ImagesGrid.ItemsSource = result;
+        UpdateBulkTagsButton();
 
         var missing = result.Count(item => !item.FileExists);
         RemoveMissingButton.IsEnabled = missing > 0;
@@ -226,6 +227,59 @@ public partial class ImagesView : UserControl
 
     private ImageListItem? Selected => ImagesGrid.SelectedItem as ImageListItem;
 
+    /// <summary>Mehrfachauswahl für Sammeländerungen an Schlagworten.</summary>
+    private IReadOnlyList<ImageListItem> SelectedItems =>
+        ImagesGrid.SelectedItems.Cast<ImageListItem>().ToArray();
+
+    private void UpdateBulkTagsButton()
+    {
+        var count = ImagesGrid.SelectedItems.Count;
+        BulkTagsButton.IsEnabled = count > 0;
+        BulkTagsButton.Content = count > 1 ? $"Schlagworte ({count}) …" : "Schlagworte …";
+    }
+
+    /// <summary>
+    /// Setzt oder entfernt Schlagworte für alle markierten Bilder in einem Schritt.
+    /// Mehrere Bilder lassen sich mit Strg- oder Umschalt-Klick markieren.
+    /// </summary>
+    private void OnBulkTagsClick(object sender, RoutedEventArgs e)
+    {
+        var selected = SelectedItems;
+        if (selected.Count == 0)
+        {
+            InfoText.Text = "Bitte zuerst Bilder markieren (Strg oder Umschalt gedrückt halten).";
+            return;
+        }
+
+        var window = new ImageTagsWindow(selected, _availableTags)
+        {
+            Owner = Window.GetWindow(this),
+        };
+
+        if (window.ShowDialog() != true)
+        {
+            return;
+        }
+
+        try
+        {
+            var changed = _services.Images.SetTags(
+                selected.Select(item => item.Id).ToArray(), window.AddTags, window.RemoveTags);
+
+            LoadImages();
+            InfoText.Text = changed switch
+            {
+                0 => "Die Schlagworte waren bereits so gesetzt.",
+                1 => "Schlagworte von 1 Bild aktualisiert.",
+                _ => $"Schlagworte von {changed} Bildern aktualisiert.",
+            };
+        }
+        catch (LiftUpException exception)
+        {
+            InfoText.Text = exception.Message;
+        }
+    }
+
     /// <summary>Gleicht den Projektordner mit der Bildbibliothek ab; 0 ohne neues Bild.</summary>
     private ProjectFolderSyncResult SyncProjectFolder()
     {
@@ -341,6 +395,7 @@ public partial class ImagesView : UserControl
         ArchiveButton.IsEnabled = selected is not null;
         DeleteButton.IsEnabled = selected is not null;
         ArchiveButton.Content = selected?.IsArchived == true ? "Wiederherstellen" : "Archivieren";
+        UpdateBulkTagsButton();
 
         PreviewImage.Source = null;
         PlaceholderText.Text = string.Empty;

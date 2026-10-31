@@ -235,6 +235,65 @@ public sealed class ImageService
         return removed;
     }
 
+    /// <summary>
+    /// Setzt Schlagworte für mehrere Bilder gleichzeitig: <paramref name="addTags"/> kommen
+    /// hinzu, <paramref name="removeTags"/> werden entfernt. Beides darf eine kommagetrennte
+    /// Liste sein. Liefert die Anzahl der tatsächlich geänderten Bilder.
+    /// </summary>
+    public int SetTags(IReadOnlyCollection<Guid> ids, string? addTags, string? removeTags)
+    {
+        _actor.Require(Permission.ManageImages);
+        ArgumentNullException.ThrowIfNull(ids);
+
+        var add = ImageTags.Split(addTags);
+        var remove = ImageTags.Split(removeTags);
+
+        if (ids.Count == 0 || (add.Count == 0 && remove.Count == 0))
+        {
+            return 0;
+        }
+
+        using var connection = _database.Open();
+        using var transaction = connection.BeginTransaction();
+
+        var changed = 0;
+        foreach (var id in ids.Distinct())
+        {
+            var image = _images.GetById(connection, transaction, id)
+                        ?? throw new ValidationException("Ein ausgewähltes Bild wurde nicht gefunden.");
+
+            var tags = ImageTags.Split(image.Tags).ToList();
+            tags.RemoveAll(tag => remove.Any(value =>
+                string.Equals(value, tag, StringComparison.CurrentCultureIgnoreCase)));
+
+            foreach (var tag in add)
+            {
+                if (!tags.Contains(tag, StringComparer.CurrentCultureIgnoreCase))
+                {
+                    tags.Add(tag);
+                }
+            }
+
+            var normalized = NormalizeTags(string.Join(", ", tags));
+            if (string.Equals(normalized, image.Tags, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var rowVersion = _images.UpdateTags(connection, transaction, id, normalized);
+            _changes.Record(connection, transaction, "Image", id.ToString("D"), "Update",
+                new { image.Name, Tags = normalized, Batch = true }, rowVersion);
+            changed++;
+        }
+
+        if (changed > 0)
+        {
+            transaction.Commit();
+        }
+
+        return changed;
+    }
+
     /// <summary>Liefert den HTML-Baustein für ein Bild (Data-URI) oder null.</summary>
     public string? GetImageTag(Guid? projectId, string name)
     {
