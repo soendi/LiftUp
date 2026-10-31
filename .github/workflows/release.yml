@@ -139,6 +139,7 @@ jobs:
         shell: pwsh
         run: |
           wix build installer/Server.wxs `
+            -arch x64 `
             -d Version=${{ steps.version.outputs.value }} `
             -d PublishDir="$((Resolve-Path artifacts/server).Path)" `
             -d IconPath="$((Resolve-Path src/LiftUp.App/Assets/LiftUp.ico).Path)" `

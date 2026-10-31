@@ -83,6 +83,7 @@ if ($LASTEXITCODE -ne 0) { throw "Veröffentlichen des Server-Setups fehlgeschla
 
 Write-Host "7/7 Server-Installationsprogramm bauen"
 wix build installer/Server.wxs `
+    -arch x64 `
     -d Version=$Version `
     -d PublishDir="$((Resolve-Path artifacts/server).Path)" `
     -d IconPath="$((Resolve-Path src/LiftUp.App/Assets/LiftUp.ico).Path)" `
