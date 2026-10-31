@@ -309,6 +309,16 @@ public partial class HtmlEditor : UserControl
                 window.liftupSnippetQuery();
             });
 
+            window.liftupGetSelectionHtml = function () {
+                var selection = window.getSelection();
+                if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+                    return null;
+                }
+                var holder = document.createElement('div');
+                holder.appendChild(selection.getRangeAt(0).cloneContents());
+                return holder.innerHTML;
+            };
+
             window.liftupGetHtml = function () {
                 window.liftupCloseSnippets();
                 return document.body.innerHTML;
@@ -370,6 +380,27 @@ public partial class HtmlEditor : UserControl
         catch (Exception exception)
         {
             throw new InvalidOperationException("Der Inhalt des Editors konnte nicht gelesen werden.", exception);
+        }
+    }
+
+    /// <summary>Liefert die markierte Stelle als HTML; <c>null</c>, wenn nichts markiert ist.</summary>
+    public async Task<string?> GetSelectionHtmlAsync()
+    {
+        if (_failed || !_ready || Browser.CoreWebView2 is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var json = await Browser.CoreWebView2.ExecuteScriptAsync(
+                "window.liftupGetSelectionHtml ? window.liftupGetSelectionHtml() : null");
+            var html = JsonSerializer.Deserialize<string?>(json);
+            return string.IsNullOrWhiteSpace(html) ? null : html;
+        }
+        catch (Exception exception)
+        {
+            throw new InvalidOperationException("Die Auswahl konnte nicht gelesen werden.", exception);
         }
     }
 

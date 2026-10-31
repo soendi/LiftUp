@@ -204,11 +204,15 @@ public partial class DocumentComposerWindow : Window
         var insertSnippet = new Button { Content = "Textbaustein einfügen" };
         insertSnippet.Click += OnInsertSnippetClick;
 
+        var saveAsSnippet = new Button { Content = "Auswahl als Textbaustein …" };
+        saveAsSnippet.Click += OnSaveSelectionAsSnippetClick;
+
         var insertImage = new Button { Content = "Bild einfügen", Margin = new Thickness(0) };
         insertImage.Click += OnInsertImageClick;
 
         var buttonRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
         buttonRow.Children.Add(insertSnippet);
+        buttonRow.Children.Add(saveAsSnippet);
         buttonRow.Children.Add(insertImage);
 
         var editor = new HtmlEditor();
@@ -337,6 +341,51 @@ public partial class DocumentComposerWindow : Window
         catch (Exception exception)
         {
             InfoText.Text = exception.Message;
+        }
+    }
+
+    /// <summary>Speichert den im Abschnitt markierten Text als neuen Textbaustein.</summary>
+    private async void OnSaveSelectionAsSnippetClick(object sender, RoutedEventArgs e)
+    {
+        var draft = CurrentDraft;
+        if (draft is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var html = await draft.Editor.GetSelectionHtmlAsync();
+            if (string.IsNullOrWhiteSpace(html))
+            {
+                InfoText.Text = "Bitte zuerst den Text im Abschnitt markieren, der als Textbaustein gespeichert werden soll.";
+                return;
+            }
+
+            var dialog = new SnippetSaveWindow(html) { Owner = this };
+            if (dialog.ShowDialog() != true)
+            {
+                return;
+            }
+
+            var snippet = _services.Snippets.Create(new SnippetInput
+            {
+                Name = dialog.SnippetName,
+                Category = dialog.Category,
+                Html = html,
+            });
+
+            // Damit die „/“-Suche den neuen Baustein sofort kennt.
+            _snippetBodies = null;
+            InfoText.Text = $"„{snippet.Name}“ als Textbaustein gespeichert – im Text mit /{snippet.Name} einfügbar.";
+        }
+        catch (LiftUpException exception)
+        {
+            InfoText.Text = exception.Message;
+        }
+        catch (Exception exception)
+        {
+            InfoText.Text = "Der Textbaustein konnte nicht gespeichert werden: " + exception.Message;
         }
     }
 
