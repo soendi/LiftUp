@@ -38,9 +38,10 @@ public sealed class ProjectFolderScanTests
         var rootFile = WriteImage(Path.Combine(project.FolderPath, "02_Bilder"), "logo.png");
         var subFile = WriteImage(Path.Combine(project.FolderPath, "02_Bilder", "Grundriss"), "plan.png");
 
-        var added = images.SyncProjectFolder(project.Id);
+        var sync = images.SyncProjectFolder(project.Id);
 
-        Assert.Equal(2, added);
+        Assert.Equal(2, sync.Added);
+        Assert.Equal(0, sync.Moved);
 
         var listed = images.Search(project.Id, null);
         Assert.Equal(2, listed.Count);
@@ -71,8 +72,8 @@ public sealed class ProjectFolderScanTests
         var project = CreateProject(fixture, session);
         WriteImage(Path.Combine(project.FolderPath, "02_Bilder"), "logo.png");
 
-        Assert.Equal(1, images.SyncProjectFolder(project.Id));
-        Assert.Equal(0, images.SyncProjectFolder(project.Id));
+        Assert.Equal(1, images.SyncProjectFolder(project.Id).Added);
+        Assert.Equal(0, images.SyncProjectFolder(project.Id).Added);
         Assert.Single(images.Search(project.Id, null));
     }
 
@@ -87,7 +88,7 @@ public sealed class ProjectFolderScanTests
         WriteImage(Path.Combine(project.FolderPath, "02_Bilder", "a"), "logo.png");
         WriteImage(Path.Combine(project.FolderPath, "02_Bilder", "b"), "logo.png");
 
-        Assert.Equal(2, images.SyncProjectFolder(project.Id));
+        Assert.Equal(2, images.SyncProjectFolder(project.Id).Added);
 
         var names = images.Search(project.Id, null).Select(item => item.Name).OrderBy(name => name).ToArray();
         Assert.Equal(["logo", "logo (2)"], names);
@@ -105,8 +106,60 @@ public sealed class ProjectFolderScanTests
         File.WriteAllText(Path.Combine(project.FolderPath, "01_Dokumente", "notiz.txt"), "kein Bild");
         File.WriteAllBytes(Path.Combine(project.FolderPath, "03_PDF", "angebot.pdf"), [0x25, 0x50, 0x44, 0x46]);
 
-        Assert.Equal(1, images.SyncProjectFolder(project.Id));
+        Assert.Equal(1, images.SyncProjectFolder(project.Id).Added);
         Assert.Single(images.Search(project.Id, null));
+    }
+
+    [Fact]
+    public void Verschobene_datei_wird_wiedererkannt()
+    {
+        using var fixture = new TestDatabase();
+        var session = fixture.LoginAsAdmin();
+        var images = Images(fixture, session);
+        var project = CreateProject(fixture, session);
+
+        var source = WriteImage(Path.Combine(project.FolderPath, "02_Bilder"), "logo.png");
+        Assert.Equal(1, images.SyncProjectFolder(project.Id).Added);
+
+        // Datei in einen anderen Unterordner verschieben.
+        var targetFolder = Path.Combine(project.FolderPath, "02_Bilder", "Neu");
+        Directory.CreateDirectory(targetFolder);
+        var target = Path.Combine(targetFolder, "logo.png");
+        File.Move(source, target);
+
+        var sync = images.SyncProjectFolder(project.Id);
+
+        Assert.Equal(0, sync.Added);
+        Assert.Equal(1, sync.Moved);
+
+        var listed = Assert.Single(images.Search(project.Id, null));
+        Assert.Equal(Path.GetFullPath(target), Path.GetFullPath(listed.FilePath));
+        Assert.Equal("02_Bilder/Neu", listed.Category);
+        Assert.True(listed.FileExists);
+    }
+
+    [Fact]
+    public void Umbennante_datei_gilt_als_neu_und_alte_meldet_sich_als_fehlend()
+    {
+        using var fixture = new TestDatabase();
+        var session = fixture.LoginAsAdmin();
+        var images = Images(fixture, session);
+        var project = CreateProject(fixture, session);
+
+        var source = WriteImage(Path.Combine(project.FolderPath, "02_Bilder"), "logo.png");
+        images.SyncProjectFolder(project.Id);
+
+        File.Move(source, Path.Combine(project.FolderPath, "02_Bilder", "zeichen.png"));
+
+        var sync = images.SyncProjectFolder(project.Id);
+
+        Assert.Equal(1, sync.Added);
+        Assert.Equal(0, sync.Moved);
+
+        var listed = images.Search(project.Id, null);
+        Assert.Equal(2, listed.Count);
+        Assert.Single(listed, item => item.Name == "logo" && !item.FileExists);
+        Assert.Single(listed, item => item.Name == "zeichen" && item.FileExists);
     }
 
     [Fact]

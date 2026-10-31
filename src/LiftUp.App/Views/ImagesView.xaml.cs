@@ -227,11 +227,11 @@ public partial class ImagesView : UserControl
     private ImageListItem? Selected => ImagesGrid.SelectedItem as ImageListItem;
 
     /// <summary>Gleicht den Projektordner mit der Bildbibliothek ab; 0 ohne neues Bild.</summary>
-    private int SyncProjectFolder()
+    private ProjectFolderSyncResult SyncProjectFolder()
     {
         if (SelectedProjectId is not { } projectId)
         {
-            return 0;
+            return new ProjectFolderSyncResult(0, 0);
         }
 
         try
@@ -240,14 +240,26 @@ public partial class ImagesView : UserControl
         }
         catch (PermissionDeniedException)
         {
-            return 0;
+            return new ProjectFolderSyncResult(0, 0);
         }
         catch (LiftUpException exception)
         {
             InfoText.Text = exception.Message;
-            return 0;
+            return new ProjectFolderSyncResult(0, 0);
         }
     }
+
+    /// <summary>Nennt in Worten, was der Ordnerabgleich gefunden hat.</summary>
+    private static string DescribeSync(ProjectFolderSyncResult sync) => (sync.Added, sync.Moved) switch
+    {
+        (0, 0) => "Keine neuen Bilder im Projektordner gefunden.",
+        (0, 1) => "1 verschobenes Bild wiedererkannt und den Pfad aktualisiert.",
+        (0, _) => $"{sync.Moved} verschobene Bilder wiedererkannt und die Pfade aktualisiert.",
+        (1, 0) => "1 Bild aus dem Projektordner übernommen.",
+        (_, 0) => $"{sync.Added} Bilder aus dem Projektordner übernommen.",
+        (1, _) => $"1 Bild übernommen, {sync.Moved} verschobene wiedererkannt.",
+        _ => $"{sync.Added} Bilder übernommen, {sync.Moved} verschobene wiedererkannt.",
+    };
 
     /// <summary>Entfernt Einträge, deren Bilddatei nicht mehr existiert.</summary>
     private void OnRemoveMissingClick(object sender, RoutedEventArgs e)
@@ -294,14 +306,9 @@ public partial class ImagesView : UserControl
             return;
         }
 
-        var added = SyncProjectFolder();
+        var sync = SyncProjectFolder();
         LoadImages();
-        InfoText.Text = added switch
-        {
-            0 => "Keine neuen Bilder im Projektordner gefunden.",
-            1 => "1 Bild aus dem Projektordner übernommen.",
-            _ => $"{added} Bilder aus dem Projektordner übernommen.",
-        };
+        InfoText.Text = DescribeSync(sync);
     }
 
     /// <summary>
@@ -310,14 +317,12 @@ public partial class ImagesView : UserControl
     /// </summary>
     private void OnProjectChanged(object sender, SelectionChangedEventArgs e)
     {
-        var added = SyncProjectFolder();
+        var sync = SyncProjectFolder();
         LoadImages();
 
-        if (added > 0)
+        if (sync.Any)
         {
-            InfoText.Text = added == 1
-                ? "1 Bild aus dem Projektordner übernommen."
-                : $"{added} Bilder aus dem Projektordner übernommen.";
+            InfoText.Text = DescribeSync(sync);
         }
     }
 

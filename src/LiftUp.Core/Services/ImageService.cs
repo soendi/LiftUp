@@ -247,10 +247,12 @@ public sealed class ImageService
     /// <summary>
     /// Liest Bilddateien aus dem Projektordner ein und ordnet sie dem Projekt zu. Die
     /// Dateien bleiben, wo sie liegen – es wird nichts kopiert. Bereits erfasste Pfade
-    /// werden übersprungen; Unterordner werden zur Kategorie. Liefert die Anzahl der
-    /// neu übernommenen Bilder.
+    /// werden übersprungen; Unterordner werden zur Kategorie.
+    /// Wurde eine Datei im Projektordner verschoben, wird sie an Name und Größe
+    /// wiedererkannt und ihr gespeicherter Pfad aktualisiert, statt sie als fehlend zu
+    /// melden und doppelt aufzunehmen.
     /// </summary>
-    public int SyncProjectFolder(Guid projectId)
+    public ProjectFolderSyncResult SyncProjectFolder(Guid projectId)
     {
         _actor.Require(Permission.ManageImages);
 
@@ -260,7 +262,7 @@ public sealed class ImageService
 
         if (string.IsNullOrWhiteSpace(project.FolderPath) || !Directory.Exists(project.FolderPath))
         {
-            return 0;
+            return new ProjectFolderSyncResult(0, 0);
         }
 
         var files = Directory.EnumerateFiles(project.FolderPath, "*", SearchOption.AllDirectories)
@@ -271,7 +273,7 @@ public sealed class ImageService
 
         if (files.Length == 0)
         {
-            return 0;
+            return new ProjectFolderSyncResult(0, 0);
         }
 
         using var transaction = connection.BeginTransaction();
@@ -284,7 +286,14 @@ public sealed class ImageService
             .Select(image => image.Name)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
+        // Nur Einträge ohne Datei kommen als „verschoben“ in Frage.
+        var missing = existing
+            .Where(image => !File.Exists(image.FilePath))
+            .ToList();
+
         var added = 0;
+        var moved = 0;
+
         foreach (var path in files)
         {
             if (!knownPaths.Add(path))
@@ -292,10 +301,26 @@ public sealed class ImageService
                 continue;
             }
 
+            var info = new FileInfo(path);
+            var relocated = missing.FirstOrDefault(image => IsSameFile(image, info));
+
+            if (relocated is not null)
+            {
+                missing.Remove(relocated);
+
+                var category = CategoryFor(project.FolderPath, path);
+                var rowVersion = _images.UpdateLocation(
+                    connection, transaction, relocated.Id, path, category, info.Length);
+
+                _changes.Record(connection, transaction, "Image", relocated.Id.ToString("D"), "Update",
+                    new { relocated.Name, Category = category, Moved = true }, rowVersion);
+                moved++;
+                continue;
+            }
+
             var name = UniqueName(Path.GetFileNameWithoutExtension(path), knownNames);
             knownNames.Add(name);
 
-            var info = new FileInfo(path);
             var image = new LibraryImage
             {
                 Name = name,
@@ -313,15 +338,23 @@ public sealed class ImageService
             added++;
         }
 
-        if (added > 0)
+        if (added + moved > 0)
         {
             _changes.Record(connection, transaction, "Project", projectId.ToString("D"), "ImportImages",
-                new { project.Name, Count = added }, project.RowVersion);
+                new { project.Name, Added = added, Moved = moved }, project.RowVersion);
             transaction.Commit();
         }
 
-        return added;
+        return new ProjectFolderSyncResult(added, moved);
     }
+
+    /// <summary>
+    /// Erkennt eine verschobene Datei an Dateiname und Größe wieder. Umbenannte Dateien
+    /// gelten bewusst als neu, damit nichts Falsches zugeordnet wird.
+    /// </summary>
+    private static bool IsSameFile(LibraryImage image, FileInfo file) =>
+        string.Equals(image.FileName, file.Name, StringComparison.OrdinalIgnoreCase) &&
+        image.SizeBytes == file.Length;
 
     /// <summary>Vereinheitlicht Schlagworte: durch Komma getrennt, ohne Doppelte.</summary>
     public static string? NormalizeTags(string? tags)

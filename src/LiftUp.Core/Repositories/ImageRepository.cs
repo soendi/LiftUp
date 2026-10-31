@@ -200,6 +200,28 @@ public sealed class ImageRepository
         return Convert.ToInt64(command.ExecuteScalar());
     }
 
+    /// <summary>Setzt den Pfad eines wiedergefundenen Bildes und seine Kategorie neu.</summary>
+    public long UpdateLocation(
+        SqliteConnection connection,
+        SqliteTransaction? transaction,
+        Guid id,
+        string filePath,
+        string? category,
+        long sizeBytes)
+    {
+        using var command = Db.Command(connection, """
+            UPDATE Images
+            SET FilePath = $filePath, Category = $category, SizeBytes = $sizeBytes, RowVersion = RowVersion + 1
+            WHERE Id = $id
+            RETURNING RowVersion;
+            """, transaction);
+        command.With("$id", id.ToString("D"))
+            .With("$filePath", filePath)
+            .With("$category", category)
+            .With("$sizeBytes", sizeBytes);
+        return Convert.ToInt64(command.ExecuteScalar());
+    }
+
     public void Delete(SqliteConnection connection, SqliteTransaction? transaction, Guid id)
     {
         using var command = Db.Command(connection, "DELETE FROM Images WHERE Id = $id;", transaction);
