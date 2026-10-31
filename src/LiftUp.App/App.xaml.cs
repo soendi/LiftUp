@@ -76,7 +76,6 @@ public sealed class AppServices(Database database)
     public DocumentTypeService DocumentTypes => new(Database, CurrentSession);
     public BackupService Backups { get; } = new(database);
     public CloudBackupService CloudBackups { get; } = new(database);
-    public CompanyProfileService Company => new(Database, CurrentSession);
     public MailAccountService Mail => new(Database, CurrentSession);
     public ImageService Images => new(Database, CurrentSession);
     public SnippetService Snippets => new(Database, CurrentSession);

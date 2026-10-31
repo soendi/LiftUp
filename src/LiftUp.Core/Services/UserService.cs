@@ -40,7 +40,15 @@ public sealed partial class UserService
         return _users.GetListItems(connection, null, null).FirstOrDefault(item => item.Id == id);
     }
 
-    public User Create(string userName, string displayName, Guid roleId, string password, bool mustChangePassword)
+    public User Create(
+        string userName,
+        string displayName,
+        Guid roleId,
+        string password,
+        bool mustChangePassword,
+        string? company = null,
+        string? email = null,
+        string? phone = null)
     {
         _actor.Require(Permission.ManageUsers);
 
@@ -72,6 +80,9 @@ public sealed partial class UserService
         {
             UserName = userName,
             DisplayName = displayName,
+            Company = Normalize(company),
+            Email = Normalize(email),
+            Phone = Normalize(phone),
             RoleId = roleId,
             IsActive = true,
             PasswordHash = hash.HashBase64,
@@ -90,7 +101,14 @@ public sealed partial class UserService
         return user;
     }
 
-    public void Update(Guid id, string displayName, Guid roleId, bool isActive)
+    public void Update(
+        Guid id,
+        string displayName,
+        Guid roleId,
+        bool isActive,
+        string? company = null,
+        string? email = null,
+        string? phone = null)
     {
         _actor.Require(Permission.ManageUsers);
 
@@ -122,7 +140,8 @@ public sealed partial class UserService
             EnsureAnotherAdministratorExists(connection, transaction, id);
         }
 
-        var rowVersion = _users.Update(connection, transaction, id, displayName, roleId, isActive);
+        var rowVersion = _users.Update(connection, transaction, id, displayName, roleId, isActive,
+            Normalize(company), Normalize(email), Normalize(phone));
         _changes.Record(connection, transaction, "User", id.ToString("D"), "Update",
             new { existing.UserName, DisplayName = displayName, RoleId = roleId.ToString("D"), IsActive = isActive },
             rowVersion);
@@ -183,6 +202,9 @@ public sealed partial class UserService
                 "Das ist der letzte aktive Administrator. Bitte zuerst einem anderen Benutzer die Benutzerverwaltung geben.");
         }
     }
+
+    private static string? Normalize(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static void ValidateUserName(string userName)
     {

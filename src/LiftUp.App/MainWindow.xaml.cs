@@ -60,17 +60,6 @@ public partial class MainWindow : Window
             Tabs.Items.Add(new TabItem { Header = "Rollen und Rechte", Content = new RolesView(_services) });
         }
 
-        if (session.Can(Permission.ChangeSettings))
-        {
-            var senderButton = new Button
-            {
-                Content = "Absenderdaten",
-                Style = (Style)FindResource("LiftUpHeaderButton"),
-            };
-            senderButton.Click += (_, _) => new CompanyProfileWindow(_services) { Owner = this }.ShowDialog();
-            HeaderButtons.Children.Insert(1, senderButton);
-        }
-
         StatusText.Text = $"Angemeldet als {session.UserName} · Datenbank: {_services.Database.FilePath}";
         SyncText.Text = _services.Sync.IsConfigured
             ? "Synchronisation: verbunden"

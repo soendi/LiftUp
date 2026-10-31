@@ -129,12 +129,19 @@ public sealed class DocumentService
     {
         var snippets = _snippets.GetActiveByName(connection, transaction);
         var images = BuildImageLookup(connection, transaction, project.Id);
-        var company = new CompanyProfileService(_database).Get();
+        // Die Absenderdaten stehen direkt am angemeldeten Benutzer.
+        var company = new CompanyProfile
+        {
+            Name = _actor.Company,
+            Contact = _actor.DisplayName is { Length: > 0 } display ? display : _actor.UserName,
+            Email = _actor.Email,
+            Phone = _actor.Phone,
+        };
 
         return PlaceholderRenderer.Render(version.Html, new PlaceholderContext
         {
             Project = project,
-            UserName = _actor.DisplayName is { Length: > 0 } display ? display : _actor.UserName,
+            UserName = company.Contact,
             Company = company,
             SnippetResolver = name => snippets.TryGetValue(name, out var snippet) ? snippet : null,
             ImageResolver = name => images.TryGetValue(name, out var image) ? ImageEmbedding.ToImageTag(image) : null,

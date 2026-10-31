@@ -18,6 +18,15 @@
             <TextBlock Text="Anzeigename" Style="{StaticResource LiftUpFieldLabel}" />
             <TextBox x:Name="DisplayNameBox" Margin="0,3,0,8" />
 
+            <TextBlock Text="Firma" Style="{StaticResource LiftUpFieldLabel}" />
+            <TextBox x:Name="CompanyBox" Margin="0,3,0,8" ToolTip="Eigene Firma für Titelseiten" />
+
+            <TextBlock Text="E-Mail" Style="{StaticResource LiftUpFieldLabel}" />
+            <TextBox x:Name="EmailBox" Margin="0,3,0,8" ToolTip="Eigene E-Mail-Adresse für Titelseiten" />
+
+            <TextBlock Text="Telefon" Style="{StaticResource LiftUpFieldLabel}" />
+            <TextBox x:Name="PhoneBox" Margin="0,3,0,8" ToolTip="Eigene Telefonnummer für Titelseiten" />
+
             <TextBlock Text="Rolle" Style="{StaticResource LiftUpFieldLabel}" />
             <ComboBox x:Name="RoleBox" Margin="0,3,0,8" DisplayMemberPath="Name" />
 

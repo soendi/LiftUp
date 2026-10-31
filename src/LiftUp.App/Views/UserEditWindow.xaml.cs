@@ -46,6 +46,9 @@ public partial class UserEditWindow : Window
             UserNameBox.Text = item.UserName;
             UserNameBox.IsReadOnly = true;
             DisplayNameBox.Text = item.DisplayName;
+            CompanyBox.Text = item.Company;
+            EmailBox.Text = item.Email;
+            PhoneBox.Text = item.Phone;
             ActiveCheck.IsChecked = item.IsActive;
 
             var roles = (IReadOnlyList<Role>)RoleBox.ItemsSource;
@@ -83,7 +86,10 @@ public partial class UserEditWindow : Window
                     DisplayNameBox.Text,
                     role.Id,
                     PasswordInput.Password,
-                    MustChangeCheck.IsChecked == true);
+                    MustChangeCheck.IsChecked == true,
+                    CompanyBox.Text,
+                    EmailBox.Text,
+                    PhoneBox.Text);
             }
             else
             {
@@ -91,7 +97,10 @@ public partial class UserEditWindow : Window
                     _userId.Value,
                     DisplayNameBox.Text,
                     role.Id,
-                    ActiveCheck.IsChecked == true);
+                    ActiveCheck.IsChecked == true,
+                    CompanyBox.Text,
+                    EmailBox.Text,
+                    PhoneBox.Text);
             }
 
             DialogResult = true;

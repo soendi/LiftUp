@@ -28,7 +28,6 @@ public partial class TemplatesView : UserControl
             .ToArray();
 
         SectionsList.ItemsSource = _sectionRows;
-        SenderButton.IsEnabled = _services.CurrentSession.Can(Permission.ChangeSettings);
 
         LoadDocumentTypes();
         LoadTemplates();
@@ -270,15 +269,6 @@ public partial class TemplatesView : UserControl
         catch (Exception exception)
         {
             InfoText.Text = "Vorschau fehlgeschlagen: " + exception.Message;
-        }
-    }
-
-    private void OnSenderClick(object sender, RoutedEventArgs e)
-    {
-        var dialog = new CompanyProfileWindow(_services) { Owner = Window.GetWindow(this) };
-        if (dialog.ShowDialog() == true)
-        {
-            InfoText.Text = "Absenderdaten gespeichert.";
         }
     }
 

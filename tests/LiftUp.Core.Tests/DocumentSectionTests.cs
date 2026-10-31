@@ -96,13 +96,16 @@ public sealed class DocumentSectionTests
         var templates = new TemplateService(fixture.Database, session);
         var documents = new DocumentService(fixture.Database, session, new FakeRenderer());
 
-        new CompanyProfileService(fixture.Database, session).Save(new CompanyProfile
-        {
-            Name = "Muster Bau AG",
-            Contact = "Max Muster",
-            Email = "max@muster.ch",
-            Phone = "+41 79 000 00 00",
-        });
+        new UserService(fixture.Database, session).Update(
+            session.UserId,
+            "Max Muster",
+            session.RoleId,
+            isActive: true,
+            company: "Muster Bau AG",
+            email: "max@muster.ch",
+            phone: "+41 79 000 00 00");
+        session = fixture.Auth.Login("admin", "admin").Session!;
+        documents = new DocumentService(fixture.Database, session, new FakeRenderer());
 
         var project = projects.Create(new ProjectInput
         {

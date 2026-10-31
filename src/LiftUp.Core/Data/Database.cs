@@ -12,7 +12,7 @@ namespace LiftUp.Core.Data;
 /// </summary>
 public sealed class Database
 {
-    public const int CurrentSchemaVersion = 10;
+    public const int CurrentSchemaVersion = 11;
 
     private readonly string _connectionString;
 
@@ -146,6 +146,9 @@ public sealed class Database
 
         // Version 10 hält die ausgefüllten Abschnitte am erzeugten Dokument fest.
         MigrateDocumentSections(connection);
+
+        // Version 11 legt Firma, E-Mail und Telefon direkt am Benutzer ab.
+        MigrateUserProfile(connection);
 
         using var command = Db.Command(connection, "UPDATE SchemaInfo SET Version = $version;");
         command.With("$version", CurrentSchemaVersion);
@@ -352,6 +355,41 @@ public sealed class Database
 
         using var alter = Db.Command(connection, "ALTER TABLE ProjectDocuments ADD COLUMN SectionsJson TEXT NULL;");
         alter.ExecuteNonQuery();
+    }
+
+    /// <summary>
+    /// Version 11: Absenderdaten gehören zum Benutzer statt in globale Einstellungen.
+    /// Bestehende Konten bleiben leer, bis sie ihre Angaben erfassen.
+    /// </summary>
+    private static void MigrateUserProfile(SqliteConnection connection)
+    {
+        var existing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using (var info = Db.Command(connection, "PRAGMA table_info(Users);"))
+        using (var reader = info.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                existing.Add(reader.GetString(1));
+            }
+        }
+
+        (string Name, string Definition)[] additions =
+        [
+            ("Company", "TEXT NULL"),
+            ("Email", "TEXT NULL"),
+            ("Phone", "TEXT NULL"),
+        ];
+
+        foreach (var (name, definition) in additions)
+        {
+            if (existing.Contains(name))
+            {
+                continue;
+            }
+
+            using var alter = Db.Command(connection, $"ALTER TABLE Users ADD COLUMN {name} {definition};");
+            alter.ExecuteNonQuery();
+        }
     }
 
     /// <summary>Übernimmt vorhandene Typnamen bestehender Vorlagen in die Typenliste.</summary>
@@ -575,6 +613,9 @@ public sealed class Database
             Id                 TEXT PRIMARY KEY NOT NULL,
             UserName           TEXT NOT NULL COLLATE NOCASE UNIQUE,
             DisplayName        TEXT NOT NULL DEFAULT '',
+            Company            TEXT NULL,
+            Email              TEXT NULL,
+            Phone              TEXT NULL,
             RoleId             TEXT NOT NULL REFERENCES Roles(Id),
             IsActive           INTEGER NOT NULL DEFAULT 1,
             PasswordHash       TEXT NOT NULL,

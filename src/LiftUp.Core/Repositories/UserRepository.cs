@@ -8,7 +8,7 @@ public sealed class UserRepository
 {
     private const string Columns =
         "Id, UserName, DisplayName, RoleId, IsActive, PasswordHash, PasswordSalt, PasswordIterations, " +
-        "MustChangePassword, CreatedUtc, CreatedBy, LastLoginUtc, RowVersion, IsDeleted";
+        "MustChangePassword, CreatedUtc, CreatedBy, LastLoginUtc, RowVersion, IsDeleted, Company, Email, Phone";
 
     public IReadOnlyList<UserListItem> GetListItems(SqliteConnection connection, SqliteTransaction? transaction, string? search)
     {
@@ -17,7 +17,8 @@ public sealed class UserRepository
             : " AND (u.UserName LIKE $pattern OR u.DisplayName LIKE $pattern)";
 
         using var command = Db.Command(connection, $"""
-            SELECT u.Id, u.UserName, u.DisplayName, u.IsActive, u.LastLoginUtc, r.Name, r.Permissions
+            SELECT u.Id, u.UserName, u.DisplayName, u.IsActive, u.LastLoginUtc, r.Name, r.Permissions,
+                   u.Company, u.Email, u.Phone
             FROM Users u
             JOIN Roles r ON r.Id = u.RoleId
             WHERE u.IsDeleted = 0{filter}
@@ -44,6 +45,9 @@ public sealed class UserRepository
                     : "–",
                 RoleName = reader.Text(5),
                 PermissionSummary = PermissionCatalog.Describe((Permission)reader.Int32(6)),
+                Company = reader.TextOrNull(7) ?? string.Empty,
+                Email = reader.TextOrNull(8) ?? string.Empty,
+                Phone = reader.TextOrNull(9) ?? string.Empty,
             });
         }
 
@@ -72,10 +76,12 @@ public sealed class UserRepository
         using var command = Db.Command(connection, """
             INSERT INTO Users
                 (Id, UserName, DisplayName, RoleId, IsActive, PasswordHash, PasswordSalt, PasswordIterations,
-                 MustChangePassword, CreatedUtc, CreatedBy, LastLoginUtc, RowVersion, IsDeleted)
+                 MustChangePassword, CreatedUtc, CreatedBy, LastLoginUtc, RowVersion, IsDeleted,
+                 Company, Email, Phone)
             VALUES
                 ($id, $userName, $displayName, $roleId, $isActive, $hash, $salt, $iterations,
-                 $mustChange, $createdUtc, $createdBy, NULL, 1, 0);
+                 $mustChange, $createdUtc, $createdBy, NULL, 1, 0,
+                 $company, $email, $phone);
             """, transaction);
         command.With("$id", user.Id.ToString("D"))
             .With("$userName", user.UserName)
@@ -87,23 +93,39 @@ public sealed class UserRepository
             .With("$iterations", user.PasswordIterations)
             .With("$mustChange", user.MustChangePassword ? 1 : 0)
             .With("$createdUtc", user.CreatedUtc.ToDb())
-            .With("$createdBy", user.CreatedBy);
+            .With("$createdBy", user.CreatedBy)
+            .With("$company", user.Company)
+            .With("$email", user.Email)
+            .With("$phone", user.Phone);
         command.ExecuteNonQuery();
         user.RowVersion = 1;
     }
 
-    public long Update(SqliteConnection connection, SqliteTransaction? transaction, Guid id, string displayName, Guid roleId, bool isActive)
+    public long Update(
+        SqliteConnection connection,
+        SqliteTransaction? transaction,
+        Guid id,
+        string displayName,
+        Guid roleId,
+        bool isActive,
+        string? company,
+        string? email,
+        string? phone)
     {
         using var command = Db.Command(connection, """
             UPDATE Users
-            SET DisplayName = $displayName, RoleId = $roleId, IsActive = $isActive, RowVersion = RowVersion + 1
+            SET DisplayName = $displayName, RoleId = $roleId, IsActive = $isActive,
+                Company = $company, Email = $email, Phone = $phone, RowVersion = RowVersion + 1
             WHERE Id = $id
             RETURNING RowVersion;
             """, transaction);
         command.With("$id", id.ToString("D"))
             .With("$displayName", displayName)
             .With("$roleId", roleId.ToString("D"))
-            .With("$isActive", isActive ? 1 : 0);
+            .With("$isActive", isActive ? 1 : 0)
+            .With("$company", company)
+            .With("$email", email)
+            .With("$phone", phone);
         return Convert.ToInt64(command.ExecuteScalar());
     }
 
@@ -186,5 +208,8 @@ public sealed class UserRepository
         LastLoginUtc = reader.DateOrNull(11),
         RowVersion = reader.Int64(12),
         IsDeleted = reader.Bool(13),
+        Company = reader.TextOrNull(14),
+        Email = reader.TextOrNull(15),
+        Phone = reader.TextOrNull(16),
     };
 }

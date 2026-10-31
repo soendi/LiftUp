@@ -5,6 +5,16 @@ public sealed class User
     public Guid Id { get; set; } = Guid.NewGuid();
     public string UserName { get; set; } = string.Empty;
     public string DisplayName { get; set; } = string.Empty;
+
+    /// <summary>Eigene Firma für Titelseiten.</summary>
+    public string? Company { get; set; }
+
+    /// <summary>Eigene E-Mail-Adresse für Titelseiten.</summary>
+    public string? Email { get; set; }
+
+    /// <summary>Eigene Telefonnummer für Titelseiten.</summary>
+    public string? Phone { get; set; }
+
     public Guid RoleId { get; set; }
     public bool IsActive { get; set; } = true;
 
@@ -27,6 +37,9 @@ public sealed class UserListItem
     public Guid Id { get; init; }
     public string UserName { get; init; } = string.Empty;
     public string DisplayName { get; init; } = string.Empty;
+    public string Company { get; init; } = string.Empty;
+    public string Email { get; init; } = string.Empty;
+    public string Phone { get; init; } = string.Empty;
     public string RoleName { get; init; } = string.Empty;
     public bool IsActive { get; init; }
     public string StatusText => IsActive ? "Aktiv" : "Deaktiviert";
