@@ -59,9 +59,10 @@ public sealed record ImageFormat(
           color: #4A5568;
           line-height: 1.3;
         }
-        .liftup-fig-small { width: 45mm; }
-        .liftup-fig-medium { width: 90mm; }
-        .liftup-fig-large { width: 165mm; }
+        /* Die Größe bezieht sich auf eine volle Zeile (Seitenbreite ohne Rand). */
+        .liftup-fig-small { width: 33.3333%; }
+        .liftup-fig-medium { width: 50%; }
+        .liftup-fig-large { width: 66.6667%; }
         .liftup-fig-inline { display: inline-block; vertical-align: middle; margin: 0 3mm 2mm 0; }
         .liftup-fig-center:not(.liftup-fig-inline) { display: block; margin-left: auto; margin-right: auto; }
         /* Mit Unterschrift steht das Bild als eigener Block im Text: Bild und

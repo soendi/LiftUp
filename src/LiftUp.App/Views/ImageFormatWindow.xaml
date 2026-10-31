@@ -14,9 +14,9 @@
 
             <TextBlock Text="Größe" Style="{StaticResource LiftUpFieldLabel}" Margin="0,0,0,4" />
             <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
-                <RadioButton x:Name="SizeSmall" GroupName="Size" Content="Klein" Margin="0,0,24,0" />
-                <RadioButton x:Name="SizeMedium" GroupName="Size" Content="Mittel" Margin="0,0,24,0" />
-                <RadioButton x:Name="SizeLarge" GroupName="Size" Content="Groß" />
+                <RadioButton x:Name="SizeSmall" GroupName="Size" Content="Klein (1/3 Zeile)" Margin="0,0,20,0" />
+                <RadioButton x:Name="SizeMedium" GroupName="Size" Content="Mittel (1/2 Zeile)" Margin="0,0,20,0" />
+                <RadioButton x:Name="SizeLarge" GroupName="Size" Content="Groß (2/3 Zeile)" />
             </StackPanel>
 
             <TextBlock Text="Seite" Style="{StaticResource LiftUpFieldLabel}" Margin="0,0,0,4" />

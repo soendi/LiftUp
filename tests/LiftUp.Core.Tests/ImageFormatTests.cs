@@ -64,6 +64,15 @@ public sealed class ImageFormatTests
         Assert.Equal(ImageFormat.Default, parsed);
     }
 
+    [Theory]
+    [InlineData("small", "33.3333%")]
+    [InlineData("medium", "50%")]
+    [InlineData("large", "66.6667%")]
+    public void Groessen_teilen_die_zeile_in_drittel(string token, string width)
+    {
+        Assert.Contains(".liftup-fig-" + token + " { width: " + width + "; }", ImageFormat.Css);
+    }
+
     [Fact]
     public void Dokument_bringt_die_bildregeln_mit()
     {
