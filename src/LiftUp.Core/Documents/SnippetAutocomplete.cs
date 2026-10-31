@@ -46,11 +46,16 @@ public static class SnippetAutocomplete
             .ToArray();
     }
 
+    /// <summary>Reiner Text eines Bausteins ohne HTML – Grundlage der Inhaltssuche.</summary>
+    public static string PlainText(string? html) =>
+        WhitespacePattern.Replace(
+            WebUtility.HtmlDecode(TagPattern.Replace(html ?? string.Empty, " ")),
+            " ").Trim();
+
     /// <summary>Kurze Textvorschau eines Bausteins für die Vorschlagsliste.</summary>
     public static string Preview(string? html, int maxLength = 70)
     {
-        var text = WebUtility.HtmlDecode(TagPattern.Replace(html ?? string.Empty, " "));
-        text = WhitespacePattern.Replace(text, " ").Trim();
+        var text = PlainText(html);
 
         if (text.Length <= maxLength)
         {
@@ -87,6 +92,13 @@ public static class SnippetAutocomplete
         if (category.Contains(term, StringComparison.CurrentCultureIgnoreCase))
         {
             return 3;
+        }
+
+        // Auch der Bausteintext zählt: „/lorem“ findet einen Baustein, in dem
+        // Lorem ipsum steht, selbst wenn sein Name anders lautet.
+        if (PlainText(snippet.Html).Contains(term, StringComparison.CurrentCultureIgnoreCase))
+        {
+            return 4;
         }
 
         return -1;

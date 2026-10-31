@@ -53,6 +53,38 @@ public sealed class SnippetAutocompleteTests
     }
 
     [Fact]
+    public void Inhalt_des_bausteins_wird_durchsucht()
+    {
+        var matches = SnippetAutocomplete.Search(
+            [Snippet("Standardtext", html: "<p>Lorem ipsum dolor sit amet</p>")],
+            "lorem");
+
+        Assert.Single(matches);
+        Assert.Equal("Standardtext", matches[0].Name);
+    }
+
+    [Fact]
+    public void Namensreffer_steht_vor_inhaltstreffer()
+    {
+        var matches = SnippetAutocomplete.Search(
+            [Snippet("Standardtext", html: "<p>Lorem ipsum</p>"), Snippet("Lorem")],
+            "lorem");
+
+        Assert.Equal(2, matches.Count);
+        Assert.Equal("Lorem", matches[0].Name);
+    }
+
+    [Fact]
+    public void Html_tags_selbst_zaehlen_nicht_als_treffer()
+    {
+        var matches = SnippetAutocomplete.Search(
+            [Snippet("Standardtext", html: "<p><strong>Hallo</strong></p>")],
+            "strong");
+
+        Assert.Empty(matches);
+    }
+
+    [Fact]
     public void Ohne_treffer_bleibt_die_liste_leer()
     {
         var matches = SnippetAutocomplete.Search([Snippet("Angebot")], "xyz");
