@@ -39,6 +39,9 @@ jobs:
         id: version
         shell: pwsh
         run: |
+          # Alle Protokolle landen unter artifacts/ – der Ordner muss vor dem ersten
+          # Tee-Object existieren, sonst bricht der Schritt ab.
+          New-Item -ItemType Directory -Force artifacts | Out-Null
           $match = Select-String -Path Directory.Build.props -Pattern '<Version>([^<]+)</Version>'
           if (-not $match) { throw "Version konnte nicht bestimmt werden." }
           $version = $match.Matches[0].Groups[1].Value
