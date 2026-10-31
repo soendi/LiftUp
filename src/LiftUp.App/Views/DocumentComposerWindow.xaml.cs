@@ -178,7 +178,7 @@ public partial class DocumentComposerWindow : Window
 
         foreach (var section in defined)
         {
-            AddSection(section.Title, select: false);
+            AddSection(section.Title, section.DefaultHtml, select: false);
         }
 
         SelectFirstSection();

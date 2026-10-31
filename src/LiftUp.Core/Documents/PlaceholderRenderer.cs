@@ -42,6 +42,8 @@ public static class PlaceholderRenderer
         ("{{project.customer}}", "Kunde"),
         ("{{project.address}}", "Anschrift (Straße, PLZ Ort)"),
         ("{{project.street}}", "Straße und Hausnummer"),
+        ("{{project.client}}", "Auftraggeber"),
+        ("{{project.clientaddress}}", "Anschrift des Auftraggebers"),
         ("{{project.zip}}", "Postleitzahl"),
         ("{{project.city}}", "Ort"),
         ("{{project.contact}}", "Erste Ansprechperson"),
@@ -178,6 +180,8 @@ public static class PlaceholderRenderer
             "project.zip" or "project.customerzip" or "projekt.plz" => Encode(project.CustomerZip),
             "project.city" or "project.customercity" or "projekt.ort" => Encode(project.CustomerCity),
             "project.address" or "project.customeraddress" or "projekt.adresse" => Encode(project.CustomerAddress),
+            "project.client" or "projekt.auftraggeber" => Encode(project.Client),
+            "project.clientaddress" or "projekt.auftraggeberadresse" => Encode(project.ClientAddress),
             "project.contact" or "projekt.ansprechpartner" =>
                 Encode(project.Contact ?? project.Contacts.FirstOrDefault()?.Summary),
             "project.contacts" or "projekt.ansprechpersonen" => RenderContacts(project.Contacts),

@@ -74,8 +74,14 @@ public partial class ProjectEditWindow : Window
             NumberBox.Text = project.Number ?? string.Empty;
             CustomerBox.Text = project.Customer ?? string.Empty;
             StreetBox.Text = project.CustomerStreet ?? string.Empty;
+            AddressLine2Box.Text = project.CustomerLine2 ?? string.Empty;
             ZipBox.Text = project.CustomerZip ?? string.Empty;
             CityBox.Text = project.CustomerCity ?? string.Empty;
+            ClientBox.Text = project.Client ?? string.Empty;
+            ClientStreetBox.Text = project.ClientStreet ?? string.Empty;
+            ClientLine2Box.Text = project.ClientLine2 ?? string.Empty;
+            ClientZipBox.Text = project.ClientZip ?? string.Empty;
+            ClientCityBox.Text = project.ClientCity ?? string.Empty;
             DescriptionBox.Text = project.Description ?? string.Empty;
             FolderBox.Text = project.FolderPath;
 
@@ -193,8 +199,14 @@ public partial class ProjectEditWindow : Window
             Number = NumberBox.Text,
             Customer = CustomerBox.Text,
             CustomerStreet = StreetBox.Text,
+            CustomerLine2 = AddressLine2Box.Text,
             CustomerZip = ZipBox.Text,
             CustomerCity = CityBox.Text,
+            Client = ClientBox.Text,
+            ClientStreet = ClientStreetBox.Text,
+            ClientLine2 = ClientLine2Box.Text,
+            ClientZip = ClientZipBox.Text,
+            ClientCity = ClientCityBox.Text,
             Contacts = _contacts
                 .Select(row => new ProjectContactInput
                 {

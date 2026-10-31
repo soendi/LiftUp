@@ -53,11 +53,29 @@ public sealed class Project
     /// <summary>Straße und Hausnummer des Kunden.</summary>
     public string? CustomerStreet { get; set; }
 
+    /// <summary>Zweite Adresszeile des Kunden, z. B. Gebäude, Abteilung oder Postfach.</summary>
+    public string? CustomerLine2 { get; set; }
+
     /// <summary>Postleitzahl des Kunden.</summary>
     public string? CustomerZip { get; set; }
 
     /// <summary>Ort des Kunden.</summary>
     public string? CustomerCity { get; set; }
+
+    /// <summary>Name des Auftraggebers.</summary>
+    public string? Client { get; set; }
+
+    /// <summary>Straße und Hausnummer des Auftraggebers.</summary>
+    public string? ClientStreet { get; set; }
+
+    /// <summary>Zweite Adresszeile des Auftraggebers.</summary>
+    public string? ClientLine2 { get; set; }
+
+    /// <summary>Postleitzahl des Auftraggebers.</summary>
+    public string? ClientZip { get; set; }
+
+    /// <summary>Ort des Auftraggebers.</summary>
+    public string? ClientCity { get; set; }
 
     /// <summary>
     /// Name der ersten Ansprechperson. Wird beim Speichern aus <see cref="Contacts"/> gepflegt,
@@ -69,15 +87,18 @@ public sealed class Project
     public List<ProjectContact> Contacts { get; set; } = [];
 
     /// <summary>Anschrift in einer Zeile, z. B. „Hauptstraße 12, 12345 Musterstadt“.</summary>
-    public string CustomerAddress
+    public string CustomerAddress => ComposeAddress(CustomerStreet, CustomerLine2, CustomerZip, CustomerCity);
+
+    /// <summary>Anschrift des Auftraggebers in einer Zeile.</summary>
+    public string ClientAddress => ComposeAddress(ClientStreet, ClientLine2, ClientZip, ClientCity);
+
+    /// <summary>Straße, zweite Zeile und „PLZ Ort“ durch Komma verbunden; Leeres entfällt.</summary>
+    private static string ComposeAddress(string? street, string? line2, string? zip, string? city)
     {
-        get
-        {
-            var city = string.Join(" ", new[] { CustomerZip, CustomerCity }
-                .Where(part => !string.IsNullOrWhiteSpace(part)));
-            return string.Join(", ", new[] { CustomerStreet, city }
-                .Where(part => !string.IsNullOrWhiteSpace(part)));
-        }
+        var cityLine = string.Join(" ", new[] { zip, city }
+            .Where(part => !string.IsNullOrWhiteSpace(part)));
+        return string.Join(", ", new[] { street, line2, cityLine }
+            .Where(part => !string.IsNullOrWhiteSpace(part)));
     }
 
     public string? Description { get; set; }
@@ -119,8 +140,15 @@ public sealed class ProjectInput
 
     public string? Customer { get; set; }
     public string? CustomerStreet { get; set; }
+    public string? CustomerLine2 { get; set; }
     public string? CustomerZip { get; set; }
     public string? CustomerCity { get; set; }
+
+    public string? Client { get; set; }
+    public string? ClientStreet { get; set; }
+    public string? ClientLine2 { get; set; }
+    public string? ClientZip { get; set; }
+    public string? ClientCity { get; set; }
 
     /// <summary>Ansprechpersonen; leere Zeilen werden beim Speichern ignoriert.</summary>
     public IReadOnlyList<ProjectContactInput> Contacts { get; set; } = [];

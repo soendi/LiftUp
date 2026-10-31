@@ -1,6 +1,11 @@
+using System.IO;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using LiftUp.Core.Documents;
 using Microsoft.Web.WebView2.Core;
 
@@ -63,46 +68,6 @@ public partial class HtmlEditor : UserControl
             td, th { border: 1px solid #DCE1E8; padding: 4px 6px; }
             a { color: #2D6CDF; }
             img { max-width: 100%; }
-            .liftup-snippets {
-                position: absolute;
-                z-index: 40;
-                min-width: 250px;
-                max-width: 420px;
-                padding: 4px;
-                background: #FFFFFF;
-                border: 1px solid #C7D0DD;
-                border-radius: 6px;
-                box-shadow: 0 8px 20px rgba(31, 42, 68, 0.18);
-                font-size: 13px;
-                line-height: 1.3;
-            }
-            .liftup-snippets-row {
-                display: flex;
-                gap: 10px;
-                align-items: center;
-                padding: 5px 8px;
-                border-radius: 4px;
-                cursor: pointer;
-            }
-            .liftup-snippets-row.active { background: #E8F0FE; }
-            .liftup-snippets-name { color: #1F2A44; white-space: nowrap; }
-            .liftup-snippets-detail {
-                color: #6B7686;
-                font-size: 12px;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                white-space: nowrap;
-            }
-            .liftup-snippets-empty { padding: 6px 8px; color: #6B7686; }
-            .liftup-snippets-thumb {
-                width: 44px;
-                height: 32px;
-                object-fit: contain;
-                background: #FFFFFF;
-                border: 1px solid #DCE1E8;
-                border-radius: 3px;
-                flex: 0 0 auto;
-            }
             /* Bilder: anklicken und mit der Maus verschieben */
             .liftup-fig { cursor: grab; -webkit-user-select: none; user-select: none; }
             .liftup-fig img { -webkit-user-drag: none; }
@@ -147,9 +112,159 @@ public partial class HtmlEditor : UserControl
                 document.execCommand(command, false, value === undefined ? null : value);
             };
 
+            // ---- Einfügen an genau der Cursorstelle ----
+            window.liftupTopBlock = function (node) {
+                var element = node && node.nodeType === 1 ? node : (node ? node.parentNode : null);
+                while (element && element !== document.body) {
+                    if (element.parentNode === document.body) {
+                        return element;
+                    }
+                    element = element.parentNode;
+                }
+                return null;
+            };
+
+            // Nur diese Blöcke lassen sich gefahrlos teilen; Listen, Tabellen und
+            // Bilder werden weiterhin vom Browser eingefügt.
+            window.liftupCanSplit = function (block) {
+                if (!block || block.nodeType !== 1) {
+                    return false;
+                }
+                return /^(P|DIV|H1|H2|H3|H4|H5|H6|BLOCKQUOTE|PRE)$/.test(block.tagName);
+            };
+
+            window.liftupIsBlockNode = function (node) {
+                if (!node || node.nodeType !== 1) {
+                    return false;
+                }
+                return /^(P|DIV|H1|H2|H3|H4|H5|H6|UL|OL|LI|TABLE|FIGURE|BLOCKQUOTE|PRE|HR|SECTION)$/.test(node.tagName);
+            };
+
+            window.liftupHasBlockContent = function (fragment) {
+                for (var index = 0; index < fragment.childNodes.length; index += 1) {
+                    if (window.liftupIsBlockNode(fragment.childNodes[index])) {
+                        return true;
+                    }
+                }
+                return false;
+            };
+
+            window.liftupPlaceCaret = function (range) {
+                var selection = window.getSelection();
+                selection.removeAllRanges();
+                selection.addRange(range);
+                window.liftupRange = range.cloneRange();
+            };
+
+            // Setzt fertige Blöcke ein und legt den Cursor dahinter ab.
+            window.liftupInsertBlocks = function (range, html, parent, reference) {
+                var fragment = range.createContextualFragment(html || '');
+                var last = fragment.lastChild;
+                parent.insertBefore(fragment, reference);
+                if (last) {
+                    var caret = document.createRange();
+                    caret.setStartAfter(last);
+                    caret.collapse(true);
+                    window.liftupPlaceCaret(caret);
+                }
+                return true;
+            };
+
+            // Fügt HTML an der aktuellen Stelle ein, ohne vorhandene Zeilen oder Absätze
+            // zu entfernen. Blockweise Inhalte (Textbausteine, Bilder) werden als eigener
+            // Block zwischen den Text davor und danach gesetzt; der Absatz an der
+            // Einfügestelle bleibt bestehen, damit ein Zeilenumbruch davor erhalten bleibt.
+            window.liftupInsertHtml = function (html) {
+                var selection = window.getSelection();
+                if (!selection || selection.rangeCount === 0) {
+                    return false;
+                }
+
+                var range = selection.getRangeAt(0);
+                if (!range.collapsed) {
+                    range.deleteContents();
+                }
+
+                var probe = document.createRange().createContextualFragment(html || '');
+                if (!window.liftupHasBlockContent(probe)) {
+                    return document.execCommand('insertHTML', false, html || '');
+                }
+
+                var block = window.liftupTopBlock(range.startContainer);
+                if (block && !window.liftupCanSplit(block)) {
+                    return document.execCommand('insertHTML', false, html || '');
+                }
+
+                // Eine leere Zeile an der Einfügestelle bleibt stehen; der Baustein
+                // kommt darunter, statt die Zeile zu ersetzen.
+                if (block && !block.textContent.replace(/\u00a0/g, ' ').trim()) {
+                    if (block.childNodes.length === 0) {
+                        block.appendChild(document.createElement('br'));
+                    }
+                    return window.liftupInsertBlocks(range, html, block.parentNode, block.nextSibling);
+                }
+
+                // Den Inhalt hinter dem Cursor aus dem Absatz herausnehmen.
+                var rest = document.createRange();
+                rest.selectNodeContents(block || document.body);
+                rest.setStart(range.startContainer, range.startOffset);
+                var after = rest.extractContents();
+
+                // Ein leer gewordener Absatz bleibt als Zeile stehen, damit nichts
+                // nach oben rutscht.
+                if (block && block.childNodes.length === 0) {
+                    block.appendChild(document.createElement('br'));
+                }
+
+                var fragment = range.createContextualFragment(html || '');
+                var parent = block ? block.parentNode : document.body;
+                var reference = block ? block.nextSibling : null;
+                var last = fragment.lastChild;
+                parent.insertBefore(fragment, reference);
+
+                // Ein leerer Rest (etwa ein leerer Textknoten am Zeilenende) erzeugt
+                // keinen zusätzlichen Absatz unter dem Baustein.
+                var hasTail = Array.prototype.some.call(after.childNodes, function (node) {
+                    return node.nodeType === 1 || (node.nodeType === 3 && node.nodeValue.length > 0);
+                });
+
+                var tailBlock = null;
+                if (hasTail) {
+                    if (block) {
+                        tailBlock = block.cloneNode(false);
+                        tailBlock.appendChild(after);
+                        parent.insertBefore(tailBlock, reference);
+                    } else {
+                        parent.insertBefore(after, reference);
+                    }
+                }
+
+                var caret = document.createRange();
+                if (tailBlock) {
+                    caret.setStart(tailBlock, 0);
+                } else if (last) {
+                    caret.setStartAfter(last);
+                } else {
+                    return true;
+                }
+                caret.collapse(true);
+                window.liftupPlaceCaret(caret);
+                return true;
+            };
+
+            window.liftupInsertHtmlAtSelection = function (html) {
+                document.body.focus();
+                var selection = window.getSelection();
+                if (window.liftupRange) {
+                    selection.removeAllRanges();
+                    selection.addRange(window.liftupRange);
+                }
+                return window.liftupInsertHtml(html);
+            };
+
             // ---- Vorschläge für Textbausteine („/Text“) ----
             window.liftupSnippetEnabled = false;
-            window.liftupSnippetPanel = null;
+            window.liftupSnippetOpen = false;
             window.liftupSnippetItems = [];
             window.liftupSnippetIndex = 0;
             window.liftupSnippetToken = null;
@@ -163,16 +278,22 @@ public partial class HtmlEditor : UserControl
                 }
             };
 
-            window.liftupRemoveSnippetPanel = function () {
-                var panel = window.liftupSnippetPanel;
-                if (panel && panel.parentNode) {
-                    panel.parentNode.removeChild(panel);
+            // Die Trefferliste zeigt die Anwendung in einem eigenen Fenster über dem
+            // Editor an; der Editor meldet dafür nur Anzeigen und Schließen.
+            window.liftupHideSnippets = function () {
+                if (!window.liftupSnippetOpen) {
+                    return;
                 }
-                window.liftupSnippetPanel = null;
+                window.liftupSnippetOpen = false;
+                try {
+                    window.chrome.webview.postMessage(JSON.stringify({ type: 'snippetHide' }));
+                } catch (error) {
+                    // Ohne Verbindung zur Anwendung bleibt nur das Schließen.
+                }
             };
 
             window.liftupCloseSnippets = function () {
-                window.liftupRemoveSnippetPanel();
+                window.liftupHideSnippets();
                 window.liftupSnippetItems = [];
                 window.liftupSnippetIndex = 0;
                 window.liftupSnippetToken = null;
@@ -240,60 +361,43 @@ public partial class HtmlEditor : UserControl
                 return rect;
             };
 
+            // Die Anwendung zeigt die Treffer in einem eigenen Fenster über dem Editor;
+            // der Editor übermittelt dafür Treffer, Auswahl und Cursorstelle.
             window.liftupRenderSnippets = function () {
-                window.liftupRemoveSnippetPanel();
                 var rect = window.liftupCaretRect();
                 if (!rect) {
                     return;
                 }
 
-                var panel = document.createElement('div');
-                panel.className = 'liftup-snippets';
-                panel.setAttribute('contenteditable', 'false');
+                var items = window.liftupSnippetItems.map(function (item) {
+                    return {
+                        name: item.name || '',
+                        detail: item.detail || '',
+                        preview: item.preview || ''
+                    };
+                });
 
-                var items = window.liftupSnippetItems;
-                if (items.length === 0) {
-                    var empty = document.createElement('div');
-                    empty.className = 'liftup-snippets-empty';
-                    empty.textContent = window.liftupSnippetKind === 'image'
-                        ? 'Keine Bilder gefunden'
-                        : 'Keine Textbausteine gefunden';
-                    panel.appendChild(empty);
-                } else {
-                    items.forEach(function (item, position) {
-                        var row = document.createElement('div');
-                        row.className = 'liftup-snippets-row' + (position === window.liftupSnippetIndex ? ' active' : '');
-
-                        if (item.preview) {
-                            var thumb = document.createElement('img');
-                            thumb.className = 'liftup-snippets-thumb';
-                            thumb.src = item.preview;
-                            thumb.alt = '';
-                            row.appendChild(thumb);
-                        }
-
-                        var name = document.createElement('span');
-                        name.className = 'liftup-snippets-name';
-                        name.textContent = item.name;
-
-                        var detail = document.createElement('span');
-                        detail.className = 'liftup-snippets-detail';
-                        detail.textContent = item.detail || '';
-
-                        row.appendChild(name);
-                        row.appendChild(detail);
-                        row.addEventListener('mousedown', function (event) {
-                            event.preventDefault();
-                            window.liftupInsertSnippet(item);
-                        });
-                        panel.appendChild(row);
-                    });
+                window.liftupSnippetOpen = true;
+                try {
+                    window.chrome.webview.postMessage(JSON.stringify({
+                        type: 'snippetShow',
+                        kind: window.liftupSnippetKind,
+                        index: window.liftupSnippetIndex,
+                        left: Math.max(0, rect.left),
+                        top: rect.bottom + 2,
+                        items: items
+                    }));
+                } catch (error) {
+                    window.liftupSnippetOpen = false;
                 }
+            };
 
-                panel.style.top = (rect.bottom + window.scrollY + 2) + 'px';
-                panel.style.left = Math.max(6, rect.left + window.scrollX) + 'px';
-                document.body.appendChild(panel);
-                window.liftupSnippetPanel = panel;
+            // Übernimmt den Treffer, den die Anwendung im Vorschlagenfenster angeklickt hat.
+            window.liftupPickSnippet = function (position) {
+                var item = window.liftupSnippetItems[position];
+                if (item) {
+                    window.liftupInsertSnippet(item);
+                }
             };
 
             window.liftupSnippetQuery = function () {
@@ -364,11 +468,11 @@ public partial class HtmlEditor : UserControl
                 range.deleteContents();
                 selection.removeAllRanges();
                 selection.addRange(range);
-                document.execCommand('insertHTML', false, item.html || '');
+                window.liftupInsertHtml(item.html || '');
             };
 
             document.addEventListener('keydown', function (event) {
-                if (!window.liftupSnippetEnabled || !window.liftupSnippetPanel) {
+                if (!window.liftupSnippetEnabled || !window.liftupSnippetOpen) {
                     return;
                 }
                 if (event.key === 'ArrowDown') {
@@ -392,6 +496,13 @@ public partial class HtmlEditor : UserControl
 
             document.addEventListener('input', function () {
                 window.liftupSnippetQuery();
+            });
+
+            // Ein Klick in den Text beendet die Vorschläge, die nicht mehr zur Stelle passen.
+            document.addEventListener('mouseup', function () {
+                if (window.liftupSnippetOpen) {
+                    window.liftupSnippetQuery();
+                }
             });
 
             window.liftupGetSelectionHtml = function () {
@@ -745,6 +856,10 @@ public partial class HtmlEditor : UserControl
     {
         InitializeComponent();
         Loaded += OnLoaded;
+
+        // Das Vorschlagenfenster ist ein eigenes Fenster über dem Editor und
+        // verschwindet mit ihm.
+        Unloaded += (_, _) => SnippetPopup.IsOpen = false;
     }
 
     /// <summary>Zeigt den übergebenen HTML-Inhalt im Editor an.</summary>
@@ -854,6 +969,168 @@ public partial class HtmlEditor : UserControl
         }
     }
 
+    /// <summary>
+    /// Zeigt die Treffer der „/“- und „&amp;“-Suche in einem eigenen Fenster direkt unter
+    /// dem Cursor. Es liegt über dem Editor, damit die Liste nicht am Textfeld abgeschnitten
+    /// oder von der Oberfläche daneben überdeckt wird.
+    /// </summary>
+    private void ShowSnippets(JsonElement root)
+    {
+        var items = root.TryGetProperty("items", out var list) && list.ValueKind == JsonValueKind.Array
+            ? list.EnumerateArray().ToArray()
+            : [];
+
+        var index = root.TryGetProperty("index", out var indexElement) && indexElement.TryGetInt32(out var active)
+            ? active
+            : 0;
+
+        var isImage = root.TryGetProperty("kind", out var kindElement) && kindElement.GetString() == "image";
+
+        SnippetList.Children.Clear();
+
+        if (items.Length == 0)
+        {
+            SnippetList.Children.Add(new TextBlock
+            {
+                Text = isImage ? "Keine Bilder gefunden" : "Keine Textbausteine gefunden",
+                Foreground = new SolidColorBrush(Color.FromRgb(0x6B, 0x76, 0x86)),
+                Margin = new Thickness(8, 6, 8, 6),
+            });
+        }
+        else
+        {
+            for (var position = 0; position < items.Length; position++)
+            {
+                SnippetList.Children.Add(CreateSnippetRow(items[position], position, position == index));
+            }
+        }
+
+        // Der Editor liefert die Cursorstelle in seinen Pixeln; das Fenster rechnet sie
+        // in die Koordinaten dieses Steuerelements um.
+        var left = root.TryGetProperty("left", out var leftElement) ? leftElement.GetDouble() : 0;
+        var top = root.TryGetProperty("top", out var topElement) ? topElement.GetDouble() : 0;
+        var origin = Browser.TranslatePoint(new Point(left, top), this);
+
+        SnippetPopup.PlacementTarget = this;
+        SnippetPopup.Placement = PlacementMode.Relative;
+        SnippetPopup.HorizontalOffset = Math.Max(0, origin.X);
+        SnippetPopup.VerticalOffset = Math.Max(0, origin.Y);
+        SnippetPopup.IsOpen = true;
+    }
+
+    private UIElement CreateSnippetRow(JsonElement item, int position, bool active)
+    {
+        string Text(string name) =>
+            item.TryGetProperty(name, out var element) && element.ValueKind == JsonValueKind.String
+                ? element.GetString() ?? string.Empty
+                : string.Empty;
+
+        var texts = new StackPanel
+        {
+            Orientation = Orientation.Vertical,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+
+        texts.Children.Add(new TextBlock
+        {
+            Text = Text("name"),
+            FontSize = 13,
+            MaxWidth = 300,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            Foreground = new SolidColorBrush(Color.FromRgb(0x1F, 0x2A, 0x44)),
+        });
+
+        var detail = Text("detail");
+        if (detail.Length > 0)
+        {
+            texts.Children.Add(new TextBlock
+            {
+                Text = detail,
+                FontSize = 12,
+                MaxWidth = 300,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                Foreground = new SolidColorBrush(Color.FromRgb(0x6B, 0x76, 0x86)),
+            });
+        }
+
+        var content = new StackPanel { Orientation = Orientation.Horizontal };
+
+        if (PreviewImage(Text("preview")) is { } preview)
+        {
+            content.Children.Add(new Image
+            {
+                Source = preview,
+                Width = 44,
+                Height = 32,
+                Stretch = Stretch.Uniform,
+                Margin = new Thickness(0, 0, 10, 0),
+            });
+        }
+
+        content.Children.Add(texts);
+
+        var row = new Border
+        {
+            Background = active
+                ? new SolidColorBrush(Color.FromRgb(0xE8, 0xF0, 0xFE))
+                : Brushes.Transparent,
+            CornerRadius = new CornerRadius(4),
+            Padding = new Thickness(8, 5, 8, 5),
+            Cursor = Cursors.Hand,
+            Child = content,
+        };
+
+        row.MouseLeftButtonDown += (_, args) =>
+        {
+            args.Handled = true;
+            PickSnippet(position);
+        };
+
+        return row;
+    }
+
+    /// <summary>Übernimmt den im Vorschlagenfenster angeklickten Treffer in den Text.</summary>
+    private void PickSnippet(int position)
+    {
+        SnippetPopup.IsOpen = false;
+
+        if (Browser.CoreWebView2 is null)
+        {
+            return;
+        }
+
+        // Der Klick in das eigene Fenster nimmt dem Editor die Eingabe; er bekommt sie zurück.
+        Browser.Focus();
+        _ = Browser.CoreWebView2.ExecuteScriptAsync("window.liftupPickSnippet(" + position + "); true");
+    }
+
+    /// <summary>Wandelt das Vorschaubild eines Treffers (Daten-URI) in ein Bild um.</summary>
+    private static ImageSource? PreviewImage(string preview)
+    {
+        var comma = preview.IndexOf(',');
+        if (comma < 0)
+        {
+            return null;
+        }
+
+        try
+        {
+            using var stream = new MemoryStream(Convert.FromBase64String(preview[(comma + 1)..]));
+            var image = new BitmapImage();
+            image.BeginInit();
+            image.CacheOption = BitmapCacheOption.OnLoad;
+            image.StreamSource = stream;
+            image.EndInit();
+            image.Freeze();
+            return image;
+        }
+        catch (Exception exception) when (exception is FormatException or NotSupportedException or ArgumentException)
+        {
+            // Ein fehlerhaftes Vorschaubild darf die Liste nicht verhindern.
+            return null;
+        }
+    }
+
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         if (_initialization is not null)
@@ -942,6 +1219,18 @@ public partial class HtmlEditor : UserControl
             if (kind == "imageFormat")
             {
                 OnImageFormatRequested(root);
+                return;
+            }
+
+            if (kind == "snippetHide")
+            {
+                SnippetPopup.IsOpen = false;
+                return;
+            }
+
+            if (kind == "snippetShow")
+            {
+                ShowSnippets(root);
                 return;
             }
 
@@ -1061,6 +1350,7 @@ public partial class HtmlEditor : UserControl
         _failed = true;
         _ready = false;
 
+        SnippetPopup.IsOpen = false;
         Browser.Visibility = Visibility.Collapsed;
         ToolbarPanel.IsEnabled = false;
         FallbackBox.Text = _pendingHtml;
@@ -1102,7 +1392,7 @@ public partial class HtmlEditor : UserControl
         try
         {
             await Browser.CoreWebView2.ExecuteScriptAsync(
-                "window.liftupExec('insertHTML', " + JsonSerializer.Serialize(html) + "); true");
+                "window.liftupInsertHtmlAtSelection(" + JsonSerializer.Serialize(html) + "); true");
         }
         catch (Exception exception)
         {

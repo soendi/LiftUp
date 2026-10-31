@@ -46,5 +46,28 @@
                          BorderThickness="0" />
             </Grid>
         </Border>
+
+        <!-- Vorschläge der „/“- und „&“-Suche: ein eigenes Fenster über dem Editor,
+             damit die Liste nicht am Textfeld abgeschnitten wird. -->
+        <Popup x:Name="SnippetPopup"
+               AllowsTransparency="True"
+               Focusable="False"
+               Placement="Relative"
+               PopupAnimation="Fade"
+               StaysOpen="True">
+            <Border Background="White"
+                    BorderBrush="{StaticResource LiftUpBorder}"
+                    BorderThickness="1"
+                    CornerRadius="6"
+                    MaxWidth="420"
+                    MinWidth="260"
+                    Padding="4">
+                <ScrollViewer MaxHeight="320"
+                              HorizontalScrollBarVisibility="Disabled"
+                              VerticalScrollBarVisibility="Auto">
+                    <StackPanel x:Name="SnippetList" />
+                </ScrollViewer>
+            </Border>
+        </Popup>
     </Grid>
 </UserControl>

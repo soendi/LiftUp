@@ -76,13 +76,46 @@ Benutzer verwalten, Rollen und Rechte verwalten. Die Prüfung passiert in der Co
 - Löschen entfernt den Datensatz; auf Wunsch wird der Projektordner zusätzlich in den Papierkorb
   verschoben (Rückfrage im Dialog, standardmäßig „Nein“).
 - Die Liste zeigt zusätzlich, ob der Ordner aktuell vorhanden ist.
+- Zwei Adressen je Projekt, im Dialog unten als Register **Kunde** und **Auftraggeber** gepflegt:
+  Name, Straße und Hausnummer, eine zusätzliche Zeile (Gebäude, Abteilung, Postfach) sowie PLZ und Ort.
+  Die Ansprechpersonen gehören zum Kunden.
+
+### Zustandsanalyse und Investitionsplanung
+
+Zwei projektbezogene Tabellen, die direkt hinter dem Reiter "Projekte" liegen:
+
+- **Zustandsanalyse** – „Datenaufnahme der Aufzüge“ wie in `Aufzüge.xlsx`, je Aufzug eine Zeile:
+  Anlagendaten (Anlagebezeichnung, Servicefirma, Standort, Art des Aufzugs, Baujahr, Anlageart,
+  Nutzlast, Stockwerke, Züge, Notrufsystem nach EN81-28 und dessen Technologie, automatische Türen,
+  Wartungen pro Jahr), dann die **Analysepunkte** (Aggregat/Antrieb, Treibscheibe, Steuerung,
+  Regulator, Fangvorrichtung, Kabine, Zugänglichkeit), die **ESBA**-Punkte und die
+  **Ersatzteilverfügbarkeit** – durchwegs mit den Bewertungen der Vorlage.
+- **Investitionsplanung** – „Investitionsplanung (Empfehlung)“ wie in `Investition.xlsx`, je Aufzug
+  eine Zeile: Jahr und Anlagendaten, danach **Variante 1 – Modernisierung** und
+  **Variante 2 – Ersatzanlage** mit Massnahme, Kosten und Erläuterung.
+
+Bewertungen, ja/nein und die Aufzugsart werden aus einer Auswahlliste gewählt (Spaltenkopf zeigt die
+möglichen Werte). Im PDF bekommen die Bewertungszellen dieselben Farben wie im Excel: grün gut /
+in Ordnung / verfügbar, gelb mässig / bedingt verfügbar, rot schlecht / nicht in Ordnung / nicht
+verfügbar. Das Blatt übernimmt auch die Gruppenköpfe und den Hinweistext der Vorlage.
+
+Beide Reiter haben oben die Projektauswahl. In Textfeldern öffnet ein eingetipptes `/` die
+Textbausteine; weitere Buchstaben filtern die Liste (Pfeiltasten wählen, Eingabe übernimmt,
+Escape schließt). In einer Tabellenzelle wird ein Textbaustein als reiner Text eingesetzt, weil die
+Zelle keine Formatierung kennt.
+
+Speichern schreibt alle Zeilen des Projekts neu; vollständig leere Zeilen fallen weg. Die Spalten
+stehen an einer Stelle im Code (`ProjectTableCatalog`), die Werte liegen als JSON je Zeile – neue
+Felder brauchen deshalb keine Datenbankmigration. Sind Zeilen vorhanden, erscheinen beide Tabellen
+als eigene Blätter hinter der Vorlage im PDF.
 
 ## Datenmodell
 
 Tabellen: `Users`, `Roles`, `Projects`, `ChangeLog`, `Settings`, `SchemaInfo`.
 `ChangeLog` führt zusätzlich den Bearbeiter (`OriginUser`) und die Geräte-Id, damit sich Einträge
 ihrem Ursprung zuordnen lassen. Ansprechpersonen stehen in `ProjectContacts`, werden beim Bearbeiten
-neu geschrieben und dabei weich gelöscht.
+neu geschrieben und dabei weich gelöscht. Zeilen aus Zustandsanalyse und Investitionsplanung liegen in
+`ProjectTableRows` (Feld `TableKey` trennt die beiden Tabellen, `Data` hält die Werte als JSON).
 
 Jede fachliche Tabelle führt:
 
@@ -184,6 +217,13 @@ Projektleiter dürfen zusätzlich archivieren, löschen und Dokumente erzeugen. 
 Vorlagen bestehen aus HTML und CSS (Register "Vorlagen"). Der Editor bietet HTML-Eingabe,
 Vorschau mit Beispieldaten und eine Platzhalterliste, aus der per Doppelklick eingefügt wird.
 
+**Startvorlage:** LiftUp legt den **Zustandsbericht Aufzugsanlagen** an. Beim Erstellen eines
+Dokuments erscheinen seine Abschnitte als Tabs: „1. Anlagedaten“ (bringt die Anlagedaten-Tabelle
+al Startinhalt mit – Aufzugstyp, Jahrgang, Antrieb, Steuerung/Regler, Fabrikat, Nutzlast,
+Geschwindigkeit, Haltestellen, Zugänge, Förderhöhe, Maschinenraum, Kabinenabschluss, Schachttüren,
+Schachtausführung, Auffahrsockel), „2. Analyse“ und „3. Fazit / Empfehlung“ (nur Titel). Ein
+Startinhalt bleibt erhalten, wenn die Titel der Abschnitte angepasst werden.
+
 | Platzhalter | Inhalt |
 | --- | --- |
 | `{{project.number}}` | Projektnummer |
@@ -191,6 +231,8 @@ Vorschau mit Beispieldaten und eine Platzhalterliste, aus der per Doppelklick ei
 | `{{project.customer}}` | Kunde |
 | `{{project.address}}` | Anschrift des Kunden (Straße, PLZ Ort) |
 | `{{project.street}}` | Straße und Hausnummer |
+| `{{project.client}}` | Auftraggeber |
+| `{{project.clientaddress}}` | Anschrift des Auftraggebers |
 | `{{project.zip}}` | Postleitzahl |
 | `{{project.city}}` | Ort |
 | `{{project.contact}}` | Erste Ansprechperson |
@@ -214,6 +256,9 @@ vorinstallierte **WebView2**-Engine – damit stimmen `@page`, Seitenumbrüche, 
 Schriftgrößen. Formate A4/A3, Hoch-/Querformat und Seitenrand sind einstellbar. Die PDFs landen
 im Projektordner unter `03_PDF`; die Historie zeigt Datei, Vorlage, Version und Zeitpunkt und kann
 die Datei direkt öffnen.
+
+Gibt es zum Projekt Zeilen in der Zustandsanalyse oder Investitionsplanung, folgen diese als eigene
+Blätter (jedes mit erzwungenem Seitenumbruch) hinter der Titelseite – in der Vorschau wie im PDF.
 
 ## Installation und Updates
 
@@ -306,6 +351,8 @@ Das Werkzeug fragt die aktuelle PostgreSQL-Version bei postgresql.org ab und ins
 Tabellen an (wiederholbar: vorhandene Teile bleiben stehen) und schreibt die Zugangsdatei
 `LiftUp-Datenbank-Zugang.json` auf den Desktop. Optionen: `--port`, `--database`, `--user`,
 `--password`, `--superuser-password`, `--host` (Adresse in der Datei), `--output`, `--whatif`.
+Das Passwort des Benutzers `postgres` ist mit `postgres` vorbelegt, damit das Werkzeug nach der
+Installation von PostgreSQL ohne Rückfrage weiterläuft; `--superuser-password` überschreibt es.
 
 Im Client den Reiter **Datenbank** öffnen, „Datei einlesen …“ wählen und speichern – damit sind Host,
 Port, Datenbank, Benutzer und Passwort gesetzt. Alternativ lassen sich die Werte von Hand eintragen;

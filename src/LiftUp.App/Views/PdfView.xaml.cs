@@ -38,18 +38,39 @@ public partial class PdfView : UserControl
         LoadProjects();
         LoadTemplates();
         LoadDocuments();
+
+        // Neu angelegte Projekte stehen sofort zur Auswahl, sobald der Reiter geöffnet wird.
+        IsVisibleChanged += (_, args) =>
+        {
+            if (args.NewValue is true)
+            {
+                LoadProjects(keepSelection: true);
+            }
+        };
     }
 
-    private void LoadProjects()
+    private void LoadProjects(bool keepSelection = false)
     {
+        var previousId = keepSelection ? (ProjectBox.SelectedItem as ProjectOption)?.Id : null;
+
         try
         {
             var projects = _services.Projects.Search(new ProjectQuery())
                 .Select(item => new ProjectOption(item.Id, $"{item.Number} · {item.Name}"))
                 .ToArray();
 
+            var index = projects.Length > 0 ? 0 : -1;
+            if (previousId is { } id)
+            {
+                var found = Array.FindIndex(projects, item => item.Id == id);
+                if (found >= 0)
+                {
+                    index = found;
+                }
+            }
+
             ProjectBox.ItemsSource = projects;
-            ProjectBox.SelectedIndex = projects.Length > 0 ? 0 : -1;
+            ProjectBox.SelectedIndex = index;
 
             InfoText.Text = projects.Length == 0
                 ? "Noch keine Projekte vorhanden."

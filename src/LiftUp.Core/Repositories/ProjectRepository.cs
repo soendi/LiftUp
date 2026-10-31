@@ -10,7 +10,8 @@ public sealed class ProjectRepository
     private const string Columns =
         "Id, Number, Name, Customer, CustomerStreet, CustomerZip, CustomerCity, Contact, Description, " +
         "ResponsibleUserId, ResponsibleName, FolderPath, Status, ArchivedUtc, ArchivedBy, CreatedUtc, " +
-        "CreatedBy, UpdatedUtc, UpdatedBy, RowVersion, IsDeleted";
+        "CreatedBy, UpdatedUtc, UpdatedBy, RowVersion, IsDeleted, CustomerLine2, Client, ClientStreet, " +
+        "ClientLine2, ClientZip, ClientCity";
 
     public IReadOnlyList<ProjectListItem> Search(SqliteConnection connection, SqliteTransaction? transaction, ProjectQuery query)
     {
@@ -36,6 +37,7 @@ public sealed class ProjectRepository
             conditions.Add(
                 "(p.Name LIKE $pattern OR p.Number LIKE $pattern OR p.Customer LIKE $pattern " +
                 "OR p.CustomerStreet LIKE $pattern OR p.CustomerZip LIKE $pattern OR p.CustomerCity LIKE $pattern " +
+                "OR p.Client LIKE $pattern OR p.ClientStreet LIKE $pattern OR p.ClientCity LIKE $pattern " +
                 "OR p.Contact LIKE $pattern OR p.ResponsibleName LIKE $pattern OR p.Description LIKE $pattern " +
                 "OR EXISTS (SELECT 1 FROM ProjectContacts c WHERE c.ProjectId = p.Id AND c.IsDeleted = 0 " +
                 "AND (c.Name LIKE $pattern OR c.Email LIKE $pattern OR c.Phone LIKE $pattern " +
@@ -154,11 +156,13 @@ public sealed class ProjectRepository
     {
         using var command = Db.Command(connection, """
             INSERT INTO Projects
-                (Id, Number, Name, Customer, CustomerStreet, CustomerZip, CustomerCity, Contact, Description,
+                (Id, Number, Name, Customer, CustomerStreet, CustomerLine2, CustomerZip, CustomerCity,
+                 Client, ClientStreet, ClientLine2, ClientZip, ClientCity, Contact, Description,
                  ResponsibleUserId, ResponsibleName, FolderPath, Status, ArchivedUtc, ArchivedBy, CreatedUtc,
                  CreatedBy, UpdatedUtc, UpdatedBy, RowVersion, IsDeleted)
             VALUES
-                ($id, $number, $name, $customer, $customerStreet, $customerZip, $customerCity, $contact,
+                ($id, $number, $name, $customer, $customerStreet, $customerLine2, $customerZip, $customerCity,
+                 $client, $clientStreet, $clientLine2, $clientZip, $clientCity, $contact,
                  $description, $responsibleId, $responsibleName, $folderPath, $status, $archivedUtc, $archivedBy,
                  $createdUtc, $createdBy, $updatedUtc, $updatedBy, 1, 0);
             """, transaction);
@@ -167,8 +171,14 @@ public sealed class ProjectRepository
             .With("$name", project.Name)
             .With("$customer", project.Customer)
             .With("$customerStreet", project.CustomerStreet)
+            .With("$customerLine2", project.CustomerLine2)
             .With("$customerZip", project.CustomerZip)
             .With("$customerCity", project.CustomerCity)
+            .With("$client", project.Client)
+            .With("$clientStreet", project.ClientStreet)
+            .With("$clientLine2", project.ClientLine2)
+            .With("$clientZip", project.ClientZip)
+            .With("$clientCity", project.ClientCity)
             .With("$contact", project.Contact)
             .With("$description", project.Description)
             .With("$responsibleId", project.ResponsibleUserId?.ToString("D"))
@@ -190,7 +200,9 @@ public sealed class ProjectRepository
         using var command = Db.Command(connection, """
             UPDATE Projects
             SET Number = $number, Name = $name, Customer = $customer, CustomerStreet = $customerStreet,
-                CustomerZip = $customerZip, CustomerCity = $customerCity, Contact = $contact,
+                CustomerLine2 = $customerLine2, CustomerZip = $customerZip, CustomerCity = $customerCity,
+                Client = $client, ClientStreet = $clientStreet, ClientLine2 = $clientLine2,
+                ClientZip = $clientZip, ClientCity = $clientCity, Contact = $contact,
                 Description = $description, ResponsibleUserId = $responsibleId, ResponsibleName = $responsibleName,
                 FolderPath = $folderPath, Status = $status, UpdatedUtc = $updatedUtc, UpdatedBy = $updatedBy,
                 RowVersion = RowVersion + 1
@@ -202,8 +214,14 @@ public sealed class ProjectRepository
             .With("$name", project.Name)
             .With("$customer", project.Customer)
             .With("$customerStreet", project.CustomerStreet)
+            .With("$customerLine2", project.CustomerLine2)
             .With("$customerZip", project.CustomerZip)
             .With("$customerCity", project.CustomerCity)
+            .With("$client", project.Client)
+            .With("$clientStreet", project.ClientStreet)
+            .With("$clientLine2", project.ClientLine2)
+            .With("$clientZip", project.ClientZip)
+            .With("$clientCity", project.ClientCity)
             .With("$contact", project.Contact)
             .With("$description", project.Description)
             .With("$responsibleId", project.ResponsibleUserId?.ToString("D"))
@@ -366,5 +384,11 @@ public sealed class ProjectRepository
         UpdatedBy = reader.TextOrNull(18),
         RowVersion = reader.Int64(19),
         IsDeleted = reader.Bool(20),
+        CustomerLine2 = reader.TextOrNull(21),
+        Client = reader.TextOrNull(22),
+        ClientStreet = reader.TextOrNull(23),
+        ClientLine2 = reader.TextOrNull(24),
+        ClientZip = reader.TextOrNull(25),
+        ClientCity = reader.TextOrNull(26),
     };
 }

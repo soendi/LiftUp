@@ -9,6 +9,10 @@ public sealed class TemplateSection
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid TemplateId { get; set; }
     public string Title { get; set; } = string.Empty;
+
+    /// <summary>Startinhalt des Tabs (HTML); leer heißt: der Tab beginnt leer.</summary>
+    public string DefaultHtml { get; set; } = string.Empty;
+
     public int SortOrder { get; set; }
 }
 

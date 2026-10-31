@@ -71,7 +71,13 @@ public sealed class AppServices(Database database)
 
     public void SetSession(Session session) => Session = session;
 
+    /// <summary>Beendet die Sitzung beim Abmelden; danach ist kein Benutzer mehr angemeldet.</summary>
+    public void ClearSession() => Session = null;
+
     public ProjectService Projects => new(Database, CurrentSession);
+
+    /// <summary>Zustandsanalyse und Investitionsplanung je Projekt.</summary>
+    public ProjectTableService ProjectTables => new(Database, CurrentSession);
     public UserService Users => new(Database, CurrentSession);
     public RoleService Roles => new(Database, CurrentSession);
     public TemplateService Templates => new(Database, CurrentSession);

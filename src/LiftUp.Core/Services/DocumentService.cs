@@ -20,6 +20,7 @@ public sealed class DocumentService
     private readonly DocumentRepository _documents = new();
     private readonly SnippetRepository _snippets = new();
     private readonly ImageRepository _images = new();
+    private readonly ProjectTableRepository _tables = new();
     private readonly ChangeLogWriter _changes;
 
     public DocumentService(Database database, Session actor, IHtmlToPdfRenderer renderer)
@@ -242,7 +243,7 @@ public sealed class DocumentService
             Phone = _actor.Phone,
         };
 
-        return PlaceholderRenderer.Render(version.Html, new PlaceholderContext
+        var html = PlaceholderRenderer.Render(version.Html, new PlaceholderContext
         {
             Project = project,
             UserName = company.Contact,
@@ -250,6 +251,29 @@ public sealed class DocumentService
             SnippetResolver = name => snippets.TryGetValue(name, out var snippet) ? snippet : null,
             ImageResolver = name => images.TryGetValue(name, out var image) ? ImageEmbedding.ToImageTag(image) : null,
         });
+
+        // Zustandsanalyse und Investitionsplanung folgen als eigene Blätter – in Vorschau und PDF.
+        return AppendProjectSheets(connection, transaction, project, html);
+    }
+
+    /// <summary>
+    /// Hängt die projektbezogenen Tabellen als eigene Seiten an. Ohne Zeilen bleibt das
+    /// Dokument unverändert.
+    /// </summary>
+    private string AppendProjectSheets(
+        Microsoft.Data.Sqlite.SqliteConnection connection,
+        Microsoft.Data.Sqlite.SqliteTransaction? transaction,
+        Project project,
+        string html)
+    {
+        var builder = new System.Text.StringBuilder(html);
+        foreach (var definition in ProjectTableCatalog.All)
+        {
+            var rows = _tables.GetRows(connection, transaction, project.Id, definition.Key);
+            builder.Append(ProjectTableSheet.Render(definition, rows));
+        }
+
+        return builder.ToString();
     }
 
     private async Task<ProjectDocument> SavePdfAsync(

@@ -20,6 +20,9 @@ namespace LiftUp.ServerSetup;
 ///   LiftUp.ServerSetup.exe
 ///   LiftUp.ServerSetup.exe --port 5432 --database liftup --user liftup
 ///   LiftUp.ServerSetup.exe --whatif
+///
+/// Das Passwort des Superusers „postgres“ ist mit „postgres“ vorbelegt; nach einer
+/// Installation von PostgreSQL läuft die Einrichtung damit ohne Rückfrage weiter.
 /// </summary>
 internal static class Program
 {
@@ -129,12 +132,6 @@ internal static class Program
             {
                 if (string.IsNullOrWhiteSpace(options.SuperuserPassword))
                 {
-                    Console.Write("Passwort des Benutzers „postgres“ (wird bei der Installation gesetzt): ");
-                    options = options with { SuperuserPassword = Console.ReadLine() ?? string.Empty };
-                }
-
-                if (string.IsNullOrWhiteSpace(options.SuperuserPassword))
-                {
                     Console.WriteLine("Ohne Passwort für „postgres“ kann PostgreSQL nicht eingerichtet werden.");
                     return 3;
                 }
@@ -190,18 +187,12 @@ internal static class Program
             return 0;
         }
 
-        // Das Passwort wird auch dann gebraucht, wenn PostgreSQL schon läuft und nur
-        // Datenbank und Benutzer fehlen – früher endete der Lauf hier ohne Nachfrage.
-        if (string.IsNullOrWhiteSpace(options.SuperuserPassword))
-        {
-            Console.Write("Passwort des Benutzers „postgres“ (Superuser): ");
-            options = options with { SuperuserPassword = Console.ReadLine() ?? string.Empty };
-        }
-
+        // Das Passwort ist vorbelegt („postgres“). Damit läuft die Einrichtung nach der
+        // Installation von PostgreSQL ohne Rückfrage weiter und kann unbeaufsichtigt starten.
         if (string.IsNullOrWhiteSpace(options.SuperuserPassword))
         {
             Console.WriteLine("Für das Anlegen von Datenbank und Benutzer wird das Passwort von „postgres“ benötigt.");
-            Console.WriteLine("Das Passwort von Hand eingeben oder --superuser-password angeben.");
+            Console.WriteLine("Bitte --superuser-password angeben.");
             return 5;
         }
 
@@ -224,6 +215,11 @@ internal static class Program
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             Console.WriteLine($"Einrichten fehlgeschlagen: {exception.Message}");
+            if (options.SuperuserPassword == "postgres")
+            {
+                Console.WriteLine("Lautet das Passwort des Benutzers „postgres“ anders, bitte --superuser-password angeben.");
+            }
+
             return 6;
         }
 
@@ -328,7 +324,9 @@ internal sealed record SetupOptions
     public string Database { get; init; } = DatabaseServerSettings.DefaultDatabase;
     public string User { get; init; } = DatabaseServerSettings.DefaultUser;
     public string Password { get; init; } = GeneratePassword();
-    public string SuperuserPassword { get; init; } = string.Empty;
+    // Beim Start bereits hinterlegt, damit die Einrichtung nach der Installation von
+    // PostgreSQL ohne Rückfrage weiterläuft; --superuser-password überschreibt ihn.
+    public string SuperuserPassword { get; init; } = "postgres";
     public string ConnectHost { get; init; } = "127.0.0.1";
     public string PublicHost { get; init; } = Environment.MachineName;
     public string? OutputPath { get; init; }
@@ -396,7 +394,7 @@ internal sealed record SetupOptions
               --database <Name>          Name der Datenbank (Standard liftup)
               --user <Name>              Benutzer für die Clients (Standard liftup)
               --password <Text>          Passwort dieses Benutzers (sonst zufällig erzeugt)
-              --superuser-password <Text> Passwort des Benutzers „postgres“
+              --superuser-password <Text> Passwort des Benutzers „postgres“ (Standard: postgres)
               --connect-host <Host>      Adresse für die Einrichtung (Standard 127.0.0.1)
               --host <Host>              Adresse, die in der Zugangsdatei steht (Standard: Rechnername)
               --output <Pfad>            Ablageort der Zugangsdatei (Standard: Desktop)

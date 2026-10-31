@@ -1,0 +1,73 @@
+<UserControl x:Class="LiftUp.App.Views.ProjectTableView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Style="{StaticResource LiftUpCard}" Padding="10" Margin="0,0,0,10">
+            <WrapPanel Orientation="Horizontal">
+                <StackPanel Margin="0,0,12,0">
+                    <TextBlock Text="Projekt" Style="{StaticResource LiftUpFieldLabel}" />
+                    <ComboBox x:Name="ProjectBox" Width="320" SelectionChanged="OnProjectChanged" />
+                </StackPanel>
+
+                <StackPanel VerticalAlignment="Bottom">
+                    <Button Content="Aktualisieren" Click="OnRefreshClick" Width="120" />
+                </StackPanel>
+            </WrapPanel>
+        </Border>
+
+        <TextBlock Grid.Row="1" x:Name="InfoText" Margin="2,0,0,6" TextWrapping="Wrap" />
+
+        <DataGrid Grid.Row="2" x:Name="RowsGrid"
+                  AutoGenerateColumns="False"
+                  CanUserAddRows="False"
+                  CanUserDeleteRows="False"
+                  CanUserReorderColumns="False"
+                  HeadersVisibility="Column"
+                  GridLinesVisibility="Horizontal"
+                  SelectionMode="Single"
+                  RowHeight="26" />
+
+        <Border Grid.Row="3" Style="{StaticResource LiftUpCard}" Padding="10" Margin="0,10,0,0">
+            <StackPanel Orientation="Horizontal">
+                <Button Content="Zeile hinzufügen" Click="OnAddRowClick" />
+                <Button Content="Zeile entfernen" Click="OnRemoveRowClick" />
+                <Button Content="Speichern" Click="OnSaveClick" />
+                <TextBlock Text="In Textfeldern „/“ eintippen, um Textbausteine zu suchen."
+                           Style="{StaticResource LiftUpFieldLabel}"
+                           VerticalAlignment="Center"
+                           Margin="12,0,0,0" />
+            </StackPanel>
+        </Border>
+
+        <!-- Vorschläge der „/“-Suche: ein eigenes Fenster, damit die Liste nicht am
+             Rand der Tabelle abgeschnitten wird. -->
+        <Popup x:Name="SnippetPopup"
+               AllowsTransparency="True"
+               Focusable="False"
+               Placement="Relative"
+               PopupAnimation="Fade"
+               StaysOpen="True">
+            <Border Background="White"
+                    BorderBrush="{StaticResource LiftUpBorder}"
+                    BorderThickness="1"
+                    CornerRadius="6"
+                    MaxWidth="420"
+                    MinWidth="260"
+                    Padding="4">
+                <ScrollViewer MaxHeight="300"
+                              HorizontalScrollBarVisibility="Disabled"
+                              VerticalScrollBarVisibility="Auto">
+                    <StackPanel x:Name="SnippetList" />
+                </ScrollViewer>
+            </Border>
+        </Popup>
+    </Grid>
+</UserControl>

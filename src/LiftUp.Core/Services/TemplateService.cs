@@ -235,7 +235,17 @@ public sealed class TemplateService
         var template = _templates.GetById(connection, transaction, templateId)
                        ?? throw new ValidationException("Die Vorlage wurde nicht gefunden.");
 
-        _sections.ReplaceAll(connection, transaction, templateId, cleaned, _actor.UserName);
+        // Ein vorhandener Startinhalt bleibt erhalten, auch wenn der Titel angepasst wird.
+        var previous = _sections.GetByTemplate(connection, transaction, templateId);
+        var content = cleaned
+            .Select(title => (
+                Title: title,
+                DefaultHtml: previous.FirstOrDefault(section =>
+                    string.Equals(section.Title.Trim(), title, StringComparison.OrdinalIgnoreCase))?.DefaultHtml
+                    ?? string.Empty))
+            .ToList();
+
+        _sections.ReplaceAll(connection, transaction, templateId, content, _actor.UserName);
         _changes.Record(connection, transaction, "Template", templateId.ToString("D"), "Sections",
             new { Count = cleaned.Count }, template.RowVersion);
         transaction.Commit();

@@ -62,7 +62,7 @@ public sealed class DocumentTypeTests
         Assert.Equal("Angebot kurz", angebote[0].Name);
 
         // Die mitgelieferte Startvorlage zählt nicht mit.
-        Assert.Equal(2, templates.GetAll().Count(item => item.Name != "Standard-Dokument"));
+        Assert.Equal(2, templates.GetAll().Count(item => item.Name != "Zustandsbericht Aufzugsanlagen"));
     }
 
     [Fact]

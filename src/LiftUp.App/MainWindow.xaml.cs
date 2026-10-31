@@ -35,6 +35,14 @@ public partial class MainWindow : Window
             overview.Add(CreateTab("Projekte", new ProjectsView(_services)));
         }
 
+        if (session.Can(Permission.ViewProjects))
+        {
+            // Die beiden Tabellen erscheinen direkt hinter den Projekten; die Zustandsanalyse
+            // wird zusätzlich als zweites Blatt ins PDF übernommen.
+            overview.Add(CreateTab("Zustandsanalyse", new ProjectTableView(_services, ProjectTableCatalog.Zustandsanalyse)));
+            overview.Add(CreateTab("Investitionsplanung", new ProjectTableView(_services, ProjectTableCatalog.Investitionsplanung)));
+        }
+
         if (session.Can(Permission.CreateDocuments) || session.Can(Permission.ManageTemplates))
         {
             overview.Add(CreateTab("PDF", new PdfView(_services)));
@@ -316,15 +324,29 @@ public partial class MainWindow : Window
 
     private void OnLogoutClick(object sender, RoutedEventArgs e)
     {
+        var application = System.Windows.Application.Current;
+
+        // Beim Abmelden wird das Hauptfenster geschlossen: Sonst bliebe der Inhalt des
+        // abgemeldeten Benutzers offen, während davor nur das Anmeldefenster steht.
+        // Die Anwendung läuft dabei weiter und beendet sich erst, wenn die Anmeldung
+        // abgebrochen wird.
+        application.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+        _skipSyncOnClose = true;
+        _syncTimer.Stop();
+        Close();
+        application.MainWindow = null;
+        _services.ClearSession();
+
         var login = new LoginWindow(_services);
-        if (login.ShowDialog() != true)
+        if (login.ShowDialog() != true || _services.Session is null)
         {
+            application.Shutdown();
             return;
         }
 
         var next = new MainWindow(_services);
-        System.Windows.Application.Current.MainWindow = next;
+        application.MainWindow = next;
+        application.ShutdownMode = ShutdownMode.OnMainWindowClose;
         next.Show();
-        Close();
     }
 }

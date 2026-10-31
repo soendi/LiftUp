@@ -28,9 +28,6 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
                 <TextBlock Grid.Row="0" Grid.Column="0" Text="Projektname *" Style="{StaticResource LiftUpFieldLabel}" VerticalAlignment="Center" />
@@ -71,49 +68,106 @@
 
                 <Border Grid.Row="8" Grid.ColumnSpan="2" Height="1" Background="{StaticResource LiftUpBorder}" Margin="0,12,0,14" />
 
-                <TextBlock Grid.Row="9" Grid.Column="0" Text="Kunde" Style="{StaticResource LiftUpFieldLabel}" VerticalAlignment="Center" />
-                <TextBox Grid.Row="9" Grid.Column="1" x:Name="CustomerBox" Margin="0,3,0,8" />
+                <!-- Zwei Anschriften nebeneinander: Kunde und Auftraggeber. -->
+                <TabControl Grid.Row="9" Grid.ColumnSpan="2" Margin="0,0,0,4">
+                    <TabItem Header="Kunde">
+                        <Grid Margin="12,10,12,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="150" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
 
-                <TextBlock Grid.Row="10" Grid.Column="0" Text="Straße, Hausnr." Style="{StaticResource LiftUpFieldLabel}" VerticalAlignment="Center" />
-                <TextBox Grid.Row="10" Grid.Column="1" x:Name="StreetBox" Margin="0,3,0,8" ToolTip="Anschrift des Kunden" />
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Kunde" Style="{StaticResource LiftUpFieldLabel}" VerticalAlignment="Center" />
+                            <TextBox Grid.Row="0" Grid.Column="1" x:Name="CustomerBox" Margin="0,3,0,8" />
 
-                <TextBlock Grid.Row="11" Grid.Column="0" Text="PLZ, Ort" Style="{StaticResource LiftUpFieldLabel}" VerticalAlignment="Center" />
-                <Grid Grid.Row="11" Grid.Column="1" Margin="0,3,0,8">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="110" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <TextBox Grid.Column="0" x:Name="ZipBox" ToolTip="Postleitzahl" />
-                    <TextBox Grid.Column="1" x:Name="CityBox" Margin="8,0,0,0" ToolTip="Ort" />
-                </Grid>
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Straße, Hausnr." Style="{StaticResource LiftUpFieldLabel}" VerticalAlignment="Center" />
+                            <TextBox Grid.Row="1" Grid.Column="1" x:Name="StreetBox" Margin="0,3,0,8" ToolTip="Anschrift des Kunden" />
 
-                <TextBlock Grid.Row="12" Grid.Column="0" Text="Ansprechpersonen beim Kunden"
-                           Style="{StaticResource LiftUpFieldLabel}" VerticalAlignment="Top" Margin="0,7,0,0" TextWrapping="Wrap" />
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Zusatz" Style="{StaticResource LiftUpFieldLabel}" VerticalAlignment="Center" />
+                            <TextBox Grid.Row="2" Grid.Column="1" x:Name="AddressLine2Box" Margin="0,3,0,8"
+                                     ToolTip="Zweite Adresszeile, z. B. Gebäude, Abteilung oder Postfach" />
 
-                <StackPanel Grid.Row="12" Grid.Column="1">
-                    <DataGrid x:Name="ContactsGrid"
-                              Height="128"
-                              AutoGenerateColumns="False"
-                              CanUserAddRows="False"
-                              CanUserDeleteRows="False"
-                              CanUserReorderColumns="False"
-                              HeadersVisibility="Column"
-                              GridLinesVisibility="Horizontal"
-                              SelectionMode="Single"
-                              RowHeight="26">
-                        <DataGrid.Columns>
-                            <DataGridTextColumn Header="Name" Binding="{Binding Name, UpdateSourceTrigger=PropertyChanged}" Width="150" />
-                            <DataGridTextColumn Header="E-Mail" Binding="{Binding Email, UpdateSourceTrigger=PropertyChanged}" Width="*" />
-                            <DataGridTextColumn Header="Telefon" Binding="{Binding Phone, UpdateSourceTrigger=PropertyChanged}" Width="120" />
-                            <DataGridTextColumn Header="Zuständigkeit" Binding="{Binding Responsibility, UpdateSourceTrigger=PropertyChanged}" Width="140" />
-                        </DataGrid.Columns>
-                    </DataGrid>
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="PLZ, Ort" Style="{StaticResource LiftUpFieldLabel}" VerticalAlignment="Center" />
+                            <Grid Grid.Row="3" Grid.Column="1" Margin="0,3,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="110" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox Grid.Column="0" x:Name="ZipBox" ToolTip="Postleitzahl" />
+                                <TextBox Grid.Column="1" x:Name="CityBox" Margin="8,0,0,0" ToolTip="Ort" />
+                            </Grid>
 
-                    <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
-                        <Button Content="Person hinzufügen" Click="OnAddContactClick" />
-                        <Button Content="Zeile entfernen" Click="OnRemoveContactClick" />
-                    </StackPanel>
-                </StackPanel>
+                            <TextBlock Grid.Row="4" Grid.Column="0" Text="Ansprechpersonen"
+                                       Style="{StaticResource LiftUpFieldLabel}" VerticalAlignment="Top" Margin="0,7,0,0" TextWrapping="Wrap" />
+                            <DataGrid Grid.Row="4" Grid.Column="1"
+                                      x:Name="ContactsGrid"
+                                      Height="128"
+                                      AutoGenerateColumns="False"
+                                      CanUserAddRows="False"
+                                      CanUserDeleteRows="False"
+                                      CanUserReorderColumns="False"
+                                      HeadersVisibility="Column"
+                                      GridLinesVisibility="Horizontal"
+                                      SelectionMode="Single"
+                                      RowHeight="26">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Name" Binding="{Binding Name, UpdateSourceTrigger=PropertyChanged}" Width="150" />
+                                    <DataGridTextColumn Header="E-Mail" Binding="{Binding Email, UpdateSourceTrigger=PropertyChanged}" Width="*" />
+                                    <DataGridTextColumn Header="Telefon" Binding="{Binding Phone, UpdateSourceTrigger=PropertyChanged}" Width="120" />
+                                    <DataGridTextColumn Header="Zuständigkeit" Binding="{Binding Responsibility, UpdateSourceTrigger=PropertyChanged}" Width="140" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+
+                            <StackPanel Grid.Row="5" Grid.Column="1" Orientation="Horizontal" Margin="0,6,0,0">
+                                <Button Content="Person hinzufügen" Click="OnAddContactClick" />
+                                <Button Content="Zeile entfernen" Click="OnRemoveContactClick" />
+                            </StackPanel>
+                        </Grid>
+                    </TabItem>
+
+                    <TabItem Header="Auftraggeber">
+                        <Grid Margin="12,10,12,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="150" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Auftraggeber" Style="{StaticResource LiftUpFieldLabel}" VerticalAlignment="Center" />
+                            <TextBox Grid.Row="0" Grid.Column="1" x:Name="ClientBox" Margin="0,3,0,8" />
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Straße, Hausnr." Style="{StaticResource LiftUpFieldLabel}" VerticalAlignment="Center" />
+                            <TextBox Grid.Row="1" Grid.Column="1" x:Name="ClientStreetBox" Margin="0,3,0,8" ToolTip="Anschrift des Auftraggebers" />
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Zusatz" Style="{StaticResource LiftUpFieldLabel}" VerticalAlignment="Center" />
+                            <TextBox Grid.Row="2" Grid.Column="1" x:Name="ClientLine2Box" Margin="0,3,0,8"
+                                     ToolTip="Zweite Adresszeile, z. B. Gebäude, Abteilung oder Postfach" />
+
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="PLZ, Ort" Style="{StaticResource LiftUpFieldLabel}" VerticalAlignment="Center" />
+                            <Grid Grid.Row="3" Grid.Column="1" Margin="0,3,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="110" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox Grid.Column="0" x:Name="ClientZipBox" ToolTip="Postleitzahl" />
+                                <TextBox Grid.Column="1" x:Name="ClientCityBox" Margin="8,0,0,0" ToolTip="Ort" />
+                            </Grid>
+                        </Grid>
+                    </TabItem>
+                </TabControl>
             </Grid>
 
             <TextBlock x:Name="ArchiveInfoText" Style="{StaticResource LiftUpMutedText}" Margin="0,10,0,0" Visibility="Collapsed" />

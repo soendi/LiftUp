@@ -12,7 +12,7 @@ namespace LiftUp.Core.Data;
 /// </summary>
 public sealed class Database
 {
-    public const int CurrentSchemaVersion = 13;
+    public const int CurrentSchemaVersion = 16;
 
     private readonly string _connectionString;
 
@@ -157,6 +157,17 @@ public sealed class Database
 
         // Version 13 merkt sich den Inhalts-Hash, um umbenannte Bilder wiederzuerkennen.
         MigrateImageContentHash(connection);
+
+        // Version 14 ergänzt die zweite Adresszeile und die Anschrift des Auftraggebers.
+        MigrateProjectAddresses(connection);
+
+        // Version 15 legt die Tabellen für Zustandsanalyse und Investitionsplanung an.
+        MigrateProjectTables(connection);
+
+        // Version 16 gibt den Abschnitten einen Startinhalt und ersetzt die Startvorlage
+        // durch den Zustandsbericht Aufzugsanlagen.
+        MigrateTemplateSectionContent(connection);
+        EnsureReportTemplate(connection);
 
         using var command = Db.Command(connection, "UPDATE SchemaInfo SET Version = $version;");
         command.With("$version", CurrentSchemaVersion);
@@ -451,6 +462,70 @@ public sealed class Database
         alter.ExecuteNonQuery();
     }
 
+    /// <summary>
+    /// Version 14: zweite Adresszeile beim Kunden und eine eigene Anschrift für den
+    /// Auftraggeber. Bestehende Projekte behalten ihre bisherige Anschrift.
+    /// </summary>
+    private static void MigrateProjectAddresses(SqliteConnection connection)
+    {
+        var existing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using (var info = Db.Command(connection, "PRAGMA table_info(Projects);"))
+        using (var reader = info.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                existing.Add(reader.GetString(1));
+            }
+        }
+
+        (string Name, string Definition)[] additions =
+        [
+            ("CustomerLine2", "TEXT NULL"),
+            ("Client", "TEXT NULL"),
+            ("ClientStreet", "TEXT NULL"),
+            ("ClientLine2", "TEXT NULL"),
+            ("ClientZip", "TEXT NULL"),
+            ("ClientCity", "TEXT NULL"),
+        ];
+
+        foreach (var (name, definition) in additions)
+        {
+            if (existing.Contains(name))
+            {
+                continue;
+            }
+
+            using var alter = Db.Command(connection, $"ALTER TABLE Projects ADD COLUMN {name} {definition};");
+            alter.ExecuteNonQuery();
+        }
+    }
+
+    /// <summary>
+    /// Version 15: Zeilen für Zustandsanalyse und Investitionsplanung. Die Werte einer Zeile
+    /// liegen als JSON an den Spaltenschlüsseln; neue Spalten brauchen deshalb keine Migration.
+    /// </summary>
+    private static void MigrateProjectTables(SqliteConnection connection)
+    {
+        using var command = Db.Command(connection, """
+            CREATE TABLE IF NOT EXISTS ProjectTableRows (
+                Id         TEXT PRIMARY KEY NOT NULL,
+                ProjectId  TEXT NOT NULL REFERENCES Projects(Id),
+                TableKey   TEXT NOT NULL,
+                Data       TEXT NOT NULL,
+                SortOrder  INTEGER NOT NULL DEFAULT 0,
+                CreatedUtc TEXT NOT NULL,
+                CreatedBy  TEXT NULL,
+                UpdatedUtc TEXT NOT NULL,
+                UpdatedBy  TEXT NULL,
+                RowVersion INTEGER NOT NULL DEFAULT 1,
+                IsDeleted  INTEGER NOT NULL DEFAULT 0
+            );
+
+            CREATE INDEX IF NOT EXISTS IX_ProjectTableRows_Project ON ProjectTableRows (ProjectId, TableKey);
+            """);
+        command.ExecuteNonQuery();
+    }
+
     /// <summary>Übernimmt vorhandene Typnamen bestehender Vorlagen in die Typenliste.</summary>
     private static void MigrateDocumentTypes(SqliteConnection connection)
     {
@@ -484,7 +559,7 @@ public sealed class Database
         }
     }
 
-    /// <summary>Legt eine brauchbare Startvorlage an, damit der PDF-Generator sofort nutzbar ist.</summary>
+    /// <summary>Legt den Zustandsbericht an, damit der PDF-Generator sofort nutzbar ist.</summary>
     private static void SeedTemplates(SqliteConnection connection, SqliteTransaction transaction)
     {
         using var count = Db.Command(connection, "SELECT COUNT(1) FROM Templates;", transaction);
@@ -493,23 +568,7 @@ public sealed class Database
             return;
         }
 
-        var templateId = Guid.NewGuid();
-        var now = DateTime.UtcNow;
-
-        using var insert = Db.Command(connection, """
-            INSERT INTO Templates
-                (Id, Name, DocumentType, CurrentVersion, IsActive, CreatedUtc, CreatedBy,
-                 UpdatedUtc, UpdatedBy, RowVersion, IsDeleted)
-            VALUES ($id, 'Standard-Dokument', 'Dokument', 1, 1, $createdUtc, 'System', $createdUtc, 'System', 1, 0);
-
-            INSERT INTO TemplateVersions (Id, TemplateId, Version, Html, CreatedUtc, CreatedBy)
-            VALUES ($versionId, $id, 1, $html, $createdUtc, 'System');
-            """, transaction);
-        insert.With("$id", templateId.ToString("D"))
-            .With("$versionId", Guid.NewGuid().ToString("D"))
-            .With("$html", DefaultTemplateHtml)
-            .With("$createdUtc", now.ToDb());
-        insert.ExecuteNonQuery();
+        EnsureReportTemplate(connection);
     }
 
     private const string DefaultTemplateHtml = """
@@ -525,23 +584,216 @@ public sealed class Database
             table { width: 100%; border-collapse: collapse; }
             td { padding: 2mm 0; vertical-align: top; }
             .label { width: 40mm; color: #52606d; }
-            .note { margin-top: 8mm; white-space: pre-wrap; }
           </style>
         </head>
         <body>
-          <h1>{{project.name}}</h1>
-          <div class="meta">Projekt {{project.number}} · {{date}}</div>
+          <h1>Zustandsbericht Aufzugsanlagen</h1>
+          <div class="meta">Projekt {{project.number}} · {{project.name}} · {{date}}</div>
           <table>
             <tr><td class="label">Kunde</td><td>{{project.customer}}</td></tr>
             <tr><td class="label">Anschrift</td><td>{{project.address}}</td></tr>
-            <tr><td class="label">Ansprechpersonen</td><td>{{project.contacts}}</td></tr>
+            <tr><td class="label">Auftraggeber</td><td>{{project.client}}</td></tr>
             <tr><td class="label">Verantwortlich</td><td>{{project.responsible}}</td></tr>
-            <tr><td class="label">Status</td><td>{{project.status}}</td></tr>
           </table>
-          <div class="note">{{project.description}}</div>
         </body>
         </html>
         """;
+
+    /// <summary>Name der mitgelieferten Vorlage für den Zustandsbericht.</summary>
+    private const string ReportTemplateName = "Zustandsbericht Aufzugsanlagen";
+
+    /// <summary>
+    /// Tabelle der Anlagedaten – der Startinhalt des ersten Tabs. Die Werte werden beim
+    /// Erstellen des Dokuments ergänzt.
+    /// </summary>
+    private const string AnlagedatenTableHtml = """
+        <table style="width:100%;border-collapse:collapse;font-size:10.5pt;">
+          <tr><td style="width:55mm;padding:1.8mm 2mm;border-bottom:1px solid #cbd2d9;color:#52606d;">Aufzugstyp:</td><td style="padding:1.8mm 2mm;border-bottom:1px solid #cbd2d9;">&nbsp;</td></tr>
+          <tr><td style="padding:1.8mm 2mm;border-bottom:1px solid #cbd2d9;color:#52606d;">Jahrgang:</td><td style="padding:1.8mm 2mm;border-bottom:1px solid #cbd2d9;">&nbsp;</td></tr>
+          <tr><td style="padding:1.8mm 2mm;border-bottom:1px solid #cbd2d9;color:#52606d;">Antrieb:</td><td style="padding:1.8mm 2mm;border-bottom:1px solid #cbd2d9;">&nbsp;</td></tr>
+          <tr><td style="padding:1.8mm 2mm;border-bottom:1px solid #cbd2d9;color:#52606d;">Steuerung / Regler:</td><td style="padding:1.8mm 2mm;border-bottom:1px solid #cbd2d9;">&nbsp;</td></tr>
+          <tr><td style="padding:1.8mm 2mm;border-bottom:1px solid #cbd2d9;color:#52606d;">Fabrikat:</td><td style="padding:1.8mm 2mm;border-bottom:1px solid #cbd2d9;">&nbsp;</td></tr>
+          <tr><td style="padding:1.8mm 2mm;border-bottom:1px solid #cbd2d9;color:#52606d;">Nutzlast:</td><td style="padding:1.8mm 2mm;border-bottom:1px solid #cbd2d9;">&nbsp;</td></tr>
+          <tr><td style="padding:1.8mm 2mm;border-bottom:1px solid #cbd2d9;color:#52606d;">Geschwindigkeit:</td><td style="padding:1.8mm 2mm;border-bottom:1px solid #cbd2d9;">&nbsp;</td></tr>
+          <tr><td style="padding:1.8mm 2mm;border-bottom:1px solid #cbd2d9;color:#52606d;">Haltestellen:</td><td style="padding:1.8mm 2mm;border-bottom:1px solid #cbd2d9;">&nbsp;</td></tr>
+          <tr><td style="padding:1.8mm 2mm;border-bottom:1px solid #cbd2d9;color:#52606d;">Zugänge:</td><td style="padding:1.8mm 2mm;border-bottom:1px solid #cbd2d9;">&nbsp;</td></tr>
+          <tr><td style="padding:1.8mm 2mm;border-bottom:1px solid #cbd2d9;color:#52606d;">Förderhöhe:</td><td style="padding:1.8mm 2mm;border-bottom:1px solid #cbd2d9;">&nbsp;</td></tr>
+          <tr><td style="padding:1.8mm 2mm;border-bottom:1px solid #cbd2d9;color:#52606d;">Maschinenraum:</td><td style="padding:1.8mm 2mm;border-bottom:1px solid #cbd2d9;">&nbsp;</td></tr>
+          <tr><td style="padding:1.8mm 2mm;border-bottom:1px solid #cbd2d9;color:#52606d;">Kabinenabschluss:</td><td style="padding:1.8mm 2mm;border-bottom:1px solid #cbd2d9;">&nbsp;</td></tr>
+          <tr><td style="padding:1.8mm 2mm;border-bottom:1px solid #cbd2d9;color:#52606d;">Schachttüren:</td><td style="padding:1.8mm 2mm;border-bottom:1px solid #cbd2d9;">&nbsp;</td></tr>
+          <tr><td style="padding:1.8mm 2mm;border-bottom:1px solid #cbd2d9;color:#52606d;">Schachtausführung:</td><td style="padding:1.8mm 2mm;border-bottom:1px solid #cbd2d9;">&nbsp;</td></tr>
+          <tr><td style="padding:1.8mm 2mm;border-bottom:1px solid #cbd2d9;color:#52606d;">Auffahrsockel:</td><td style="padding:1.8mm 2mm;border-bottom:1px solid #cbd2d9;">&nbsp;</td></tr>
+        </table>
+        """;
+
+    /// <summary>Die Tabs des Zustandsberichts; nur der erste bringt Inhalt mit.</summary>
+    private static readonly (string Title, string DefaultHtml)[] ReportSections =
+    [
+        ("1. Anlagedaten", AnlagedatenTableHtml),
+        ("2. Analyse", string.Empty),
+        ("3. Fazit / Empfehlung", string.Empty),
+    ];
+
+    /// <summary>
+    /// Version 16: Abschnitte einer Vorlage dürfen einen Startinhalt mitbringen – so enthält
+    /// der Tab „Anlagedaten“ des Zustandsberichts bereits die Tabelle.
+    /// </summary>
+    private static void MigrateTemplateSectionContent(SqliteConnection connection)
+    {
+        var hasColumn = false;
+        using (var info = Db.Command(connection, "PRAGMA table_info(TemplateSections);"))
+        using (var reader = info.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                if (string.Equals(reader.GetString(1), "DefaultHtml", StringComparison.OrdinalIgnoreCase))
+                {
+                    hasColumn = true;
+                }
+            }
+        }
+
+        if (hasColumn)
+        {
+            return;
+        }
+
+        using var alter = Db.Command(connection,
+            "ALTER TABLE TemplateSections ADD COLUMN DefaultHtml TEXT NOT NULL DEFAULT '';");
+        alter.ExecuteNonQuery();
+    }
+
+    /// <summary>
+    /// Sorgt dafür, dass der Zustandsbericht als Vorlage vorhanden ist. Eine noch unberührte
+    /// Startvorlage übernimmt dabei Namen und Inhalt, damit keine zweite Vorlage entsteht.
+    /// </summary>
+    private static void EnsureReportTemplate(SqliteConnection connection)
+    {
+        var existing = FindTemplateId(connection, ReportTemplateName, onlyFirstVersion: false);
+        if (existing is { } present)
+        {
+            if (!HasTemplateSections(connection, present))
+            {
+                AddTemplateSections(connection, present);
+            }
+
+            return;
+        }
+
+        var legacy = FindTemplateId(connection, "Standard-Dokument", onlyFirstVersion: true);
+        if (legacy is { } legacyId)
+        {
+            using (var rename = Db.Command(connection, """
+                UPDATE Templates
+                SET Name = $name, DocumentType = 'Bericht', UpdatedUtc = $utc, UpdatedBy = 'System',
+                    RowVersion = RowVersion + 1
+                WHERE Id = $id;
+                """))
+            {
+                rename.With("$id", legacyId.ToString("D"))
+                    .With("$name", ReportTemplateName)
+                    .With("$utc", DateTime.UtcNow.ToDb());
+                rename.ExecuteNonQuery();
+            }
+
+            var version = NextTemplateVersion(connection, legacyId);
+            InsertTemplateVersion(connection, legacyId, version, DefaultTemplateHtml);
+            SetTemplateVersion(connection, legacyId, version);
+            AddTemplateSections(connection, legacyId);
+            return;
+        }
+
+        var templateId = Guid.NewGuid();
+        var now = DateTime.UtcNow;
+
+        using (var insert = Db.Command(connection, """
+            INSERT INTO Templates
+                (Id, Name, DocumentType, CurrentVersion, IsActive, CreatedUtc, CreatedBy,
+                 UpdatedUtc, UpdatedBy, RowVersion, IsDeleted)
+            VALUES ($id, $name, 'Bericht', 1, 1, $createdUtc, 'System', $createdUtc, 'System', 1, 0);
+            """))
+        {
+            insert.With("$id", templateId.ToString("D"))
+                .With("$name", ReportTemplateName)
+                .With("$createdUtc", now.ToDb());
+            insert.ExecuteNonQuery();
+        }
+
+        InsertTemplateVersion(connection, templateId, 1, DefaultTemplateHtml);
+        AddTemplateSections(connection, templateId);
+    }
+
+    private static Guid? FindTemplateId(SqliteConnection connection, string name, bool onlyFirstVersion)
+    {
+        using var command = Db.Command(connection, onlyFirstVersion
+            ? "SELECT Id FROM Templates WHERE Name = $name AND CurrentVersion = 1 AND IsDeleted = 0;"
+            : "SELECT Id FROM Templates WHERE Name = $name AND IsDeleted = 0;");
+        command.With("$name", name);
+
+        return command.ExecuteScalar() is string value && Guid.TryParse(value, out var id) ? id : null;
+    }
+
+    private static bool HasTemplateSections(SqliteConnection connection, Guid templateId)
+    {
+        using var command = Db.Command(connection, "SELECT COUNT(1) FROM TemplateSections WHERE TemplateId = $id;");
+        command.With("$id", templateId.ToString("D"));
+        return Convert.ToInt64(command.ExecuteScalar(), CultureInfo.InvariantCulture) > 0;
+    }
+
+    private static int NextTemplateVersion(SqliteConnection connection, Guid templateId)
+    {
+        using var command = Db.Command(connection, "SELECT MAX(Version) FROM TemplateVersions WHERE TemplateId = $id;");
+        command.With("$id", templateId.ToString("D"));
+        var value = command.ExecuteScalar();
+        return value is null or DBNull ? 1 : Convert.ToInt32(value, CultureInfo.InvariantCulture) + 1;
+    }
+
+    private static void InsertTemplateVersion(SqliteConnection connection, Guid templateId, int version, string html)
+    {
+        using var insert = Db.Command(connection, """
+            INSERT INTO TemplateVersions (Id, TemplateId, Version, Html, CreatedUtc, CreatedBy)
+            VALUES ($id, $templateId, $version, $html, $createdUtc, 'System');
+            """);
+        insert.With("$id", Guid.NewGuid().ToString("D"))
+            .With("$templateId", templateId.ToString("D"))
+            .With("$version", version)
+            .With("$html", html)
+            .With("$createdUtc", DateTime.UtcNow.ToDb());
+        insert.ExecuteNonQuery();
+    }
+
+    private static void SetTemplateVersion(SqliteConnection connection, Guid templateId, int version)
+    {
+        using var command = Db.Command(connection, """
+            UPDATE Templates SET CurrentVersion = $version, UpdatedUtc = $utc, UpdatedBy = 'System',
+                RowVersion = RowVersion + 1
+            WHERE Id = $id;
+            """);
+        command.With("$id", templateId.ToString("D"))
+            .With("$version", version)
+            .With("$utc", DateTime.UtcNow.ToDb());
+        command.ExecuteNonQuery();
+    }
+
+    /// <summary>Legt die Tabs des Zustandsberichts an; Tab 1 erhält die Anlagedaten-Tabelle.</summary>
+    private static void AddTemplateSections(SqliteConnection connection, Guid templateId)
+    {
+        for (var index = 0; index < ReportSections.Length; index++)
+        {
+            using var insert = Db.Command(connection, """
+                INSERT INTO TemplateSections
+                    (Id, TemplateId, Title, DefaultHtml, SortOrder, CreatedUtc, CreatedBy, RowVersion)
+                VALUES ($id, $templateId, $title, $defaultHtml, $sortOrder, $createdUtc, 'System', 1);
+                """);
+            insert.With("$id", Guid.NewGuid().ToString("D"))
+                .With("$templateId", templateId.ToString("D"))
+                .With("$title", ReportSections[index].Title)
+                .With("$defaultHtml", ReportSections[index].DefaultHtml)
+                .With("$sortOrder", index)
+                .With("$createdUtc", DateTime.UtcNow.ToDb());
+            insert.ExecuteNonQuery();
+        }
+    }
 
     private static void SeedRoles(SqliteConnection connection, SqliteTransaction transaction)
     {
@@ -694,8 +946,14 @@ public sealed class Database
             Name        TEXT NOT NULL,
             Customer    TEXT NULL,
             CustomerStreet TEXT NULL,
+            CustomerLine2  TEXT NULL,
             CustomerZip    TEXT NULL,
             CustomerCity   TEXT NULL,
+            Client         TEXT NULL,
+            ClientStreet   TEXT NULL,
+            ClientLine2    TEXT NULL,
+            ClientZip      TEXT NULL,
+            ClientCity     TEXT NULL,
             Contact     TEXT NULL,
             Description TEXT NULL,
             ResponsibleUserId TEXT NULL,
@@ -725,6 +983,23 @@ public sealed class Database
             RowVersion     INTEGER NOT NULL DEFAULT 1,
             IsDeleted      INTEGER NOT NULL DEFAULT 0
         );
+
+        -- Zeilen der projektbezogenen Tabellen; Data hält die Werte je Spaltenschlüssel.
+        CREATE TABLE IF NOT EXISTS ProjectTableRows (
+            Id         TEXT PRIMARY KEY NOT NULL,
+            ProjectId  TEXT NOT NULL REFERENCES Projects(Id),
+            TableKey   TEXT NOT NULL,
+            Data       TEXT NOT NULL,
+            SortOrder  INTEGER NOT NULL DEFAULT 0,
+            CreatedUtc TEXT NOT NULL,
+            CreatedBy  TEXT NULL,
+            UpdatedUtc TEXT NOT NULL,
+            UpdatedBy  TEXT NULL,
+            RowVersion INTEGER NOT NULL DEFAULT 1,
+            IsDeleted  INTEGER NOT NULL DEFAULT 0
+        );
+
+        CREATE INDEX IF NOT EXISTS IX_ProjectTableRows_Project ON ProjectTableRows (ProjectId, TableKey);
 
         CREATE TABLE IF NOT EXISTS ChangeLog (
             Id             INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -771,11 +1046,12 @@ public sealed class Database
         CREATE TABLE IF NOT EXISTS TemplateSections (
             Id         TEXT PRIMARY KEY NOT NULL,
             TemplateId TEXT NOT NULL REFERENCES Templates(Id),
-            Title      TEXT NOT NULL,
-            SortOrder  INTEGER NOT NULL DEFAULT 0,
-            CreatedUtc TEXT NOT NULL,
-            CreatedBy  TEXT NULL,
-            RowVersion INTEGER NOT NULL DEFAULT 1
+            Title       TEXT NOT NULL,
+            DefaultHtml TEXT NOT NULL DEFAULT '',
+            SortOrder   INTEGER NOT NULL DEFAULT 0,
+            CreatedUtc  TEXT NOT NULL,
+            CreatedBy   TEXT NULL,
+            RowVersion  INTEGER NOT NULL DEFAULT 1
         );
 
         CREATE TABLE IF NOT EXISTS ProjectDocuments (
