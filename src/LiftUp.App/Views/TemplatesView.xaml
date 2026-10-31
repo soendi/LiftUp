@@ -127,5 +127,29 @@
         </Grid>
 
         <TextBlock x:Name="InfoText" Grid.Row="1" Style="{StaticResource LiftUpMutedText}" Margin="2,8,0,0" />
+
+        <Popup x:Name="ImagePopup" PlacementTarget="{Binding ElementName=HtmlBox}" Placement="Relative"
+               StaysOpen="True" AllowsTransparency="True">
+            <Border Background="White" BorderBrush="{StaticResource LiftUpBorder}" BorderThickness="1"
+                    CornerRadius="4" Padding="4">
+                <ListBox x:Name="ImageList" BorderThickness="0" Width="340" MaxHeight="260"
+                         PreviewMouseLeftButtonUp="OnImageListClick">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal">
+                                <Border Width="44" Height="32" Background="#F4F6F9" Margin="0,0,8,0"
+                                        VerticalAlignment="Center">
+                                    <Image Source="{Binding Preview}" Stretch="Uniform" />
+                                </Border>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding Name}" />
+                                    <TextBlock Text="{Binding Detail}" Style="{StaticResource LiftUpMutedText}" FontSize="11" />
+                                </StackPanel>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Border>
+        </Popup>
     </Grid>
 </UserControl>

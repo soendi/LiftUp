@@ -1,9 +1,8 @@
 using System.Diagnostics;
-using System.IO;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Media.Imaging;
 using LiftUp.App.Controls;
+using LiftUp.App.Documents;
 using LiftUp.Core.Documents;
 using LiftUp.Core.Domain;
 
@@ -317,7 +316,7 @@ public partial class DocumentComposerWindow : Window
                     image.Name,
                     detail,
                     html,
-                    Thumbnail(image.FilePath) ?? string.Empty));
+                    ImagePreviews.DataUri(image.FilePath) ?? string.Empty));
             }
 
             return choices;
@@ -326,38 +325,6 @@ public partial class DocumentComposerWindow : Window
         {
             InfoText.Text = exception.Message;
             return [];
-        }
-    }
-
-    /// <summary>Verkleinert ein Bild für die Vorschlagsliste; SVG und TIFF bleiben ohne Vorschau.</summary>
-    private static string? Thumbnail(string path)
-    {
-        try
-        {
-            if (!File.Exists(path) || ImageEmbedding.ContentTypeFor(path) is "image/svg+xml" or "image/tiff")
-            {
-                return null;
-            }
-
-            var bitmap = new BitmapImage();
-            bitmap.BeginInit();
-            bitmap.CacheOption = BitmapCacheOption.OnLoad;
-            bitmap.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
-            bitmap.DecodePixelWidth = 48;
-            bitmap.UriSource = new Uri(path);
-            bitmap.EndInit();
-            bitmap.Freeze();
-
-            var encoder = new PngBitmapEncoder();
-            encoder.Frames.Add(BitmapFrame.Create(bitmap));
-            using var stream = new MemoryStream();
-            encoder.Save(stream);
-
-            return "data:image/png;base64," + Convert.ToBase64String(stream.ToArray());
-        }
-        catch (Exception)
-        {
-            return null;
         }
     }
 

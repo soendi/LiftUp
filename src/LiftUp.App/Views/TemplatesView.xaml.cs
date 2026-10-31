@@ -1,6 +1,10 @@
 using System.Collections.ObjectModel;
+using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Media.Imaging;
+using LiftUp.App.Documents;
 using LiftUp.Core.Documents;
 using Microsoft.Win32;
 using LiftUp.Core.Domain;
@@ -15,8 +19,18 @@ public partial class TemplatesView : UserControl
         public string Title { get; set; } = string.Empty;
     }
 
+    /// <summary>Ein Treffer der „&amp;“-Suche im Vorlagentext.</summary>
+    private sealed record ImageChoice(string Name, string Placeholder, string Detail, BitmapImage? Preview);
+
+    private static readonly Regex ImageTokenPattern =
+        new(@"(^|[\s\u00a0>])(&{1,2})([^\s&]{0,40})$", RegexOptions.Compiled);
+
     private readonly AppServices _services;
     private readonly ObservableCollection<SectionRow> _sectionRows = [];
+    private IReadOnlyList<ImageChoice> _imageMatches = [];
+    private int _imageTokenStart;
+    private int _imageTokenLength;
+    private bool _insertingImage;
     private Guid? _templateId;
 
     public TemplatesView(AppServices services)
@@ -29,6 +43,10 @@ public partial class TemplatesView : UserControl
             .ToArray();
 
         SectionsList.ItemsSource = _sectionRows;
+
+        // Die Bildsuche hängt am Textfeld: Nach „&“ erscheint eine Liste mit Vorschau.
+        HtmlBox.TextChanged += OnHtmlBoxTextChanged;
+        HtmlBox.PreviewKeyDown += OnHtmlBoxPreviewKeyDown;
 
         LoadDocumentTypes();
         LoadTemplates();
@@ -418,6 +436,152 @@ public partial class TemplatesView : UserControl
         {
             InfoText.Text = "Löschen fehlgeschlagen: " + exception.Message;
         }
+    }
+
+    /// <summary>
+    /// Sucht nach „&amp;“ im Vorlagentext nach Bildern. Vorlagen hängen an keinem Projekt,
+    /// deshalb durchsuchen „&amp;“ und „&amp;&amp;“ alle Bilder. Eingefügt wird der Platzhalter
+    /// <c>{{bild:Name}}</c>, damit die Vorlage klein bleibt und für jedes Projekt passt.
+    /// </summary>
+    private void OnHtmlBoxTextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_insertingImage)
+        {
+            return;
+        }
+
+        var caret = Math.Clamp(HtmlBox.CaretIndex, 0, HtmlBox.Text.Length);
+        var before = HtmlBox.Text[..caret];
+        var match = ImageTokenPattern.Match(before);
+
+        if (!match.Success)
+        {
+            CloseImagePopup();
+            return;
+        }
+
+        var prefixLength = match.Groups[2].Value.Length;
+        var query = match.Groups[3].Value;
+        _imageTokenStart = caret - prefixLength - query.Length;
+        _imageTokenLength = prefixLength + query.Length;
+
+        var matches = SearchImages(query);
+        if (matches.Count == 0)
+        {
+            CloseImagePopup();
+            InfoText.Text = query.Length == 0
+                ? "Keine Bilder vorhanden. Bilder unter „Bilder“ erfassen oder im Projektordner ablegen."
+                : $"Kein Bild zu \"{query}\" gefunden.";
+            return;
+        }
+
+        _imageMatches = matches;
+        ImageList.ItemsSource = matches;
+        ImageList.SelectedIndex = 0;
+
+        var caretRect = HtmlBox.GetRectFromCharacterIndex(Math.Max(_imageTokenStart, 0), trailingEdge: false);
+        ImagePopup.HorizontalOffset = caretRect.Left;
+        ImagePopup.VerticalOffset = caretRect.Bottom + 2;
+        ImagePopup.IsOpen = true;
+    }
+
+    private IReadOnlyList<ImageChoice> SearchImages(string query)
+    {
+        try
+        {
+            return _services.Images
+                .Search(null, query, allProjects: true)
+                .Take(8)
+                .Select(image => new ImageChoice(
+                    image.Name,
+                    $"{{{{bild:{image.Name}}}}}",
+                    BuildDetail(image),
+                    ImagePreviews.Load(image.FilePath)))
+                .ToArray();
+        }
+        catch (PermissionDeniedException)
+        {
+            return [];
+        }
+        catch (LiftUpException exception)
+        {
+            InfoText.Text = exception.Message;
+            return [];
+        }
+    }
+
+    private static string BuildDetail(ImageListItem image) => string.Join(" · ",
+        new[] { image.Category, image.Tags, image.ScopeText }
+            .Where(value => !string.IsNullOrWhiteSpace(value)));
+
+    private void OnHtmlBoxPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (!ImagePopup.IsOpen || _imageMatches.Count == 0)
+        {
+            return;
+        }
+
+        switch (e.Key)
+        {
+            case Key.Down:
+                ImageList.SelectedIndex = (ImageList.SelectedIndex + 1) % _imageMatches.Count;
+                e.Handled = true;
+                break;
+            case Key.Up:
+                ImageList.SelectedIndex = ImageList.SelectedIndex <= 0
+                    ? _imageMatches.Count - 1
+                    : ImageList.SelectedIndex - 1;
+                e.Handled = true;
+                break;
+            case Key.Enter:
+                if (ImageList.SelectedItem is ImageChoice choice)
+                {
+                    InsertImage(choice);
+                }
+
+                e.Handled = true;
+                break;
+            case Key.Escape:
+                CloseImagePopup();
+                e.Handled = true;
+                break;
+        }
+    }
+
+    private void OnImageListClick(object sender, MouseButtonEventArgs e)
+    {
+        if (ImageList.SelectedItem is ImageChoice choice)
+        {
+            InsertImage(choice);
+        }
+    }
+
+    /// <summary>Ersetzt das getippte „&amp;…“ durch den Bild-Platzhalter.</summary>
+    private void InsertImage(ImageChoice choice)
+    {
+        var start = Math.Clamp(_imageTokenStart, 0, HtmlBox.Text.Length);
+        var length = Math.Clamp(_imageTokenLength, 0, HtmlBox.Text.Length - start);
+        CloseImagePopup();
+
+        _insertingImage = true;
+        try
+        {
+            HtmlBox.Text = HtmlBox.Text.Remove(start, length).Insert(start, choice.Placeholder);
+            HtmlBox.CaretIndex = start + choice.Placeholder.Length;
+            HtmlBox.Focus();
+        }
+        finally
+        {
+            _insertingImage = false;
+        }
+
+        InfoText.Text = $"Platzhalter {choice.Placeholder} eingefügt – beim Erzeugen wird das Bild eingesetzt.";
+    }
+
+    private void CloseImagePopup()
+    {
+        ImagePopup.IsOpen = false;
+        _imageMatches = [];
     }
 
     private void OnPlaceholderDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
