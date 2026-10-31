@@ -8,6 +8,9 @@ public sealed class PlaceholderContext
 {
     public required Project Project { get; init; }
     public required string UserName { get; init; }
+
+    /// <summary>Eigene Absenderdaten für Titelseiten; optional.</summary>
+    public CompanyProfile? Company { get; init; }
     public DateTime Now { get; init; } = DateTime.Now;
 
     /// <summary>Liefert den HTML-Inhalt eines Textbausteins (Name, ohne Präfix).</summary>
@@ -47,6 +50,10 @@ public static class PlaceholderRenderer
         ("{{project.description}}", "Beschreibung"),
         ("{{project.status}}", "Status"),
         ("{{project.folder}}", "Projektordner"),
+        ("{{company.name}}", "Eigene Firma"),
+        ("{{company.contact}}", "Eigener Name (Ansprechperson)"),
+        ("{{company.email}}", "Eigene E-Mail-Adresse"),
+        ("{{company.phone}}", "Eigene Telefonnummer"),
         ("{{date}}", "Datum (TT.MM.JJJJ)"),
         ("{{datetime}}", "Datum und Uhrzeit"),
         ("{{user}}", "Angemeldeter Benutzer"),
@@ -116,6 +123,10 @@ public static class PlaceholderRenderer
             "project.description" or "projekt.beschreibung" => Encode(project.Description),
             "project.status" or "projekt.status" => Encode(ProjectStatusCatalog.Describe(project.Status)),
             "project.folder" or "projekt.ordner" => Encode(project.FolderPath),
+            "company.name" or "firma" or "firma.name" => Encode(context.Company?.Name),
+            "company.contact" or "company.person" or "firma.ansprechperson" => Encode(context.Company?.Contact),
+            "company.email" or "firma.email" => Encode(context.Company?.Email),
+            "company.phone" or "firma.telefon" => Encode(context.Company?.Phone),
             "date" or "datum" => context.Now.ToString("dd.MM.yyyy"),
             "time" or "zeit" => context.Now.ToString("HH:mm"),
             "datetime" or "datumzeit" => context.Now.ToString("dd.MM.yyyy HH:mm"),

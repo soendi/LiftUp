@@ -12,7 +12,7 @@ namespace LiftUp.Core.Data;
 /// </summary>
 public sealed class Database
 {
-    public const int CurrentSchemaVersion = 8;
+    public const int CurrentSchemaVersion = 9;
 
     private readonly string _connectionString;
 
@@ -140,6 +140,9 @@ public sealed class Database
 
         // Version 8 gibt dem Administrator Rechte, die erst nach dem Anlegen der Rolle dazukamen.
         MigrateAdministratorPermissions(connection);
+
+        // Version 9 ergänzt die Abschnitte (Untertitel) je Vorlage.
+        MigrateTemplateSections(connection);
 
         using var command = Db.Command(connection, "UPDATE SchemaInfo SET Version = $version;");
         command.With("$version", CurrentSchemaVersion);
@@ -295,6 +298,28 @@ public sealed class Database
             WHERE Name = 'Administrator' AND IsSystem = 1 AND Permissions <> $all;
             """);
         command.With("$all", (int)Permission.All);
+        command.ExecuteNonQuery();
+    }
+
+    /// <summary>
+    /// Version 9: Vorlagen können Abschnitte (Untertitel) definieren, die beim
+    /// Erstellen eines Dokuments als Tabs ausgefüllt werden.
+    /// </summary>
+    private static void MigrateTemplateSections(SqliteConnection connection)
+    {
+        using var command = Db.Command(connection, """
+            CREATE TABLE IF NOT EXISTS TemplateSections (
+                Id         TEXT PRIMARY KEY NOT NULL,
+                TemplateId TEXT NOT NULL REFERENCES Templates(Id),
+                Title      TEXT NOT NULL,
+                SortOrder  INTEGER NOT NULL DEFAULT 0,
+                CreatedUtc TEXT NOT NULL,
+                CreatedBy  TEXT NULL,
+                RowVersion INTEGER NOT NULL DEFAULT 1
+            );
+
+            CREATE INDEX IF NOT EXISTS IX_TemplateSections_Template ON TemplateSections (TemplateId);
+            """);
         command.ExecuteNonQuery();
     }
 
@@ -612,6 +637,16 @@ public sealed class Database
             UNIQUE (TemplateId, Version)
         );
 
+        CREATE TABLE IF NOT EXISTS TemplateSections (
+            Id         TEXT PRIMARY KEY NOT NULL,
+            TemplateId TEXT NOT NULL REFERENCES Templates(Id),
+            Title      TEXT NOT NULL,
+            SortOrder  INTEGER NOT NULL DEFAULT 0,
+            CreatedUtc TEXT NOT NULL,
+            CreatedBy  TEXT NULL,
+            RowVersion INTEGER NOT NULL DEFAULT 1
+        );
+
         CREATE TABLE IF NOT EXISTS ProjectDocuments (
             Id              TEXT PRIMARY KEY NOT NULL,
             ProjectId       TEXT NOT NULL REFERENCES Projects(Id),
@@ -680,6 +715,7 @@ public sealed class Database
         CREATE INDEX IF NOT EXISTS IX_Users_RoleId ON Users (RoleId);
         CREATE INDEX IF NOT EXISTS IX_Projects_Status ON Projects (Status);
         CREATE INDEX IF NOT EXISTS IX_ChangeLog_Pending ON ChangeLog (SyncedUtc) WHERE SyncedUtc IS NULL;
+        CREATE INDEX IF NOT EXISTS IX_TemplateSections_Template ON TemplateSections (TemplateId);
         CREATE INDEX IF NOT EXISTS IX_ProjectDocuments_Project ON ProjectDocuments (ProjectId);
         CREATE INDEX IF NOT EXISTS IX_ProjectContacts_Project ON ProjectContacts (ProjectId);
 

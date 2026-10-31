@@ -31,7 +31,10 @@ public sealed class DocumentService
     }
 
     /// <summary>HTML für die Vorschau, ohne etwas zu schreiben.</summary>
-    public string RenderHtml(Guid projectId, Guid templateId)
+    public string RenderHtml(Guid projectId, Guid templateId) => RenderHtml(projectId, templateId, null);
+
+    /// <summary>HTML für die Vorschau, optional mit ausgefüllten Abschnitten.</summary>
+    public string RenderHtml(Guid projectId, Guid templateId, IReadOnlyList<DocumentSectionContent>? sections)
     {
         _actor.Require(Permission.CreateDocuments);
 
@@ -40,16 +43,9 @@ public sealed class DocumentService
                       ?? throw new ValidationException("Das Projekt wurde nicht gefunden.");
         var version = _templates.GetLatestVersion(connection, null, templateId)
                       ?? throw new ValidationException("Für diese Vorlage gibt es noch keine Version.");
-        var snippets = _snippets.GetActiveByName(connection, null);
-        var images = BuildImageLookup(connection, null, project.Id);
 
-        return PlaceholderRenderer.Render(version.Html, new PlaceholderContext
-        {
-            Project = project,
-            UserName = _actor.DisplayName is { Length: > 0 } display ? display : _actor.UserName,
-            SnippetResolver = name => snippets.TryGetValue(name, out var html) ? html : null,
-            ImageResolver = name => images.TryGetValue(name, out var image) ? ImageEmbedding.ToImageTag(image) : null,
-        });
+        var html = RenderTitlePage(connection, null, project, version);
+        return sections is { Count: > 0 } ? DocumentComposition.Build(html, sections) : html;
     }
 
     public async Task<ProjectDocument> CreatePdfAsync(
@@ -70,17 +66,82 @@ public sealed class DocumentService
                        ?? throw new ValidationException("Die Vorlage wurde nicht gefunden.");
         var version = _templates.GetLatestVersion(connection, transaction, templateId)
                       ?? throw new ValidationException("Für diese Vorlage gibt es noch keine Version.");
+
+        var html = RenderTitlePage(connection, transaction, project, version);
+        return await SavePdfAsync(connection, transaction, project, template, version, html, settings, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Erzeugt ein Dokument aus der Titelseite der Vorlage und den ausgefüllten
+    /// Abschnitten (Untertitel samt Text und Bildern) und legt es als PDF ab.
+    /// </summary>
+    public async Task<ProjectDocument> CreatePdfFromSectionsAsync(
+        Guid projectId,
+        Guid templateId,
+        IReadOnlyList<DocumentSectionContent> sections,
+        PdfPageSettings? settings = null,
+        CancellationToken cancellationToken = default)
+    {
+        _actor.Require(Permission.CreateDocuments);
+        ArgumentNullException.ThrowIfNull(sections);
+        settings ??= new PdfPageSettings();
+
+        using var connection = _database.Open();
+        using var transaction = connection.BeginTransaction();
+
+        var project = _projects.GetById(connection, transaction, projectId)
+                      ?? throw new ValidationException("Das Projekt wurde nicht gefunden.");
+        var template = _templates.GetById(connection, transaction, templateId)
+                       ?? throw new ValidationException("Die Vorlage wurde nicht gefunden.");
+        var version = _templates.GetLatestVersion(connection, transaction, templateId)
+                      ?? throw new ValidationException("Für diese Vorlage gibt es noch keine Version.");
+
+        var titlePage = RenderTitlePage(connection, transaction, project, version);
+        var html = DocumentComposition.Build(titlePage, sections);
+
+        return await SavePdfAsync(connection, transaction, project, template, version, html, settings, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    public IReadOnlyList<ProjectDocument> GetDocuments(Guid projectId)
+    {
+        _actor.Require(Permission.ViewProjects);
+        using var connection = _database.Open();
+        return _documents.GetByProject(connection, null, projectId);
+    }
+
+    /// <summary>Titelseite der Vorlage mit Projekt- und Absenderdaten füllen.</summary>
+    private string RenderTitlePage(
+        Microsoft.Data.Sqlite.SqliteConnection connection,
+        Microsoft.Data.Sqlite.SqliteTransaction? transaction,
+        Project project,
+        TemplateVersion version)
+    {
         var snippets = _snippets.GetActiveByName(connection, transaction);
         var images = BuildImageLookup(connection, transaction, project.Id);
+        var company = new CompanyProfileService(_database).Get();
 
-        var html = PlaceholderRenderer.Render(version.Html, new PlaceholderContext
+        return PlaceholderRenderer.Render(version.Html, new PlaceholderContext
         {
             Project = project,
             UserName = _actor.DisplayName is { Length: > 0 } display ? display : _actor.UserName,
+            Company = company,
             SnippetResolver = name => snippets.TryGetValue(name, out var snippet) ? snippet : null,
             ImageResolver = name => images.TryGetValue(name, out var image) ? ImageEmbedding.ToImageTag(image) : null,
         });
+    }
 
+    private async Task<ProjectDocument> SavePdfAsync(
+        Microsoft.Data.Sqlite.SqliteConnection connection,
+        Microsoft.Data.Sqlite.SqliteTransaction transaction,
+        Project project,
+        DocumentTemplate template,
+        TemplateVersion version,
+        string html,
+        PdfPageSettings settings,
+        CancellationToken cancellationToken)
+    {
         var bytes = await _renderer.RenderAsync(html, settings, cancellationToken).ConfigureAwait(false);
 
         var folder = Path.Combine(project.FolderPath, "03_PDF");
@@ -110,13 +171,6 @@ public sealed class DocumentService
         transaction.Commit();
 
         return document;
-    }
-
-    public IReadOnlyList<ProjectDocument> GetDocuments(Guid projectId)
-    {
-        _actor.Require(Permission.ViewProjects);
-        using var connection = _database.Open();
-        return _documents.GetByProject(connection, null, projectId);
     }
 
     /// <summary>

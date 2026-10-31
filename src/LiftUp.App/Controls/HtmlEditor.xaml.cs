@@ -45,6 +45,24 @@ public partial class HtmlEditor : UserControl
         </style>
         </head>
         <body contenteditable="true" spellcheck="false"></body>
+        <script>
+            window.liftupRange = null;
+            document.addEventListener('selectionchange', function () {
+                var selection = window.getSelection();
+                if (selection && selection.rangeCount > 0) {
+                    window.liftupRange = selection.getRangeAt(0).cloneRange();
+                }
+            });
+            window.liftupExec = function (command, value) {
+                document.body.focus();
+                if (window.liftupRange) {
+                    var selection = window.getSelection();
+                    selection.removeAllRanges();
+                    selection.addRange(window.liftupRange);
+                }
+                document.execCommand(command, false, value === undefined ? null : value);
+            };
+        </script>
         </html>
         """;
 
@@ -192,6 +210,37 @@ public partial class HtmlEditor : UserControl
 
     private async void OnClearFormatClick(object sender, RoutedEventArgs e) => await ExecuteAsync("removeFormat");
 
+    /// <summary>Fügt HTML an der Stelle der letzten Eingabe ein (Textbaustein, Bild).</summary>
+    public async Task InsertHtmlAsync(string html)
+    {
+        if (string.IsNullOrEmpty(html))
+        {
+            return;
+        }
+
+        if (_failed)
+        {
+            FallbackBox.Text += html;
+            return;
+        }
+
+        if (!_ready || Browser.CoreWebView2 is null)
+        {
+            _pendingHtml += html;
+            return;
+        }
+
+        try
+        {
+            await Browser.CoreWebView2.ExecuteScriptAsync(
+                "window.liftupExec('insertHTML', " + JsonSerializer.Serialize(html) + "); true");
+        }
+        catch (Exception exception)
+        {
+            throw new InvalidOperationException("Der Baustein konnte nicht eingefügt werden.", exception);
+        }
+    }
+
     private async Task ExecuteAsync(string command)
     {
         if (!_ready || Browser.CoreWebView2 is null)
@@ -201,8 +250,7 @@ public partial class HtmlEditor : UserControl
 
         try
         {
-            await Browser.CoreWebView2.ExecuteScriptAsync(
-                $"document.body.focus(); document.execCommand('{command}', false, null); true");
+            await Browser.CoreWebView2.ExecuteScriptAsync($"window.liftupExec('{command}'); true");
         }
         catch (Exception)
         {

@@ -26,7 +26,7 @@
                                Margin="12,0,0,2"
                                VerticalAlignment="Bottom" />
                 </StackPanel>
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                <StackPanel x:Name="HeaderButtons" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                     <TextBlock x:Name="UserText" Foreground="White" VerticalAlignment="Center" FontSize="12" />
                     <Button Content="Updates" Style="{StaticResource LiftUpHeaderButton}" Click="OnCheckUpdatesClick" />
                     <Button Content="Passwort ändern" Style="{StaticResource LiftUpHeaderButton}" Click="OnChangePasswordClick" />

@@ -13,6 +13,7 @@ public sealed class TemplateService
     private readonly Database _database;
     private readonly Session _actor;
     private readonly TemplateRepository _templates = new();
+    private readonly TemplateSectionRepository _sections = new();
     private readonly DocumentTypeRepository _types = new();
     private readonly ChangeLogWriter _changes;
 
@@ -162,6 +163,37 @@ public sealed class TemplateService
 
         template.RowVersion = rowVersion;
         return template;
+    }
+
+    /// <summary>Abschnitte (Untertitel) der Vorlage in der gespeicherten Reihenfolge.</summary>
+    public IReadOnlyList<TemplateSection> GetSections(Guid templateId)
+    {
+        RequireRead();
+        using var connection = _database.Open();
+        return _sections.GetByTemplate(connection, null, templateId);
+    }
+
+    /// <summary>Ersetzt die Abschnitte der Vorlage; leere Titel werden verworfen.</summary>
+    public void SaveSections(Guid templateId, IReadOnlyList<string> titles)
+    {
+        _actor.Require(Permission.ManageTemplates);
+        ArgumentNullException.ThrowIfNull(titles);
+
+        var cleaned = titles
+            .Select(title => (title ?? string.Empty).Trim())
+            .Where(title => title.Length > 0)
+            .ToList();
+
+        using var connection = _database.Open();
+        using var transaction = connection.BeginTransaction();
+
+        var template = _templates.GetById(connection, transaction, templateId)
+                       ?? throw new ValidationException("Die Vorlage wurde nicht gefunden.");
+
+        _sections.ReplaceAll(connection, transaction, templateId, cleaned, _actor.UserName);
+        _changes.Record(connection, transaction, "Template", templateId.ToString("D"), "Sections",
+            new { Count = cleaned.Count }, template.RowVersion);
+        transaction.Commit();
     }
 
     public void SetActive(Guid templateId, bool active)

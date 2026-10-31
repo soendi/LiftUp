@@ -47,6 +47,7 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
                     <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
@@ -63,7 +64,8 @@
 
                     <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,8">
                         <Button Content="Vorschau" Click="OnPreviewClick" />
-                        <Button Content="Als neue Version speichern" Style="{StaticResource LiftUpPrimaryButton}" Margin="0" Click="OnSaveClick" />
+                        <Button Content="Als neue Version speichern" Style="{StaticResource LiftUpPrimaryButton}" Click="OnSaveClick" />
+                        <Button x:Name="SenderButton" Content="Absenderdaten …" Margin="0" Click="OnSenderClick" />
                     </StackPanel>
 
                     <Grid Grid.Row="2">
@@ -81,6 +83,31 @@
                             <wv2:WebView2 x:Name="PreviewBrowser" />
                         </Border>
                     </Grid>
+
+                    <Expander Grid.Row="4" Header="Abschnitte (Untertitel) – beim Dokument als Tabs" Margin="0,8,0,0" IsExpanded="False">
+                        <Grid Margin="0,6,0,0">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <ListBox x:Name="SectionsList" Grid.Row="0" Height="110">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBox Text="{Binding Title, UpdateSourceTrigger=PropertyChanged}" Width="420" HorizontalAlignment="Left" />
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+
+                            <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,6,0,0">
+                                <Button Content="Abschnitt hinzufügen" Click="OnAddSectionClick" />
+                                <Button Content="Nach oben" Click="OnMoveSectionUpClick" />
+                                <Button Content="Nach unten" Click="OnMoveSectionDownClick" />
+                                <Button Content="Entfernen" Click="OnRemoveSectionClick" />
+                                <Button Content="Abschnitte speichern" Style="{StaticResource LiftUpPrimaryButton}" Margin="0" Click="OnSaveSectionsClick" />
+                            </StackPanel>
+                        </Grid>
+                    </Expander>
 
                     <Expander Grid.Row="3" Header="Platzhalter (Doppelklick fügt ein)" Margin="0,8,0,0" IsExpanded="True">
                         <ListBox x:Name="PlaceholderList" Height="120" MouseDoubleClick="OnPlaceholderDoubleClick">

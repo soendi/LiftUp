@@ -129,6 +129,21 @@ public partial class PdfView : UserControl
         FolderButton.IsEnabled = selected is not null;
     }
 
+    /// <summary>Öffnet den Editor, in dem die Abschnitte der Vorlage ausgefüllt werden.</summary>
+    private void OnComposeClick(object sender, RoutedEventArgs e)
+    {
+        var project = ProjectBox.SelectedItem as ProjectOption;
+        var template = TemplateBox.SelectedItem as TemplateListItem;
+
+        var dialog = new DocumentComposerWindow(_services, project?.Id, template?.Id)
+        {
+            Owner = Window.GetWindow(this),
+        };
+
+        dialog.ShowDialog();
+        LoadDocuments();
+    }
+
     private async void OnPreviewClick(object sender, RoutedEventArgs e)
     {
         if (ProjectBox.SelectedItem is not ProjectOption project ||

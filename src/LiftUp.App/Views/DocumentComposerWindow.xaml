@@ -1,0 +1,60 @@
+<Window x:Class="LiftUp.App.Views.DocumentComposerWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Dokument erstellen"
+        Width="1020"
+        Height="800"
+        MinWidth="820"
+        MinHeight="640"
+        WindowStartupLocation="CenterOwner"
+        Background="{StaticResource LiftUpBackground}">
+
+    <Border Margin="16" Style="{StaticResource LiftUpCard}">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
+                <TextBlock Text="Projekt" VerticalAlignment="Center" Margin="0,0,6,0" Style="{StaticResource LiftUpFieldLabel}" />
+                <ComboBox x:Name="ProjectBox" Width="290" Margin="0,0,16,0"
+                          DisplayMemberPath="DisplayText" SelectionChanged="OnProjectChanged" />
+
+                <TextBlock Text="Vorlage" VerticalAlignment="Center" Margin="0,0,6,0" Style="{StaticResource LiftUpFieldLabel}" />
+                <ComboBox x:Name="TemplateBox" Width="240" DisplayMemberPath="Name" SelectionChanged="OnTemplateChanged" />
+            </StackPanel>
+
+            <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,8">
+                <Button Content="Neuer Abschnitt" Click="OnAddSectionClick" />
+                <Button Content="Abschnitt löschen" Click="OnRemoveSectionClick" />
+                <Button Content="Nach links" Click="OnMoveLeftClick" />
+                <Button Content="Nach rechts" Click="OnMoveRightClick" Margin="0" />
+            </StackPanel>
+
+            <TabControl x:Name="SectionTabs" Grid.Row="2" />
+
+            <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,10,0,0">
+                <TextBlock Text="Format" VerticalAlignment="Center" Margin="0,0,6,0" Style="{StaticResource LiftUpFieldLabel}" />
+                <ComboBox x:Name="FormatBox" Width="80" Margin="0,0,12,0" />
+
+                <TextBlock Text="Ausrichtung" VerticalAlignment="Center" Margin="0,0,6,0" Style="{StaticResource LiftUpFieldLabel}" />
+                <ComboBox x:Name="OrientationBox" Width="110" Margin="0,0,12,0" />
+
+                <TextBlock Text="Rand (mm)" VerticalAlignment="Center" Margin="0,0,6,0" Style="{StaticResource LiftUpFieldLabel}" />
+                <TextBox x:Name="MarginBox" Width="60" Text="15" />
+            </StackPanel>
+
+            <TextBlock x:Name="InfoText" Grid.Row="4" Style="{StaticResource LiftUpMutedText}" Margin="0,8,0,0" />
+
+            <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+                <Button Content="Schließen" Click="OnCloseClick" />
+                <Button Content="PDF erzeugen" Style="{StaticResource LiftUpPrimaryButton}" Margin="0" Click="OnCreatePdfClick" />
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

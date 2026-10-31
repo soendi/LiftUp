@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Controls;
 using LiftUp.Core.Documents;
@@ -7,7 +8,14 @@ namespace LiftUp.App.Views;
 
 public partial class TemplatesView : UserControl
 {
+    /// <summary>Bearbeitbare Zeile der Abschnittsliste.</summary>
+    private sealed class SectionRow
+    {
+        public string Title { get; set; } = string.Empty;
+    }
+
     private readonly AppServices _services;
+    private readonly ObservableCollection<SectionRow> _sectionRows = [];
     private Guid? _templateId;
 
     public TemplatesView(AppServices services)
@@ -18,6 +26,9 @@ public partial class TemplatesView : UserControl
         PlaceholderList.ItemsSource = PlaceholderRenderer.Known
             .Select(entry => new { entry.Token, entry.Description })
             .ToArray();
+
+        SectionsList.ItemsSource = _sectionRows;
+        SenderButton.IsEnabled = _services.CurrentSession.Can(Permission.ChangeSettings);
 
         LoadDocumentTypes();
         LoadTemplates();
@@ -97,6 +108,12 @@ public partial class TemplatesView : UserControl
             VersionBox.SelectedIndex = 0;
             HtmlBox.Text = versions.Count > 0 ? versions[0].Html : string.Empty;
 
+            _sectionRows.Clear();
+            foreach (var section in _services.Templates.GetSections(templateId))
+            {
+                _sectionRows.Add(new SectionRow { Title = section.Title });
+            }
+
             InfoText.Text = $"Vorlage \"{template.Name}\", aktuelle Version {template.CurrentVersion}";
         }
         catch (LiftUpException exception)
@@ -154,6 +171,7 @@ public partial class TemplatesView : UserControl
         HtmlBox.Text = string.Empty;
         VersionBox.ItemsSource = null;
         ToggleActiveButton.IsEnabled = false;
+        _sectionRows.Clear();
     }
 
     private void OnSaveClick(object sender, RoutedEventArgs e)
@@ -252,6 +270,75 @@ public partial class TemplatesView : UserControl
         catch (Exception exception)
         {
             InfoText.Text = "Vorschau fehlgeschlagen: " + exception.Message;
+        }
+    }
+
+    private void OnSenderClick(object sender, RoutedEventArgs e)
+    {
+        var dialog = new CompanyProfileWindow(_services) { Owner = Window.GetWindow(this) };
+        if (dialog.ShowDialog() == true)
+        {
+            InfoText.Text = "Absenderdaten gespeichert.";
+        }
+    }
+
+    private void OnAddSectionClick(object sender, RoutedEventArgs e)
+    {
+        _sectionRows.Add(new SectionRow());
+        SectionsList.SelectedIndex = _sectionRows.Count - 1;
+    }
+
+    private void OnRemoveSectionClick(object sender, RoutedEventArgs e)
+    {
+        if (SectionsList.SelectedItem is SectionRow row)
+        {
+            _sectionRows.Remove(row);
+        }
+    }
+
+    private void OnMoveSectionUpClick(object sender, RoutedEventArgs e) => MoveSection(-1);
+
+    private void OnMoveSectionDownClick(object sender, RoutedEventArgs e) => MoveSection(1);
+
+    private void MoveSection(int offset)
+    {
+        if (SectionsList.SelectedItem is not SectionRow row)
+        {
+            return;
+        }
+
+        var index = _sectionRows.IndexOf(row);
+        var target = index + offset;
+        if (target < 0 || target >= _sectionRows.Count)
+        {
+            return;
+        }
+
+        _sectionRows.Move(index, target);
+        SectionsList.SelectedItem = row;
+    }
+
+    private void OnSaveSectionsClick(object sender, RoutedEventArgs e)
+    {
+        if (_templateId is null)
+        {
+            InfoText.Text = "Bitte zuerst die Vorlage speichern, dann Abschnitte festlegen.";
+            return;
+        }
+
+        try
+        {
+            _services.Templates.SaveSections(_templateId.Value, _sectionRows.Select(row => row.Title).ToArray());
+            InfoText.Text = $"Abschnitte gespeichert ({_sectionRows.Count(row => !string.IsNullOrWhiteSpace(row.Title))}).";
+            LoadTemplate(_templateId.Value);
+        }
+        catch (LiftUpException exception)
+        {
+            InfoText.Text = exception.Message;
+        }
+        catch (Exception exception)
+        {
+            InfoText.Text = "Abschnitte konnten nicht gespeichert werden: " + exception.Message;
         }
     }
 
