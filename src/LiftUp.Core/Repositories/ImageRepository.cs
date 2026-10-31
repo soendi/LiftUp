@@ -117,6 +117,29 @@ public sealed class ImageRepository
         return images;
     }
 
+    /// <summary>Alle Bilder, die einem Projekt direkt zugeordnet sind.</summary>
+    public IReadOnlyList<LibraryImage> GetForProject(
+        SqliteConnection connection,
+        SqliteTransaction? transaction,
+        Guid projectId)
+    {
+        using var command = Db.Command(connection, $"""
+            SELECT {Columns} FROM Images
+            WHERE ProjectId = $projectId
+            ORDER BY Name COLLATE NOCASE;
+            """, transaction);
+        command.With("$projectId", projectId.ToString("D"));
+
+        using var reader = command.ExecuteReader();
+        var images = new List<LibraryImage>();
+        while (reader.Read())
+        {
+            images.Add(Map(reader));
+        }
+
+        return images;
+    }
+
     public bool NameExists(
         SqliteConnection connection,
         SqliteTransaction? transaction,

@@ -40,6 +40,7 @@ public partial class DocumentComposerWindow : Window
     private readonly Guid? _presetTemplateId;
     private IReadOnlyList<DocumentSectionContent>? _presetSections;
     private IReadOnlyList<TextSnippet>? _snippetBodies;
+    private readonly HashSet<Guid> _scannedProjects = [];
     private string? _lastPdfPath;
 
     public DocumentComposerWindow(
@@ -286,6 +287,13 @@ public partial class DocumentComposerWindow : Window
 
         try
         {
+            // Bilder, die im Projektordner liegen, werden einmal je Fenster übernommen,
+            // damit sie auch ohne den Umweg über die Bilderansicht auffindbar sind.
+            if (_scannedProjects.Add(project.Id))
+            {
+                _services.Images.SyncProjectFolder(project.Id);
+            }
+
             var images = _services.Images.Search(project.Id, query, allProjects: allProjects);
             var choices = new List<HtmlEditor.ImageChoice>();
 

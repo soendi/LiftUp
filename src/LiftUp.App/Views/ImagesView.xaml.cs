@@ -82,6 +82,64 @@ public partial class ImagesView : UserControl
 
     private ImageListItem? Selected => ImagesGrid.SelectedItem as ImageListItem;
 
+    /// <summary>Gleicht den Projektordner mit der Bildbibliothek ab; 0 ohne neues Bild.</summary>
+    private int SyncProjectFolder()
+    {
+        if (SelectedProjectId is not { } projectId)
+        {
+            return 0;
+        }
+
+        try
+        {
+            return _services.Images.SyncProjectFolder(projectId);
+        }
+        catch (PermissionDeniedException)
+        {
+            return 0;
+        }
+        catch (LiftUpException exception)
+        {
+            InfoText.Text = exception.Message;
+            return 0;
+        }
+    }
+
+    private void OnScanFolderClick(object sender, RoutedEventArgs e)
+    {
+        if (SelectedProjectId is null)
+        {
+            InfoText.Text = "Bitte zuerst ein Projekt wählen – die globale Bibliothek hat keinen Projektordner.";
+            return;
+        }
+
+        var added = SyncProjectFolder();
+        LoadImages();
+        InfoText.Text = added switch
+        {
+            0 => "Keine neuen Bilder im Projektordner gefunden.",
+            1 => "1 Bild aus dem Projektordner übernommen.",
+            _ => $"{added} Bilder aus dem Projektordner übernommen.",
+        };
+    }
+
+    /// <summary>
+    /// Beim Wechsel des Bereichs wird der Projektordner eingelesen: Bilder, die dort
+    /// gespeichert wurden, erscheinen ohne Import in der Liste.
+    /// </summary>
+    private void OnProjectChanged(object sender, SelectionChangedEventArgs e)
+    {
+        var added = SyncProjectFolder();
+        LoadImages();
+
+        if (added > 0)
+        {
+            InfoText.Text = added == 1
+                ? "1 Bild aus dem Projektordner übernommen."
+                : $"{added} Bilder aus dem Projektordner übernommen.";
+        }
+    }
+
     private void OnFilterChanged(object sender, RoutedEventArgs e) => LoadImages();
 
     private void OnFilterChanged(object sender, SelectionChangedEventArgs e) => LoadImages();
@@ -258,7 +316,7 @@ public partial class ImagesView : UserControl
 
         var answer = MessageBox.Show(
             $"Bild \"{selected.Name}\" wirklich löschen?\n\n" +
-            "Der Eintrag und die Kopie im Bibliotheksordner werden entfernt. " +
+            "Der Eintrag wird entfernt und die Bilddatei in den Papierkorb gelegt. " +
             "Bereits erzeugte PDFs behalten das eingebettete Bild.",
             "Bild löschen", MessageBoxButton.YesNo, MessageBoxImage.Warning);
         if (answer != MessageBoxResult.Yes)

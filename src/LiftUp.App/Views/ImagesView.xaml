@@ -19,13 +19,14 @@
 
                 <StackPanel Grid.Column="0" Orientation="Horizontal">
                     <Button Content="Bilder importieren …" Style="{StaticResource LiftUpPrimaryButton}"
-                            Click="OnImportClick" Margin="0" />
+                            Click="OnImportClick" />
+                    <Button Content="Ordner einlesen" Click="OnScanFolderClick" Margin="0" />
                 </StackPanel>
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="14,0,0,0">
                     <TextBlock Text="Bereich" VerticalAlignment="Center" Margin="0,0,6,0" Style="{StaticResource LiftUpFieldLabel}" />
                     <ComboBox x:Name="ProjectBox" Width="230" Margin="0,0,12,0"
-                              DisplayMemberPath="Name" SelectionChanged="OnFilterChanged" />
+                              DisplayMemberPath="Name" SelectionChanged="OnProjectChanged" />
 
                     <TextBlock Text="Kategorie" VerticalAlignment="Center" Margin="0,0,6,0" Style="{StaticResource LiftUpFieldLabel}" />
                     <ComboBox x:Name="CategoryFilterBox" Width="150" SelectionChanged="OnCategoryChanged" />

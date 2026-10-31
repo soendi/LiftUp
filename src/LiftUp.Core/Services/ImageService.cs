@@ -14,6 +14,7 @@ public sealed class ImageService
     private readonly Database _database;
     private readonly Session _actor;
     private readonly ImageRepository _images = new();
+    private readonly ProjectRepository _projects = new();
     private readonly ChangeLogWriter _changes;
     private readonly string _libraryRoot;
 
@@ -207,6 +208,85 @@ public sealed class ImageService
         return match is null ? null : ImageEmbedding.ToImageTag(match);
     }
 
+    /// <summary>
+    /// Liest Bilddateien aus dem Projektordner ein und ordnet sie dem Projekt zu. Die
+    /// Dateien bleiben, wo sie liegen – es wird nichts kopiert. Bereits erfasste Pfade
+    /// werden übersprungen; Unterordner werden zur Kategorie. Liefert die Anzahl der
+    /// neu übernommenen Bilder.
+    /// </summary>
+    public int SyncProjectFolder(Guid projectId)
+    {
+        _actor.Require(Permission.ManageImages);
+
+        using var connection = _database.Open();
+        var project = _projects.GetById(connection, null, projectId)
+                      ?? throw new ValidationException("Das Projekt wurde nicht gefunden.");
+
+        if (string.IsNullOrWhiteSpace(project.FolderPath) || !Directory.Exists(project.FolderPath))
+        {
+            return 0;
+        }
+
+        var files = Directory.EnumerateFiles(project.FolderPath, "*", SearchOption.AllDirectories)
+            .Select(Path.GetFullPath)
+            .Where(path => ImageEmbedding.ContentTypeFor(path) is not null)
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (files.Length == 0)
+        {
+            return 0;
+        }
+
+        using var transaction = connection.BeginTransaction();
+
+        var existing = _images.GetForProject(connection, transaction, projectId);
+        var knownPaths = existing
+            .Select(image => Path.GetFullPath(image.FilePath))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var knownNames = existing
+            .Select(image => image.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var added = 0;
+        foreach (var path in files)
+        {
+            if (!knownPaths.Add(path))
+            {
+                continue;
+            }
+
+            var name = UniqueName(Path.GetFileNameWithoutExtension(path), knownNames);
+            knownNames.Add(name);
+
+            var info = new FileInfo(path);
+            var image = new LibraryImage
+            {
+                Name = name,
+                Category = CategoryFor(project.FolderPath, path),
+                ProjectId = projectId,
+                FileName = info.Name,
+                FilePath = path,
+                ContentType = ImageEmbedding.ContentTypeFor(path) ?? "application/octet-stream",
+                SizeBytes = info.Length,
+                CreatedUtc = DateTime.UtcNow,
+                CreatedBy = _actor.UserName,
+            };
+
+            _images.Insert(connection, transaction, image);
+            added++;
+        }
+
+        if (added > 0)
+        {
+            _changes.Record(connection, transaction, "Project", projectId.ToString("D"), "ImportImages",
+                new { project.Name, Count = added }, project.RowVersion);
+            transaction.Commit();
+        }
+
+        return added;
+    }
+
     /// <summary>Vereinheitlicht Schlagworte: durch Komma getrennt, ohne Doppelte.</summary>
     public static string? NormalizeTags(string? tags)
     {
@@ -222,6 +302,37 @@ public sealed class ImageService
             .ToArray();
 
         return values.Length == 0 ? null : string.Join(", ", values);
+    }
+
+    /// <summary>Der Unterordner im Projektordner wird zur Kategorie des Bildes.</summary>
+    private static string? CategoryFor(string root, string filePath)
+    {
+        var relative = Path.GetRelativePath(root, filePath);
+        var folder = Path.GetDirectoryName(relative);
+
+        return string.IsNullOrWhiteSpace(folder) || folder == "."
+            ? null
+            : folder.Replace('\\', '/');
+    }
+
+    private static string UniqueName(string? preferred, IReadOnlySet<string> known)
+    {
+        var name = string.IsNullOrWhiteSpace(preferred) ? "Bild" : preferred.Trim();
+        if (!known.Contains(name))
+        {
+            return name;
+        }
+
+        for (var suffix = 2; suffix < 1000; suffix++)
+        {
+            var candidate = $"{name} ({suffix})";
+            if (!known.Contains(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        return $"{name} ({Guid.NewGuid():N})";
     }
 
     private static string RequireName(string? name)
