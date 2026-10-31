@@ -400,16 +400,26 @@ public partial class HtmlEditor : UserControl
 
             // ---- Bild anklicken: Größe, Seite, Textfluss und Unterschrift ändern ----
             window.liftupFigCounter = 0;
+            window.liftupFormatTarget = null;
 
             window.liftupFigId = function (figure) {
                 if (!figure.dataset.liftupId) {
-                    window.liftupFigCounter += 1;
-                    figure.dataset.liftupId = 'fig' + window.liftupFigCounter;
+                    // Kennungen aus gespeichertem HTML bleiben gültig: jede neue
+                    // Kennung wird geprüft, damit keine doppelt vergeben wird.
+                    var id;
+                    do {
+                        window.liftupFigCounter += 1;
+                        id = 'fig' + window.liftupFigCounter;
+                    } while (document.querySelector('[data-liftup-id="' + id + '"]'));
+                    figure.dataset.liftupId = id;
                 }
                 return figure.dataset.liftupId;
             };
 
             window.liftupOpenFormat = function (figure) {
+                // Das angeklickte Bild bleibt festgehalten, damit die Angaben
+                // sicher an dieses Bild zurückgehen.
+                window.liftupFormatTarget = figure;
                 var caption = figure.querySelector('figcaption');
                 try {
                     window.chrome.webview.postMessage(JSON.stringify({
@@ -430,7 +440,8 @@ public partial class HtmlEditor : UserControl
                 var size = figure.dataset.liftupSize || 'medium';
                 var flow = figure.dataset.liftupFlow || 'inline';
                 figure.dataset.liftupPlace = place;
-                figure.className = 'liftup-fig liftup-fig-' + size + ' liftup-fig-' + place + ' liftup-fig-' + flow;
+                figure.className = 'liftup-fig liftup-fig-' + size + ' liftup-fig-' + place + ' liftup-fig-' + flow
+                    + (figure.querySelector('figcaption') ? ' liftup-fig-captioned' : '');
             };
 
             // Blöcke sind die Elemente direkt unter <body>; dazwischen wird das Bild abgelegt.
@@ -603,7 +614,14 @@ public partial class HtmlEditor : UserControl
                 if (!value || !value.id) {
                     return false;
                 }
-                var figure = document.querySelector('[data-liftup-id="' + value.id + '"]');
+
+                // Zuerst das zuletzt angeklickte Bild, damit die Angaben nicht bei
+                // einem gleichnamigen Bild an anderer Stelle landen.
+                var figure = window.liftupFormatTarget;
+                window.liftupFormatTarget = null;
+                if (!figure || !figure.isConnected || figure.dataset.liftupId !== value.id) {
+                    figure = document.querySelector('[data-liftup-id="' + value.id + '"]');
+                }
                 if (!figure) {
                     return false;
                 }
@@ -621,8 +639,10 @@ public partial class HtmlEditor : UserControl
                         figure.appendChild(caption);
                     }
                     caption.textContent = value.caption;
+                    figure.classList.add('liftup-fig-captioned');
                 } else if (caption && caption.parentNode) {
                     caption.parentNode.removeChild(caption);
+                    figure.classList.remove('liftup-fig-captioned');
                 }
 
                 // „Unter dem Text“: das Bild wandert in den Streifen am Ende.
@@ -641,6 +661,35 @@ public partial class HtmlEditor : UserControl
                 }
 
                 return true;
+            };
+
+            // Bild und Bildunterschrift gehören zusammen: eine Unterschrift, die
+            // außerhalb des Bildes steht, wird wieder hineingeholt.
+            window.liftupNormalizeFigures = function () {
+                var captions = document.querySelectorAll('figcaption');
+                for (var index = 0; index < captions.length; index += 1) {
+                    var caption = captions[index];
+                    var parent = caption.parentNode;
+                    if (parent && parent.classList && parent.classList.contains('liftup-fig')) {
+                        parent.classList.add('liftup-fig-captioned');
+                        continue;
+                    }
+
+                    var previous = caption.previousElementSibling;
+                    if (previous && previous.tagName === 'FIGURE' && previous.classList.contains('liftup-fig')) {
+                        previous.appendChild(caption);
+                        previous.classList.add('liftup-fig-captioned');
+                    }
+                }
+
+                var figures = document.querySelectorAll('figure.liftup-fig');
+                for (var position = 0; position < figures.length; position += 1) {
+                    if (figures[position].querySelector('figcaption')) {
+                        figures[position].classList.add('liftup-fig-captioned');
+                    } else {
+                        figures[position].classList.remove('liftup-fig-captioned');
+                    }
+                }
             };
 
             window.liftupGetHtml = function () {
@@ -971,7 +1020,7 @@ public partial class HtmlEditor : UserControl
 
         var script = "document.body.innerHTML = "
                      + JsonSerializer.Serialize(_pendingHtml)
-                     + "; true";
+                     + "; window.liftupNormalizeFigures && window.liftupNormalizeFigures(); true";
 
         await Browser.CoreWebView2.ExecuteScriptAsync(script);
     }

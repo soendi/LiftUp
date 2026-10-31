@@ -64,6 +64,12 @@ public sealed record ImageFormat(
         .liftup-fig-large { width: 165mm; }
         .liftup-fig-inline { display: inline-block; vertical-align: middle; margin: 0 3mm 2mm 0; }
         .liftup-fig-center:not(.liftup-fig-inline) { display: block; margin-left: auto; margin-right: auto; }
+        /* Mit Unterschrift steht das Bild als eigener Block im Text: Bild und
+           Unterschrift bleiben eine Einheit, der Text steht darüber und darunter. */
+        .liftup-fig-captioned.liftup-fig-inline { display: block; }
+        .liftup-fig-captioned.liftup-fig-inline.liftup-fig-left { margin: 0 auto 4mm 0; }
+        .liftup-fig-captioned.liftup-fig-inline.liftup-fig-center { margin: 0 auto 4mm auto; }
+        .liftup-fig-captioned.liftup-fig-inline.liftup-fig-right { margin: 0 0 4mm auto; }
         .liftup-fig-square.liftup-fig-left,
         .liftup-fig-tight.liftup-fig-left,
         .liftup-fig-through.liftup-fig-left { float: left; }
@@ -97,6 +103,7 @@ public sealed record ImageFormat(
           float: none;
           margin: 0;
         }
+        .liftup-fig-strip .liftup-fig.liftup-fig-captioned { display: block; float: none; margin: 0; }
         .liftup-fig-strip .liftup-fig img { width: 100%; height: 100%; object-fit: contain; }
         """;
 
@@ -143,17 +150,19 @@ public sealed record ImageFormat(
         }
 
         var value = format ?? Default;
+        var caption = value.Caption?.Trim();
         var builder = new StringBuilder();
         builder.Append("<figure class=\"").Append(value.ClassList)
+            .Append(string.IsNullOrEmpty(caption) ? string.Empty : " liftup-fig-captioned")
             .Append("\" data-liftup-size=\"").Append(value.SizeToken)
             .Append("\" data-liftup-place=\"").Append(value.PlacementToken)
             .Append("\" data-liftup-flow=\"").Append(value.FlowToken)
             .Append("\">")
             .Append(imageHtml);
 
-        if (!string.IsNullOrWhiteSpace(value.Caption))
+        if (!string.IsNullOrEmpty(caption))
         {
-            builder.Append("<figcaption>").Append(Encode(value.Caption.Trim())).Append("</figcaption>");
+            builder.Append("<figcaption>").Append(Encode(caption)).Append("</figcaption>");
         }
 
         builder.Append("</figure>");

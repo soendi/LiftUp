@@ -15,7 +15,7 @@ public sealed class ImageFormatTests
 
         var html = ImageFormat.Wrap(Image, format);
 
-        Assert.StartsWith("<figure class=\"liftup-fig liftup-fig-large liftup-fig-left liftup-fig-square\"", html);
+        Assert.StartsWith("<figure class=\"liftup-fig liftup-fig-large liftup-fig-left liftup-fig-square liftup-fig-captioned\"", html);
         Assert.Contains("data-liftup-size=\"large\"", html);
         Assert.Contains("data-liftup-place=\"left\"", html);
         Assert.Contains("data-liftup-flow=\"square\"", html);
@@ -30,6 +30,7 @@ public sealed class ImageFormatTests
         var html = ImageFormat.Wrap(Image);
 
         Assert.DoesNotContain("figcaption", html);
+        Assert.DoesNotContain("liftup-fig-captioned", html);
         Assert.Contains("liftup-fig-medium", html);
         Assert.Contains("liftup-fig-inline", html);
     }
@@ -72,6 +73,9 @@ public sealed class ImageFormatTests
 
         Assert.Contains(".liftup-fig-strip", html);
         Assert.Contains(".liftup-fig-square.liftup-fig-left", html);
+
+        // Bild und Unterschrift bilden einen Block, sobald eine Unterschrift dranhängt.
+        Assert.Contains(".liftup-fig-captioned.liftup-fig-inline { display: block; }", html);
         Assert.Contains("object-fit: contain", html);
         Assert.True(
             html.IndexOf(".liftup-fig-strip", StringComparison.Ordinal) < html.IndexOf("</head>", StringComparison.Ordinal),
