@@ -386,12 +386,29 @@ internal static class PostgreSqlLocator
         }
     }
 
+    /// <summary>
+    /// Prüft, ob unter „Program Files\PostgreSQL“ wirklich Binärdateien liegen.
+    /// Ein leerer Restordner – etwa nach einer Deinstallation oder auf einem
+    /// vorbereiteten Rechnerimage – darf die Installation nicht blockieren.
+    /// </summary>
     private static bool ProgramFolderExists()
     {
         var folder = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
             "PostgreSQL");
-        return Directory.Exists(folder);
+        if (!Directory.Exists(folder))
+        {
+            return false;
+        }
+
+        try
+        {
+            return Directory.EnumerateFiles(folder, "pg_ctl.exe", SearchOption.AllDirectories).Any();
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
     }
 }
 

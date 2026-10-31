@@ -400,16 +400,33 @@ jobs:
           $setup = Join-Path ${env:ProgramFiles} "LiftUp Server\LiftUp.ServerSetup.exe"
           if (-not (Test-Path $setup)) { throw "LiftUp.ServerSetup.exe wurde nicht installiert." }
 
-      - name: Ausgangslage muss frisch sein
+      - name: Ausgangslage herstellen
         shell: pwsh
         run: |
-          # Sonst würde das Werkzeug die Installation überspringen und der
-          # winget-Weg bliebe ungetestet.
-          if (Test-Path "${env:ProgramFiles}\PostgreSQL") { throw "PostgreSQL ist bereits vorhanden." }
+          # Das Runner-Image bringt teilweise schon PostgreSQL mit; dann würde
+          # das Werkzeug die Installation überspringen und der winget-Weg bliebe
+          # ungetestet. Auf dem Wegwerf-Runner wird es deshalb entfernt.
+          $folder = Join-Path ${env:ProgramFiles} "PostgreSQL"
+          if (Test-Path $folder) {
+            Write-Host "Vorhandenes PostgreSQL auf dem Image:"
+            Get-ChildItem $folder -Directory | Select-Object -ExpandProperty Name | Out-Host
+            $uninstaller = Get-ChildItem $folder -Recurse -Filter "uninstall-postgresql.exe" -ErrorAction SilentlyContinue |
+              Select-Object -First 1
+            if ($uninstaller) {
+              Write-Host "Entferne vorhandenes PostgreSQL: $($uninstaller.FullName)"
+              $process = Start-Process -FilePath $uninstaller.FullName `
+                -ArgumentList "--mode", "unattended" -Wait -PassThru
+              Write-Host "Deinstallations-Exitcode: $($process.ExitCode)"
+            }
+          }
+
+          Get-Service | Where-Object { $_.Name -like "postgresql*" } |
+            Stop-Service -Force -ErrorAction SilentlyContinue
+
           $services = Get-Service | Where-Object { $_.Name -like "postgresql*" }
-          if ($services) { throw "Es läuft bereits ein PostgreSQL-Dienst: $($services.Name -join ', ')" }
+          if ($services) { throw "Es läuft weiterhin ein PostgreSQL-Dienst: $($services.Name -join ', ')" }
           $answers = Test-NetConnection -ComputerName 127.0.0.1 -Port 5432 -InformationLevel Quiet -WarningAction SilentlyContinue
-          if ($answers) { throw "Auf Port 5432 antwortet bereits etwas." }
+          if ($answers) { throw "Auf Port 5432 antwortet weiterhin etwas." }
           Write-Host "Kein PostgreSQL vorhanden – der winget-Weg wird durchlaufen."
 
       - name: Einrichtung über winget ausführen
