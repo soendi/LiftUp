@@ -86,14 +86,8 @@ internal static class Program
                 : $"PostgreSQL ist bereits vorhanden – Dienst \u201E{serviceName}\u201C, es wird nichts installiert.");
             if (!portAnswers && serviceName is not null)
             {
-                Console.WriteLine($"Der Dienst „{serviceName}“ antwortet auf Port {options.Port} nicht – er wird gestartet …");
-                if (PostgreSqlLocator.TryStartService(serviceName) &&
-                    await WaitForPortAsync("127.0.0.1", options.Port, TimeSpan.FromSeconds(30)))
-                {
-                    portAnswers = true;
-                    Console.WriteLine("Der Dienst läuft, der Port antwortet.");
-                }
-                else
+                portAnswers = await StartServiceAndWaitAsync(serviceName, options.Port, TimeSpan.FromSeconds(30));
+                if (!portAnswers)
                 {
                     Console.WriteLine($"Achtung: Auf Port {options.Port} antwortet weiterhin kein PostgreSQL.");
                     Console.WriteLine("Falls der Server auf einem anderen Port läuft, den mit --port angeben.");
@@ -155,8 +149,16 @@ internal static class Program
 
                 if (!await WaitForPortAsync("127.0.0.1", options.Port, TimeSpan.FromMinutes(3)))
                 {
-                    Console.WriteLine($"Auf Port {options.Port} antwortet nach der Installation kein PostgreSQL.");
-                    return 4;
+                    // winget startet den Dienst normalerweise selbst; falls nicht, wird
+                    // hier nachgeholfen, statt den Lauf mit Exitcode 4 zu beenden.
+                    var installedService = PostgreSqlLocator.FindServiceName();
+                    var started = installedService is not null &&
+                                  await StartServiceAndWaitAsync(installedService, options.Port, TimeSpan.FromSeconds(30));
+                    if (!started)
+                    {
+                        Console.WriteLine($"Auf Port {options.Port} antwortet nach der Installation kein PostgreSQL.");
+                        return 4;
+                    }
                 }
             }
         }
@@ -267,6 +269,39 @@ internal static class Program
         {
             return false;
         }
+    }
+
+    /// <summary>
+    /// Startet einen vorhandenen, aber gestoppten PostgreSQL-Dienst und wartet auf den
+    /// Port. Meldet false, wenn der Dienst nicht läuft oder der Port danach still bleibt.
+    /// </summary>
+    private static async Task<bool> StartServiceAndWaitAsync(string serviceName, int port, TimeSpan timeout)
+    {
+        var running = PostgreSqlLocator.IsServiceRunning(serviceName);
+        Console.WriteLine(running
+            ? $"Der Dienst „{serviceName}“ läuft, Port {port} antwortet aber nicht."
+            : $"Der Dienst „{serviceName}“ ist gestoppt – er wird gestartet …");
+
+        if (!running && !PostgreSqlLocator.TryStartService(serviceName, out var reason))
+        {
+            Console.WriteLine($"Der Dienst „{serviceName}“ ließ sich nicht starten: {reason}");
+            if (!IsAdministrator())
+            {
+                Console.WriteLine("Ohne Administratorrechte darf der Dienst nicht gestartet werden.");
+                Console.WriteLine("Bitte das Setup über „Als Administrator ausführen“ starten.");
+            }
+
+            return false;
+        }
+
+        if (await WaitForPortAsync("127.0.0.1", port, timeout))
+        {
+            Console.WriteLine("Der Dienst läuft, der Port antwortet.");
+            return true;
+        }
+
+        Console.WriteLine($"Der Dienst „{serviceName}“ läuft, auf Port {port} antwortet aber kein PostgreSQL.");
+        return false;
     }
 
     internal static async Task<bool> WaitForPortAsync(string host, int port, TimeSpan timeout)
@@ -426,18 +461,59 @@ internal static class PostgreSqlLocator
     /// Startet einen vorhandenen, aber gestoppten Dienst und meldet, ob er läuft.
     /// Auf einem Server mit bereits installiertem PostgreSQL ist das der
     /// Unterschied zwischen „Datenbank wird angelegt“ und „Verbindung abgelehnt“.
+    /// Der Grund eines Fehlschlags steht in <paramref name="reason"/>.
     /// </summary>
-    public static bool TryStartService(string serviceName)
+    public static bool TryStartService(string serviceName, out string reason)
     {
+        reason = string.Empty;
         try
         {
             using var service = new ServiceController(serviceName);
+            service.Refresh();
             if (service.Status != ServiceControllerStatus.Running)
             {
                 service.Start();
                 service.WaitForStatus(ServiceControllerStatus.Running, TimeSpan.FromSeconds(30));
             }
 
+            service.Refresh();
+            if (service.Status == ServiceControllerStatus.Running)
+            {
+                return true;
+            }
+
+            reason = $"Status {service.Status}";
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            reason = "keine Berechtigung zum Starten des Dienstes";
+            return false;
+        }
+        catch (InvalidOperationException)
+        {
+            reason = "der Dienst wurde nicht gefunden oder lässt sich nicht steuern";
+            return false;
+        }
+        catch (System.TimeoutException)
+        {
+            reason = "der Dienst wurde innerhalb von 30 Sekunden nicht betriebsbereit";
+            return false;
+        }
+        catch (Exception exception) when (exception is PlatformNotSupportedException
+                                              or System.ComponentModel.Win32Exception)
+        {
+            reason = exception.Message;
+            return false;
+        }
+    }
+
+    /// <summary>Meldet, ob der Dienst gerade läuft – ohne ihn zu starten.</summary>
+    public static bool IsServiceRunning(string serviceName)
+    {
+        try
+        {
+            using var service = new ServiceController(serviceName);
             service.Refresh();
             return service.Status == ServiceControllerStatus.Running;
         }

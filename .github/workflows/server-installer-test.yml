@@ -489,6 +489,39 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Der Client-Benutzer darf nicht schreiben." }
           Write-Host "Dienst, Schema und Rechte in Ordnung."
 
+      # Nach einem Neustart des Servers ist der Dienst oft gestoppt. Das Werkzeug
+      # muss ihn dann selbst starten, statt mit „Verbindung abgelehnt“ zu enden.
+      - name: Gestoppter Dienst wird gestartet
+        shell: pwsh
+        run: |
+          $service = Get-Service | Where-Object { $_.Name -like "postgresql*" } | Select-Object -First 1
+          Stop-Service -Name $service.Name -Force
+          $service.WaitForStatus([System.ServiceProcess.ServiceControllerStatus]::Stopped, "00:00:30")
+          if ((Get-Service -Name $service.Name).Status -ne "Stopped") { throw "Der Dienst ließ sich nicht stoppen." }
+          Write-Host "Dienst $($service.Name) ist gestoppt."
+
+          $setup = Join-Path ${env:ProgramFiles} "LiftUp Server\LiftUp.ServerSetup.exe"
+          $arguments = @(
+            "--port", "5432",
+            "--database", "liftup_dienst",
+            "--user", "liftup_dienst",
+            "--password", "DienstPasswort123",
+            "--superuser-password", "postgres",
+            "--connect-host", "127.0.0.1",
+            "--host", "127.0.0.1",
+            "--output", "artifacts/connection/dienst.json"
+          )
+          $output = & $setup @arguments 2>&1
+          $code = $LASTEXITCODE
+          $output | Tee-Object -FilePath artifacts/setup-dienst.log
+          if ($code -ne 0) { throw "Einrichtung bei gestopptem Dienst fehlgeschlagen (Exitcode $code)." }
+          if (-not ($output -match "ist gestoppt")) { throw "Das Werkzeug hat den gestoppten Dienst nicht erkannt." }
+          if (-not ($output -match "Der Dienst läuft, der Port antwortet")) { throw "Das Werkzeug hat den Dienst nicht gestartet." }
+          if (-not ($output -match "wurde angelegt")) { throw "Datenbank oder Benutzer wurden nicht angelegt." }
+          if ((Get-Service -Name $service.Name).Status -ne "Running") { throw "Der Dienst läuft nach dem Lauf nicht." }
+          if (-not (Test-Path "artifacts/connection/dienst.json")) { throw "Die Zugangsdatei fehlt." }
+          Write-Host "Gestoppter Dienst wurde gestartet und die Datenbank angelegt."
+
       - name: Protokolle bei Fehlschlag hochladen
         if: failure()
         uses: actions/upload-artifact@v4
