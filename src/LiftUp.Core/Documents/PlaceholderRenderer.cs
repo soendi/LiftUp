@@ -100,6 +100,43 @@ public static class PlaceholderRenderer
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
+    /// <summary>
+    /// Entfernt die Platzhalter der genannten Bilder und Textbausteine aus dem HTML – für
+    /// Fälle, in denen die Angabe bewusst weggelassen werden soll. Schreibweise und
+    /// Leerzeichen im Platzhalter sind egal.
+    /// </summary>
+    public static string RemovePlaceholders(
+        string html,
+        IReadOnlyList<string> imageNames,
+        IReadOnlyList<string> snippetNames)
+    {
+        if (string.IsNullOrEmpty(html) || (imageNames.Count == 0 && snippetNames.Count == 0))
+        {
+            return html;
+        }
+
+        var patterns = new List<string>();
+        if (imageNames.Count > 0)
+        {
+            patterns.Add($@"(?:bild|image)\s*:\s*(?:{Alternation(imageNames)})");
+        }
+
+        if (snippetNames.Count > 0)
+        {
+            patterns.Add($@"snippet\s*:\s*(?:{Alternation(snippetNames)})");
+        }
+
+        var pattern = $@"\{{\{{\s*(?:{string.Join("|", patterns)})\s*\}}\}}";
+        return Regex.Replace(html, pattern, string.Empty, RegexOptions.IgnoreCase);
+    }
+
+    /// <summary>Namen als Regex-Alternative; längere Namen zuerst, damit nichts halb passt.</summary>
+    private static string Alternation(IReadOnlyList<string> names) =>
+        string.Join("|", names
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Select(name => Regex.Escape(name.Trim()))
+            .OrderByDescending(name => name.Length));
+
     public static string Render(string html, PlaceholderContext context)
     {
         ArgumentNullException.ThrowIfNull(context);

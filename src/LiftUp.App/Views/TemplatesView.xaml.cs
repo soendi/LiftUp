@@ -35,6 +35,8 @@ public partial class TemplatesView : UserControl
     private int _imageTokenLength;
     private bool _insertingImage;
     private Guid? _templateId;
+    private IReadOnlyList<string> _missingImages = [];
+    private IReadOnlyList<string> _missingSnippets = [];
 
     public TemplatesView(AppServices services)
     {
@@ -510,6 +512,9 @@ public partial class TemplatesView : UserControl
     /// </summary>
     private void UpdateMissingPlaceholders()
     {
+        _missingImages = [];
+        _missingSnippets = [];
+
         var imageNames = PlaceholderRenderer.FindImageNames(HtmlBox.Text);
         var snippetNames = PlaceholderRenderer.FindSnippetNames(HtmlBox.Text);
 
@@ -538,41 +543,89 @@ public partial class TemplatesView : UserControl
             return;
         }
 
-        var missingImages = imageNames.Where(name => !knownImages.Contains(name)).ToArray();
-        var missingSnippets = snippetNames.Where(name => !knownSnippets.Contains(name)).ToArray();
+        _missingImages = imageNames.Where(name => !knownImages.Contains(name)).ToArray();
+        _missingSnippets = snippetNames.Where(name => !knownSnippets.Contains(name)).ToArray();
 
-        if (missingImages.Length == 0 && missingSnippets.Length == 0)
+        if (_missingImages.Count == 0 && _missingSnippets.Count == 0)
         {
             MissingBorder.Visibility = Visibility.Collapsed;
             return;
         }
 
         var parts = new List<string>();
-        if (missingImages.Length > 0)
+        if (_missingImages.Count > 0)
         {
-            parts.Add($"{missingImages.Length} Bild{(missingImages.Length == 1 ? "" : "er")}");
+            parts.Add($"{_missingImages.Count} Bild{(_missingImages.Count == 1 ? "" : "er")}");
         }
 
-        if (missingSnippets.Length > 0)
+        if (_missingSnippets.Count > 0)
         {
-            parts.Add($"{missingSnippets.Length} Textbaustein{(missingSnippets.Length == 1 ? "" : "e")}");
+            parts.Add($"{_missingSnippets.Count} Textbaustein{(_missingSnippets.Count == 1 ? "" : "e")}");
         }
 
         var details = new List<string>();
-        if (missingImages.Length > 0)
+        if (_missingImages.Count > 0)
         {
-            details.Add("Bilder: " + string.Join(", ", missingImages.Select(name => $"„{name}“")));
+            details.Add("Bilder: " + string.Join(", ", _missingImages.Select(name => $"„{name}“")));
         }
 
-        if (missingSnippets.Length > 0)
+        if (_missingSnippets.Count > 0)
         {
-            details.Add("Textbausteine: " + string.Join(", ", missingSnippets.Select(name => $"„{name}“")));
+            details.Add("Textbausteine: " + string.Join(", ", _missingSnippets.Select(name => $"„{name}“")));
         }
 
         MissingTitle.Text = $"Fehlende Angaben: {string.Join(" und ", parts)}";
         MissingText.Text = string.Join(" · ", details)
             + " – diese Stellen bleiben in der Vorschau und im erzeugten PDF leer.";
+        ReplaceImagesButton.Visibility = _missingImages.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         MissingBorder.Visibility = Visibility.Visible;
+    }
+
+    /// <summary>Entfernt die fehlenden Platzhalter direkt im Editor; gespeichert wird danach wie gewohnt.</summary>
+    private void OnRemoveMissingClick(object sender, RoutedEventArgs e)
+    {
+        if (_missingImages.Count == 0 && _missingSnippets.Count == 0)
+        {
+            return;
+        }
+
+        var answer = MessageBox.Show(
+            "Alle fehlenden Platzhalter aus dem Vorlagentext entfernen?\n\n"
+            + "Das betrifft nur den Editor; übernommen wird die Änderung mit „Als neue Version speichern“. "
+            + "Bereits erzeugte PDFs bleiben unverändert.",
+            "Platzhalter entfernen", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+
+        if (answer != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        HtmlBox.Text = PlaceholderRenderer.RemovePlaceholders(HtmlBox.Text, _missingImages, _missingSnippets);
+        HtmlBox.CaretIndex = HtmlBox.Text.Length;
+        UpdateMissingPlaceholders();
+        InfoText.Text = "Platzhalter entfernt – noch als neue Version speichern.";
+    }
+
+    /// <summary>Holt fehlende Bilder aus einer Datei in die globale Bibliothek.</summary>
+    private void OnReplaceImagesClick(object sender, RoutedEventArgs e)
+    {
+        if (_missingImages.Count == 0)
+        {
+            return;
+        }
+
+        var dialog = new ReplaceImagesWindow(_services, _missingImages)
+        {
+            Owner = Window.GetWindow(this),
+        };
+
+        if (dialog.ShowDialog() != true)
+        {
+            return;
+        }
+
+        UpdateMissingPlaceholders();
+        InfoText.Text = "Bilder ersetzt – die neue Vorlagenversion entsteht beim Speichern.";
     }
 
     private IReadOnlyList<ImageChoice> SearchImages(string query)
