@@ -33,8 +33,10 @@
                     <TextBlock Text="Kategorie" VerticalAlignment="Center" Margin="0,0,6,0" Style="{StaticResource LiftUpFieldLabel}" />
                     <ComboBox x:Name="CategoryFilterBox" Width="140" SelectionChanged="OnCategoryChanged" />
 
-                    <TextBlock Text="Schlagwort" VerticalAlignment="Center" Margin="12,0,6,0" Style="{StaticResource LiftUpFieldLabel}" />
-                    <ComboBox x:Name="TagFilterBox" Width="140" Margin="0,0,12,0" SelectionChanged="OnTagChanged" />
+                    <TextBlock Text="Schlagworte" VerticalAlignment="Center" Margin="12,0,6,0" Style="{StaticResource LiftUpFieldLabel}" />
+                    <Button x:Name="TagFilterButton" Content="Alle" Width="140" Margin="0,0,12,0"
+                            HorizontalContentAlignment="Left" Click="OnTagFilterClick"
+                            ToolTip="Mehrere Schlagworte gleichzeitig wählen" />
 
                     <TextBlock Text="Suche" VerticalAlignment="Center" Margin="0,0,6,0" Style="{StaticResource LiftUpFieldLabel}" />
                     <TextBox x:Name="SearchBox" Width="150" TextChanged="OnSearchChanged" />

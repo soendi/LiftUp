@@ -331,9 +331,7 @@ public sealed class ImageService
             return null;
         }
 
-        var values = tags
-            .Split([',', ';', '\n', '\r', '\t'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Where(value => value.Length > 0)
+        var values = ImageTags.Split(tags)
             .Distinct(StringComparer.CurrentCultureIgnoreCase)
             .ToArray();
 

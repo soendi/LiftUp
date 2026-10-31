@@ -1,6 +1,7 @@
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Media.Imaging;
 using LiftUp.Core.Domain;
 using Microsoft.Win32;
@@ -12,7 +13,10 @@ public partial class ImagesView : UserControl
     private sealed record ProjectOption(Guid? Id, string Name);
 
     private const string AllCategories = "Alle Kategorien";
-    private const string AllTags = "Alle Schlagworte";
+    /// <summary>Gewählte Schlagworte; leer bedeutet „nicht filtern“.</summary>
+    private readonly HashSet<string> _selectedTags = new(StringComparer.CurrentCultureIgnoreCase);
+
+    private IReadOnlyList<string> _availableTags = [];
 
     private readonly AppServices _services;
     private IReadOnlyList<ImageListItem> _items = [];
@@ -53,7 +57,6 @@ public partial class ImagesView : UserControl
             _items = _services.Images.Search(SelectedProjectId, SearchBox.Text, ArchiveToggle.IsChecked == true);
 
             var previousCategory = CategoryFilterBox.SelectedItem as string;
-            var previousTag = TagFilterBox.SelectedItem as string;
 
             var categories = new List<string> { AllCategories };
             categories.AddRange(_items
@@ -62,21 +65,21 @@ public partial class ImagesView : UserControl
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderBy(category => category, StringComparer.OrdinalIgnoreCase));
 
-            var tags = new List<string> { AllTags };
-            tags.AddRange(_items
-                .SelectMany(item => SplitTags(item.Tags))
+            var tags = _items
+                .SelectMany(item => ImageTags.Split(item.Tags))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(tag => tag, StringComparer.CurrentCultureIgnoreCase));
+                .OrderBy(tag => tag, StringComparer.CurrentCultureIgnoreCase)
+                .ToArray();
+
+            _availableTags = tags;
+            _selectedTags.RemoveWhere(tag => !tags.Contains(tag, StringComparer.CurrentCultureIgnoreCase));
 
             CategoryFilterBox.ItemsSource = categories;
             CategoryFilterBox.SelectedItem = previousCategory is not null && categories.Contains(previousCategory)
                 ? previousCategory
                 : AllCategories;
 
-            TagFilterBox.ItemsSource = tags;
-            TagFilterBox.SelectedItem = previousTag is not null && tags.Contains(previousTag)
-                ? previousTag
-                : AllTags;
+            UpdateTagFilterButton();
 
             ApplyCategoryFilter();
         }
@@ -90,8 +93,6 @@ public partial class ImagesView : UserControl
     private void ApplyCategoryFilter()
     {
         var category = CategoryFilterBox.SelectedItem as string;
-        var tag = TagFilterBox.SelectedItem as string;
-
         IEnumerable<ImageListItem> filtered = _items;
 
         if (!string.IsNullOrWhiteSpace(category) && category != AllCategories)
@@ -100,10 +101,9 @@ public partial class ImagesView : UserControl
                 string.Equals(item.Category, category, StringComparison.OrdinalIgnoreCase));
         }
 
-        if (!string.IsNullOrWhiteSpace(tag) && tag != AllTags)
+        if (_selectedTags.Count > 0)
         {
-            filtered = filtered.Where(item =>
-                SplitTags(item.Tags).Contains(tag, StringComparer.CurrentCultureIgnoreCase));
+            filtered = filtered.Where(item => ImageTags.MatchesAny(item.Tags, _selectedTags));
         }
 
         var result = filtered.ToArray();
@@ -121,11 +121,87 @@ public partial class ImagesView : UserControl
         InfoText.Text = result.Length == 1 ? "1 Bild" : $"{result.Length} Bilder";
     }
 
-    /// <summary>Schlagworte eines Bildes; in der Datenbank durch Komma getrennt.</summary>
-    private static string[] SplitTags(string? tags) =>
-        string.IsNullOrWhiteSpace(tags)
-            ? []
-            : tags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    /// <summary>Zeigt die aktuelle Schlagwortauswahl auf dem Knopf.</summary>
+    private void UpdateTagFilterButton()
+    {
+        TagFilterButton.Content = _selectedTags.Count switch
+        {
+            0 => "Alle",
+            1 => _selectedTags.First(),
+            _ => $"{_selectedTags.Count} ausgewählt",
+        };
+
+        TagFilterButton.ToolTip = _selectedTags.Count == 0
+            ? "Mehrere Schlagworte gleichzeitig wählen"
+            : string.Join(", ", _selectedTags.OrderBy(tag => tag, StringComparer.CurrentCultureIgnoreCase));
+    }
+
+    /// <summary>
+    /// Öffnet die Schlagwortliste als Aufklappmenü mit Häkchen. Mehrere Schlagworte
+    /// lassen sich gleichzeitig wählen; ein Bild genügt, wenn eines davon passt.
+    /// </summary>
+    private void OnTagFilterClick(object sender, RoutedEventArgs e)
+    {
+        var menu = new ContextMenu { PlacementTarget = TagFilterButton, Placement = PlacementMode.Bottom };
+        var tagItems = new List<MenuItem>();
+
+        var all = new MenuItem
+        {
+            Header = "Alle Schlagworte",
+            IsCheckable = true,
+            IsChecked = _selectedTags.Count == 0,
+            StaysOpenOnClick = true,
+        };
+
+        all.Click += (_, _) =>
+        {
+            _selectedTags.Clear();
+            foreach (var item in tagItems)
+            {
+                item.IsChecked = false;
+            }
+
+            UpdateTagFilterButton();
+            ApplyCategoryFilter();
+        };
+
+        menu.Items.Add(all);
+        menu.Items.Add(new Separator());
+
+        foreach (var tag in _availableTags)
+        {
+            var item = new MenuItem
+            {
+                Header = tag,
+                IsCheckable = true,
+                IsChecked = _selectedTags.Contains(tag),
+                StaysOpenOnClick = true,
+            };
+
+            item.Click += (_, _) =>
+            {
+                if (!_selectedTags.Remove(tag))
+                {
+                    _selectedTags.Add(tag);
+                }
+
+                item.IsChecked = _selectedTags.Contains(tag);
+                all.IsChecked = _selectedTags.Count == 0;
+                UpdateTagFilterButton();
+                ApplyCategoryFilter();
+            };
+
+            tagItems.Add(item);
+            menu.Items.Add(item);
+        }
+
+        if (_availableTags.Count == 0)
+        {
+            menu.Items.Add(new MenuItem { Header = "Keine Schlagworte vorhanden", IsEnabled = false });
+        }
+
+        menu.IsOpen = true;
+    }
 
     private ImageListItem? Selected => ImagesGrid.SelectedItem as ImageListItem;
 
@@ -229,8 +305,6 @@ public partial class ImagesView : UserControl
     private void OnFilterChanged(object sender, SelectionChangedEventArgs e) => LoadImages();
 
     private void OnCategoryChanged(object sender, SelectionChangedEventArgs e) => ApplyCategoryFilter();
-
-    private void OnTagChanged(object sender, SelectionChangedEventArgs e) => ApplyCategoryFilter();
 
     private void OnSearchChanged(object sender, TextChangedEventArgs e) => LoadImages();
 
