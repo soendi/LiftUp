@@ -104,4 +104,22 @@
         <Setter Property="AutoGenerateColumns" Value="False" />
     </Style>
 
+    <!-- Trennstrich zwischen Themengruppen in der Reiterleiste: nur eine Linie, nicht anklickbar. -->
+    <Style x:Key="LiftUpTabSeparator" TargetType="TabItem">
+        <Setter Property="IsEnabled" Value="False" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TabItem">
+                    <Border Background="Transparent" Padding="10,0">
+                        <Border Width="1"
+                                Height="18"
+                                VerticalAlignment="Center"
+                                Background="{StaticResource LiftUpBorder}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
 </ResourceDictionary>

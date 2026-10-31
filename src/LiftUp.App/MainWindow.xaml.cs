@@ -19,46 +19,87 @@ public partial class MainWindow : Window
         var session = _services.CurrentSession;
         UserText.Text = $"{session.DisplayName} · {session.RoleName}";
 
+        // Die Reiter sind in Themengruppen geordnet: Übersicht, Inhalte, Verwaltung, System.
+        // Zwischen den Gruppen steht je ein Trennstrich; leere Gruppen fallen weg.
+        var groups = new List<List<TabItem>>();
+
+        var overview = new List<TabItem>();
         if (session.Can(Permission.ViewProjects))
         {
-            Tabs.Items.Add(new TabItem { Header = "Projekte", Content = new ProjectsView(_services) });
+            overview.Add(CreateTab("Projekte", new ProjectsView(_services)));
         }
 
         if (session.Can(Permission.CreateDocuments) || session.Can(Permission.ManageTemplates))
         {
-            Tabs.Items.Add(new TabItem { Header = "PDF", Content = new PdfView(_services) });
+            overview.Add(CreateTab("PDF", new PdfView(_services)));
         }
 
+        groups.Add(overview);
+
+        var content = new List<TabItem>();
         if (session.Can(Permission.ManageTemplates))
         {
-            Tabs.Items.Add(new TabItem { Header = "Vorlagen", Content = new TemplatesView(_services) });
-        }
-
-        if (session.Can(Permission.ManageImages) || session.Can(Permission.CreateDocuments))
-        {
-            Tabs.Items.Add(new TabItem { Header = "Bilder", Content = new ImagesView(_services) });
+            content.Add(CreateTab("Vorlagen", new TemplatesView(_services)));
         }
 
         if (session.Can(Permission.ManageSnippets) || session.Can(Permission.ViewProjects))
         {
-            Tabs.Items.Add(new TabItem { Header = "Textbausteine", Content = new SnippetsView(_services) });
+            content.Add(CreateTab("Textbausteine", new SnippetsView(_services)));
         }
 
+        if (session.Can(Permission.ManageImages) || session.Can(Permission.CreateDocuments))
+        {
+            content.Add(CreateTab("Bilder", new ImagesView(_services)));
+        }
+
+        groups.Add(content);
+
+        var administration = new List<TabItem>();
         if (session.Can(Permission.ManageUsers))
         {
-            Tabs.Items.Add(new TabItem { Header = "Benutzer", Content = new UsersView(_services) });
-            Tabs.Items.Add(new TabItem { Header = "Sicherung", Content = new BackupsView(_services) });
-        }
-
-        if (session.Can(Permission.ViewChangeLog))
-        {
-            Tabs.Items.Add(new TabItem { Header = "Protokoll", Content = new ChangeLogView(_services) });
+            administration.Add(CreateTab("Benutzer", new UsersView(_services)));
         }
 
         if (session.Can(Permission.ManageRoles))
         {
-            Tabs.Items.Add(new TabItem { Header = "Rollen und Rechte", Content = new RolesView(_services) });
+            administration.Add(CreateTab("Rollen und Rechte", new RolesView(_services)));
         }
+
+        groups.Add(administration);
+
+        var system = new List<TabItem>();
+        if (session.Can(Permission.ViewChangeLog))
+        {
+            system.Add(CreateTab("Protokoll", new ChangeLogView(_services)));
+        }
+
+        if (session.Can(Permission.ManageUsers))
+        {
+            system.Add(CreateTab("Sicherung", new BackupsView(_services)));
+        }
+
+        groups.Add(system);
+
+        foreach (var group in groups)
+        {
+            if (group.Count == 0)
+            {
+                continue;
+            }
+
+            if (Tabs.Items.Count > 0)
+            {
+                Tabs.Items.Add(CreateSeparator());
+            }
+
+            foreach (var tab in group)
+            {
+                Tabs.Items.Add(tab);
+            }
+        }
+
+        // Geöffnet ist immer der erste echte Reiter; Trennstriche sind nicht wählbar.
+        Tabs.SelectedIndex = Tabs.Items.Count > 0 ? 0 : -1;
 
         StatusText.Text = $"Angemeldet als {session.UserName} · Datenbank: {_services.Database.FilePath}";
         SyncText.Text = _services.Sync.IsConfigured
@@ -89,6 +130,13 @@ public partial class MainWindow : Window
             }
         };
     }
+
+    private static TabItem CreateTab(string header, object content) =>
+        new() { Header = header, Content = content };
+
+    /// <summary>Erzeugt den Trennstrich zwischen zwei Themengruppen.</summary>
+    private TabItem CreateSeparator() =>
+        new() { Style = (Style)FindResource("LiftUpTabSeparator") };
 
     private async void OnCheckUpdatesClick(object sender, RoutedEventArgs e) =>
         await RunUpdateAsync(userInitiated: true);

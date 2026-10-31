@@ -160,29 +160,36 @@ public partial class DocumentComposerWindow : Window
             _presetSections = null;
             foreach (var section in preset)
             {
-                AddSection(section.Title, section.Html);
+                AddSection(section.Title, section.Html, select: false);
             }
 
+            SelectFirstSection();
             InfoText.Text = $"Gespeicherte Abschnitte aus „{template.Name}“ geladen. Änderungen ergeben ein neues PDF.";
             return;
         }
 
         if (defined.Count == 0)
         {
-            AddSection("Inhalt");
+            AddSection("Inhalt", select: false);
+            SelectFirstSection();
             InfoText.Text = "Diese Vorlage hat noch keine Abschnitte. Unter „Vorlagen“ lassen sich Untertitel festlegen; hier geht auch ein eigener Tab.";
             return;
         }
 
         foreach (var section in defined)
         {
-            AddSection(section.Title);
+            AddSection(section.Title, select: false);
         }
 
+        SelectFirstSection();
         InfoText.Text = $"{template.Name}: {defined.Count} Abschnitt(e) fließen mit Abstand untereinander; der erste beginnt auf Seite 2. Im Text mit /Textbaustein und &Bild suchen (&&Bild für alle Projekte).";
     }
 
-    private void AddSection(string title, string? html = null)
+    /// <summary>
+    /// Legt einen Abschnitt an. Beim Aufbau aus der Vorlage wird der neue Tab nicht
+    /// ausgewählt (<paramref name="select"/>), damit der erste Abschnitt aktiv bleibt.
+    /// </summary>
+    private void AddSection(string title, string? html = null, bool select = true)
     {
         var heading = new TextBlock
         {
@@ -240,7 +247,16 @@ public partial class DocumentComposerWindow : Window
         var tab = new TabItem { Header = heading, Content = grid };
         _sections.Add(new SectionDraft { Tab = tab, TitleBox = titleBox, Editor = editor });
         SectionTabs.Items.Add(tab);
-        SectionTabs.SelectedItem = tab;
+        if (select)
+        {
+            SectionTabs.SelectedItem = tab;
+        }
+    }
+
+    /// <summary>Nach dem Aufbau beginnt die Arbeit im ersten Abschnitt, nicht im letzten.</summary>
+    private void SelectFirstSection()
+    {
+        SectionTabs.SelectedIndex = _sections.Count > 0 ? 0 : -1;
     }
 
     /// <summary>
