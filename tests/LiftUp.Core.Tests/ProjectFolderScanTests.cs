@@ -139,7 +139,7 @@ public sealed class ProjectFolderScanTests
     }
 
     [Fact]
-    public void Umbennante_datei_gilt_als_neu_und_alte_meldet_sich_als_fehlend()
+    public void Umbenannte_datei_wird_wiedererkannt()
     {
         using var fixture = new TestDatabase();
         var session = fixture.LoginAsAdmin();
@@ -149,17 +149,49 @@ public sealed class ProjectFolderScanTests
         var source = WriteImage(Path.Combine(project.FolderPath, "02_Bilder"), "logo.png");
         images.SyncProjectFolder(project.Id);
 
-        File.Move(source, Path.Combine(project.FolderPath, "02_Bilder", "zeichen.png"));
+        var target = Path.Combine(project.FolderPath, "02_Bilder", "zeichen.png");
+        File.Move(source, target);
 
         var sync = images.SyncProjectFolder(project.Id);
 
+        Assert.Equal(0, sync.Added);
+        Assert.Equal(1, sync.Moved);
+
+        var listed = Assert.Single(images.Search(project.Id, null));
+        var image = images.Get(listed.Id);
+
+        Assert.Equal(Path.GetFullPath(target), Path.GetFullPath(image.FilePath));
+        Assert.Equal("zeichen.png", image.FileName);
+        Assert.Equal("logo", image.Name);
+        Assert.True(File.Exists(image.FilePath));
+    }
+
+    [Fact]
+    public void Anderer_inhalt_bei_gleicher_groesse_gilt_als_neues_bild()
+    {
+        using var fixture = new TestDatabase();
+        var session = fixture.LoginAsAdmin();
+        var images = Images(fixture, session);
+        var project = CreateProject(fixture, session);
+        var folder = Path.Combine(project.FolderPath, "02_Bilder");
+
+        var source = WriteImage(folder, "logo.png");
+        images.SyncProjectFolder(project.Id);
+
+        // Alte Datei umbenennen (Inhalt A), danach eine neue Datei mit anderem Inhalt
+        // gleicher Länge anlegen – sie darf nicht als „verschoben“ gelten.
+        File.Move(source, Path.Combine(folder, "alt.png"));
+        File.WriteAllBytes(Path.Combine(folder, "neu.png"), [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08]);
+
+        var sync = images.SyncProjectFolder(project.Id);
+
+        Assert.Equal(1, sync.Moved);
         Assert.Equal(1, sync.Added);
-        Assert.Equal(0, sync.Moved);
 
         var listed = images.Search(project.Id, null);
         Assert.Equal(2, listed.Count);
-        Assert.Single(listed, item => item.Name == "logo" && !item.FileExists);
-        Assert.Single(listed, item => item.Name == "zeichen" && item.FileExists);
+        Assert.Single(listed, item => item.Name == "logo" && item.FileExists);
+        Assert.Single(listed, item => item.Name == "neu" && item.FileExists);
     }
 
     [Fact]

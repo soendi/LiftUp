@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using LiftUp.Core.Data;
 using LiftUp.Core.Documents;
 using LiftUp.Core.Domain;
@@ -113,6 +114,7 @@ public sealed class ImageService
             FilePath = targetPath,
             ContentType = contentType,
             SizeBytes = new FileInfo(targetPath).Length,
+            ContentHash = ComputeHash(targetPath),
             CreatedUtc = DateTime.UtcNow,
             CreatedBy = _actor.UserName,
         };
@@ -307,9 +309,9 @@ public sealed class ImageService
     /// Liest Bilddateien aus dem Projektordner ein und ordnet sie dem Projekt zu. Die
     /// Dateien bleiben, wo sie liegen – es wird nichts kopiert. Bereits erfasste Pfade
     /// werden übersprungen; Unterordner werden zur Kategorie.
-    /// Wurde eine Datei im Projektordner verschoben, wird sie an Name und Größe
-    /// wiedererkannt und ihr gespeicherter Pfad aktualisiert, statt sie als fehlend zu
-    /// melden und doppelt aufzunehmen.
+    /// Verschohene oder umbenannte Dateien werden wiedererkannt – über Name und Größe
+    /// oder über den Inhalts-Hash – und ihr gespeicherter Pfad wird aktualisiert, statt
+    /// sie als fehlend zu melden und doppelt aufzunehmen.
     /// </summary>
     public ProjectFolderSyncResult SyncProjectFolder(Guid projectId)
     {
@@ -345,6 +347,20 @@ public sealed class ImageService
             .Select(image => image.Name)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
+        // Hash vorhandener Dateien einmalig nachtragen, damit Umbenennungen erkennbar sind.
+        foreach (var image in existing)
+        {
+            if (string.IsNullOrEmpty(image.ContentHash) && File.Exists(image.FilePath))
+            {
+                var hash = ComputeHash(image.FilePath);
+                if (hash is not null)
+                {
+                    _images.UpdateHash(connection, transaction, image.Id, hash);
+                    image.ContentHash = hash;
+                }
+            }
+        }
+
         // Nur Einträge ohne Datei kommen als „verschoben“ in Frage.
         var missing = existing
             .Where(image => !File.Exists(image.FilePath))
@@ -361,18 +377,45 @@ public sealed class ImageService
             }
 
             var info = new FileInfo(path);
-            var relocated = missing.FirstOrDefault(image => IsSameFile(image, info));
+            string? hash = null;
+
+            // 1) Gleicher Name und gleiche Größe: wandert die Datei mit.
+            var relocated = missing.FirstOrDefault(image => SameNameAndSize(image, info));
+            if (relocated is not null && !string.IsNullOrEmpty(relocated.ContentHash))
+            {
+                // Gleicher Name und gleiche Größe heißt nicht gleicher Inhalt.
+                hash = ComputeHash(path);
+                if (!string.Equals(hash, relocated.ContentHash, StringComparison.OrdinalIgnoreCase))
+                {
+                    relocated = null;
+                }
+            }
+
+            // 2) Anderer Name: über den Inhalts-Hash wiedererkennen.
+            if (relocated is null && missing.Any(image => !string.IsNullOrEmpty(image.ContentHash)))
+            {
+                hash ??= ComputeHash(path);
+                if (hash is not null)
+                {
+                    relocated = missing.FirstOrDefault(image =>
+                        !string.IsNullOrEmpty(image.ContentHash) &&
+                        string.Equals(image.ContentHash, hash, StringComparison.OrdinalIgnoreCase));
+                }
+            }
 
             if (relocated is not null)
             {
                 missing.Remove(relocated);
 
                 var category = CategoryFor(project.FolderPath, path);
+                var renamed = !string.Equals(relocated.FileName, info.Name, StringComparison.OrdinalIgnoreCase);
+                hash ??= ComputeHash(path);
+
                 var rowVersion = _images.UpdateLocation(
-                    connection, transaction, relocated.Id, path, category, info.Length);
+                    connection, transaction, relocated.Id, path, info.Name, category, info.Length, hash);
 
                 _changes.Record(connection, transaction, "Image", relocated.Id.ToString("D"), "Update",
-                    new { relocated.Name, Category = category, Moved = true }, rowVersion);
+                    new { relocated.Name, Category = category, Moved = true, Renamed = renamed }, rowVersion);
                 moved++;
                 continue;
             }
@@ -389,6 +432,7 @@ public sealed class ImageService
                 FilePath = path,
                 ContentType = ImageEmbedding.ContentTypeFor(path) ?? "application/octet-stream",
                 SizeBytes = info.Length,
+                ContentHash = hash ?? ComputeHash(path),
                 CreatedUtc = DateTime.UtcNow,
                 CreatedBy = _actor.UserName,
             };
@@ -407,13 +451,23 @@ public sealed class ImageService
         return new ProjectFolderSyncResult(added, moved);
     }
 
-    /// <summary>
-    /// Erkennt eine verschobene Datei an Dateiname und Größe wieder. Umbenannte Dateien
-    /// gelten bewusst als neu, damit nichts Falsches zugeordnet wird.
-    /// </summary>
-    private static bool IsSameFile(LibraryImage image, FileInfo file) =>
+    private static bool SameNameAndSize(LibraryImage image, FileInfo file) =>
         string.Equals(image.FileName, file.Name, StringComparison.OrdinalIgnoreCase) &&
         image.SizeBytes == file.Length;
+
+    /// <summary>SHA-256 des Dateiinhalts; <c>null</c>, wenn die Datei nicht lesbar ist.</summary>
+    private static string? ComputeHash(string path)
+    {
+        try
+        {
+            using var stream = File.OpenRead(path);
+            return Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
 
     /// <summary>Vereinheitlicht Schlagworte: durch Komma getrennt, ohne Doppelte.</summary>
     public static string? NormalizeTags(string? tags)

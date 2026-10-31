@@ -12,7 +12,7 @@ namespace LiftUp.Core.Data;
 /// </summary>
 public sealed class Database
 {
-    public const int CurrentSchemaVersion = 12;
+    public const int CurrentSchemaVersion = 13;
 
     private readonly string _connectionString;
 
@@ -152,6 +152,9 @@ public sealed class Database
 
         // Version 12 ergänzt Schlagworte an Bildern.
         MigrateImageTags(connection);
+
+        // Version 13 merkt sich den Inhalts-Hash, um umbenannte Bilder wiederzuerkennen.
+        MigrateImageContentHash(connection);
 
         using var command = Db.Command(connection, "UPDATE SchemaInfo SET Version = $version;");
         command.With("$version", CurrentSchemaVersion);
@@ -417,6 +420,32 @@ public sealed class Database
         }
 
         using var alter = Db.Command(connection, "ALTER TABLE Images ADD COLUMN Tags TEXT NULL;");
+        alter.ExecuteNonQuery();
+    }
+
+    /// <summary>
+    /// Version 13: Bilder merken sich einen Hash ihres Inhalts. Damit werden umbenannte
+    /// oder verschobene Dateien beim Ordnerabgleich wiedererkannt. Bestehende Bilder
+    /// bekommen den Hash beim nächsten Abgleich nachgetragen.
+    /// </summary>
+    private static void MigrateImageContentHash(SqliteConnection connection)
+    {
+        var existing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using (var info = Db.Command(connection, "PRAGMA table_info(Images);"))
+        using (var reader = info.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                existing.Add(reader.GetString(1));
+            }
+        }
+
+        if (existing.Contains("ContentHash"))
+        {
+            return;
+        }
+
+        using var alter = Db.Command(connection, "ALTER TABLE Images ADD COLUMN ContentHash TEXT NULL;");
         alter.ExecuteNonQuery();
     }
 
@@ -799,6 +828,7 @@ public sealed class Database
             IsArchived  INTEGER NOT NULL DEFAULT 0,
             CreatedUtc  TEXT NOT NULL,
             CreatedBy   TEXT NULL,
+            ContentHash TEXT NULL,
             RowVersion  INTEGER NOT NULL DEFAULT 1
         );
 

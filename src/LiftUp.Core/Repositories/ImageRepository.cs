@@ -8,7 +8,7 @@ public sealed class ImageRepository
 {
     private const string Columns =
         "Id, Name, Category, Description, Tags, ProjectId, FileName, FilePath, ContentType, SizeBytes, " +
-        "IsArchived, CreatedUtc, CreatedBy, RowVersion";
+        "IsArchived, CreatedUtc, CreatedBy, ContentHash, RowVersion";
 
     /// <summary>
     /// Sucht Bilder. Ohne Projekt enthält das Ergebnis die globale Bibliothek, mit Projekt
@@ -165,7 +165,7 @@ public sealed class ImageRepository
         using var command = Db.Command(connection, $"""
             INSERT INTO Images ({Columns}) VALUES
                 ($id, $name, $category, $description, $tags, $projectId, $fileName, $filePath, $contentType, $sizeBytes,
-                 $archived, $createdUtc, $createdBy, 1);
+                 $archived, $createdUtc, $createdBy, $contentHash, 1);
             """, transaction);
         command.With("$id", image.Id.ToString("D"))
             .With("$name", image.Name)
@@ -179,7 +179,8 @@ public sealed class ImageRepository
             .With("$sizeBytes", image.SizeBytes)
             .With("$archived", image.IsArchived ? 1 : 0)
             .With("$createdUtc", image.CreatedUtc.ToDb())
-            .With("$createdBy", image.CreatedBy);
+            .With("$createdBy", image.CreatedBy)
+            .With("$contentHash", image.ContentHash);
         command.ExecuteNonQuery();
     }
 
@@ -206,20 +207,44 @@ public sealed class ImageRepository
         SqliteTransaction? transaction,
         Guid id,
         string filePath,
+        string fileName,
         string? category,
-        long sizeBytes)
+        long sizeBytes,
+        string? contentHash)
     {
         using var command = Db.Command(connection, """
             UPDATE Images
-            SET FilePath = $filePath, Category = $category, SizeBytes = $sizeBytes, RowVersion = RowVersion + 1
+            SET FilePath = $filePath,
+                FileName = $fileName,
+                Category = $category,
+                SizeBytes = $sizeBytes,
+                ContentHash = CASE WHEN $contentHash IS NULL THEN ContentHash ELSE $contentHash END,
+                RowVersion = RowVersion + 1
             WHERE Id = $id
             RETURNING RowVersion;
             """, transaction);
         command.With("$id", id.ToString("D"))
             .With("$filePath", filePath)
+            .With("$fileName", fileName)
             .With("$category", category)
-            .With("$sizeBytes", sizeBytes);
+            .With("$sizeBytes", sizeBytes)
+            .With("$contentHash", contentHash);
         return Convert.ToInt64(command.ExecuteScalar());
+    }
+
+    /// <summary>Trägt den Inhalts-Hash nach, wenn noch keiner gespeichert ist.</summary>
+    public void UpdateHash(
+        SqliteConnection connection,
+        SqliteTransaction? transaction,
+        Guid id,
+        string contentHash)
+    {
+        using var command = Db.Command(connection, """
+            UPDATE Images SET ContentHash = $hash
+            WHERE Id = $id AND (ContentHash IS NULL OR ContentHash = '');
+            """, transaction);
+        command.With("$id", id.ToString("D")).With("$hash", contentHash);
+        command.ExecuteNonQuery();
     }
 
     /// <summary>Ersetzt die Schlagworte eines Bildes (Sammelbearbeitung).</summary>
@@ -271,6 +296,7 @@ public sealed class ImageRepository
         IsArchived = reader.Bool(10),
         CreatedUtc = reader.Date(11),
         CreatedBy = reader.TextOrNull(12),
-        RowVersion = reader.Int64(13),
+        ContentHash = reader.TextOrNull(13),
+        RowVersion = reader.Int64(14),
     };
 }

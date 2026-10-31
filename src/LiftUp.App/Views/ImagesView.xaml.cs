@@ -310,12 +310,12 @@ public partial class ImagesView : UserControl
     private static string DescribeSync(ProjectFolderSyncResult sync) => (sync.Added, sync.Moved) switch
     {
         (0, 0) => "Keine neuen Bilder im Projektordner gefunden.",
-        (0, 1) => "1 verschobenes Bild wiedererkannt und den Pfad aktualisiert.",
-        (0, _) => $"{sync.Moved} verschobene Bilder wiedererkannt und die Pfade aktualisiert.",
+        (0, 1) => "1 verschobenes oder umbenanntes Bild wiedererkannt und den Pfad aktualisiert.",
+        (0, _) => $"{sync.Moved} verschobene oder umbenannte Bilder wiedererkannt und die Pfade aktualisiert.",
         (1, 0) => "1 Bild aus dem Projektordner übernommen.",
         (_, 0) => $"{sync.Added} Bilder aus dem Projektordner übernommen.",
-        (1, _) => $"1 Bild übernommen, {sync.Moved} verschobene wiedererkannt.",
-        _ => $"{sync.Added} Bilder übernommen, {sync.Moved} verschobene wiedererkannt.",
+        (1, _) => $"1 Bild übernommen, {sync.Moved} verschobene oder umbenannte wiedererkannt.",
+        _ => $"{sync.Added} Bilder übernommen, {sync.Moved} verschobene oder umbenannte wiedererkannt.",
     };
 
     /// <summary>Entfernt Einträge, deren Bilddatei nicht mehr existiert.</summary>
