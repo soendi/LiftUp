@@ -64,6 +64,7 @@
 
                     <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,8">
                         <Button Content="Vorschau" Click="OnPreviewClick" />
+                        <Button Content="Datei importieren …" Click="OnImportClick" ToolTip="Excel, CSV, HTML, Text oder Word als Vorlage übernehmen" />
                         <Button Content="Als neue Version speichern" Style="{StaticResource LiftUpPrimaryButton}" Margin="0" Click="OnSaveClick" />
                     </StackPanel>
 

@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Controls;
 using LiftUp.Core.Documents;
+using Microsoft.Win32;
 using LiftUp.Core.Domain;
 
 namespace LiftUp.App.Views;
@@ -161,6 +162,57 @@ public partial class TemplatesView : UserControl
         NameBox.Focus();
         NameBox.SelectAll();
         InfoText.Text = "Neue Vorlage – mit „Als neue Version speichern“ anlegen.";
+    }
+
+    /// <summary>
+    /// Übernimmt eine vorhandene Datei als neue Vorlage. Der Inhalt landet im
+    /// Editor, damit Struktur und Text vor dem Speichern geprüft werden können.
+    /// </summary>
+    private void OnImportClick(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = "Vorlage aus Datei importieren",
+            Filter =
+                "Unterstützte Dateien|*.xlsx;*.csv;*.html;*.htm;*.txt;*.docx|" +
+                "Excel-Arbeitsmappe|*.xlsx|" +
+                "CSV-Datei|*.csv|" +
+                "HTML-Datei|*.html;*.htm|" +
+                "Textdatei|*.txt|" +
+                "Word-Dokument|*.docx",
+        };
+
+        if (dialog.ShowDialog() != true)
+        {
+            return;
+        }
+
+        try
+        {
+            var imported = FileTemplateImporter.Import(dialog.FileName);
+
+            _templateId = null;
+            TemplatesGrid.SelectedItem = null;
+            VersionBox.ItemsSource = null;
+            ToggleActiveButton.IsEnabled = false;
+            _sectionRows.Clear();
+
+            NameBox.Text = imported.SuggestedName;
+            TypeBox.SelectedItem = (TypeBox.ItemsSource as IEnumerable<DocumentType>)?
+                .FirstOrDefault(type => type.Name == "Dokument");
+            HtmlBox.Text = imported.Html;
+
+            InfoText.Text =
+                $"{imported.SourceKind}-Datei übernommen. Bitte prüfen und mit „Als neue Version speichern“ als Vorlage anlegen.";
+        }
+        catch (LiftUpException exception)
+        {
+            InfoText.Text = exception.Message;
+        }
+        catch (Exception exception)
+        {
+            InfoText.Text = "Import fehlgeschlagen: " + exception.Message;
+        }
     }
 
     private void ClearEditor()
