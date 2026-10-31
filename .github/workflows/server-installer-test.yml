@@ -122,6 +122,15 @@ jobs:
             Write-Host "$file`: $size Bytes"
           }
 
+      - name: Pakete als Artefakt bereitstellen
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-installer
+          path: |
+            artifacts/LiftUp-Setup-Server.msi
+            artifacts/LiftUp-Setup-Server.exe
+          if-no-files-found: error
+
       # --- PostgreSQL für den echten Datenbanklauf -------------------------
 
       - name: PostgreSQL bereitstellen
@@ -352,4 +361,124 @@ jobs:
             artifacts/*.log
             artifacts/pg/server.log
             artifacts/connection/*.json
+          if-no-files-found: warn
+
+  # Eigener Job auf einem frischen Runner: hier ist bewusst kein PostgreSQL
+  # vorhanden, damit das Einrichtungswerkzeug die Installation wirklich über
+  # winget anstößt (Dienst, Port, eigenes Datenverzeichnis). Das dauert einige
+  # Minuten und braucht Netz; deshalb nur auf main und auf Zuruf, nicht bei
+  # jedem Pull Request.
+  winget-install:
+    name: Installation über winget
+    needs: server-installer
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Paket aus dem Build-Job übernehmen
+        uses: actions/download-artifact@v4
+        with:
+          name: server-installer
+          path: artifacts
+
+      - name: Server-MSI still installieren
+        shell: pwsh
+        run: |
+          $msi = (Resolve-Path artifacts/LiftUp-Setup-Server.msi).Path
+          $log = Join-Path $env:GITHUB_WORKSPACE "artifacts/msi-install.log"
+          $arguments = "/i `"$msi`" /qn /norestart /l*v `"$log`""
+          $process = Start-Process -FilePath msiexec.exe -ArgumentList $arguments -Wait -PassThru
+          Write-Host "MSI-Exitcode: $($process.ExitCode)"
+          if ($process.ExitCode -notin 0, 3010) {
+            Get-Content $log -Tail 40 -ErrorAction SilentlyContinue
+            throw "Installation fehlgeschlagen (Exitcode $($process.ExitCode))."
+          }
+
+          $setup = Join-Path ${env:ProgramFiles} "LiftUp Server\LiftUp.ServerSetup.exe"
+          if (-not (Test-Path $setup)) { throw "LiftUp.ServerSetup.exe wurde nicht installiert." }
+
+      - name: Ausgangslage muss frisch sein
+        shell: pwsh
+        run: |
+          # Sonst würde das Werkzeug die Installation überspringen und der
+          # winget-Weg bliebe ungetestet.
+          if (Test-Path "${env:ProgramFiles}\PostgreSQL") { throw "PostgreSQL ist bereits vorhanden." }
+          $services = Get-Service | Where-Object { $_.Name -like "postgresql*" }
+          if ($services) { throw "Es läuft bereits ein PostgreSQL-Dienst: $($services.Name -join ', ')" }
+          $answers = Test-NetConnection -ComputerName 127.0.0.1 -Port 5432 -InformationLevel Quiet -WarningAction SilentlyContinue
+          if ($answers) { throw "Auf Port 5432 antwortet bereits etwas." }
+          Write-Host "Kein PostgreSQL vorhanden – der winget-Weg wird durchlaufen."
+
+      - name: Einrichtung über winget ausführen
+        shell: pwsh
+        run: |
+          $setup = Join-Path ${env:ProgramFiles} "LiftUp Server\LiftUp.ServerSetup.exe"
+          $arguments = @(
+            "--port", "5432",
+            "--database", "liftup_winget",
+            "--user", "liftup_winget",
+            "--password", "WingetPasswort123",
+            "--superuser-password", "postgres",
+            "--connect-host", "127.0.0.1",
+            "--host", "127.0.0.1",
+            "--output", "artifacts/connection/LiftUp-Datenbank-Zugang.json"
+          )
+          $output = & $setup @arguments 2>&1
+          $code = $LASTEXITCODE
+          $output | Tee-Object -FilePath artifacts/setup-winget.log
+          if ($code -ne 0) { throw "Einrichtung über winget fehlgeschlagen (Exitcode $code)." }
+          if (-not ($output -match "PostgreSQL.PostgreSQL.")) {
+            throw "Das Werkzeug hat die winget-Installation nicht angestoßen."
+          }
+          if (-not ($output -match "wurde angelegt")) {
+            throw "Datenbank oder Benutzer wurden nicht angelegt."
+          }
+
+      - name: Zugangsdatei prüfen
+        shell: pwsh
+        run: |
+          $path = "artifacts/connection/LiftUp-Datenbank-Zugang.json"
+          if (-not (Test-Path $path)) { throw "Die Zugangsdatei fehlt." }
+          $file = Get-Content $path -Raw | ConvertFrom-Json
+          if ($file.datenbank -ne "liftup_winget") { throw "Datenbank falsch: $($file.datenbank)" }
+          if ($file.benutzer -ne "liftup_winget") { throw "Benutzer falsch: $($file.benutzer)" }
+          if ([string]::IsNullOrWhiteSpace($file.postgresql)) { throw "PostgreSQL-Version fehlt." }
+          Write-Host "Zugangsdatei in Ordnung (PostgreSQL $($file.postgresql))."
+
+      - name: Dienst, Schema und Rechte prüfen
+        shell: pwsh
+        run: |
+          $service = Get-Service | Where-Object { $_.Name -like "postgresql*" } | Select-Object -First 1
+          if (-not $service) { throw "winget hat keinen PostgreSQL-Dienst eingerichtet." }
+          Write-Host "Dienst: $($service.Name) ($($service.Status))"
+
+          $root = (Get-ChildItem "${env:ProgramFiles}\PostgreSQL" -Directory |
+            Sort-Object Name -Descending | Select-Object -First 1).FullName
+          $psql = Join-Path $root "bin\psql.exe"
+          if (-not (Test-Path $psql)) { throw "psql.exe nicht gefunden unter $root." }
+
+          $env:PGPASSWORD = "postgres"
+          $tables = & $psql -h 127.0.0.1 -p 5432 -U postgres -d liftup_winget -tAc `
+            "select string_agg(table_name, ',' order by table_name) from information_schema.tables where table_schema = 'liftup';"
+          if ($LASTEXITCODE -ne 0) { throw "Schemaabfrage fehlgeschlagen." }
+          if ($tables.Trim() -ne "change_log,devices,entities,info") { throw "Tabellen unerwartet: $($tables.Trim())" }
+
+          $env:PGPASSWORD = "WingetPasswort123"
+          & $psql -h 127.0.0.1 -p 5432 -U liftup_winget -d liftup_winget -v ON_ERROR_STOP=1 -c `
+            "insert into liftup.devices (device_id) values ('winget-check') on conflict (device_id) do nothing;"
+          if ($LASTEXITCODE -ne 0) { throw "Der Client-Benutzer darf nicht schreiben." }
+          Write-Host "Dienst, Schema und Rechte in Ordnung."
+
+      - name: Protokolle bei Fehlschlag hochladen
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: winget-install-logs
+          path: |
+            artifacts/*.log
+            artifacts/connection/*.json
+            "C:\Program Files\PostgreSQL\*\data\log\*.log"
           if-no-files-found: warn
