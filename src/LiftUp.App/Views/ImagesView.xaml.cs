@@ -18,6 +18,9 @@ public partial class ImagesView : UserControl
 
     private IReadOnlyList<string> _availableTags = [];
 
+    /// <summary>Für die Hervorhebung in der Liste: die gerade aktiven Filter-Schlagworte.</summary>
+    public IReadOnlyCollection<string> ActiveTags => _selectedTags;
+
     private readonly AppServices _services;
     private IReadOnlyList<ImageListItem> _items = [];
 
