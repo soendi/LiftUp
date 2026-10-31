@@ -39,6 +39,18 @@ public sealed class ImageTagsTests
     }
 
     [Fact]
+    public void Suche_im_schlagwortmenue_grenzt_die_liste_ein()
+    {
+        var tags = new[] { "Logo", "Grundriss", "Rot" };
+
+        Assert.Equal(["Grundriss"], ImageTags.Filter(tags, "riss"));
+        Assert.Equal(["Logo"], ImageTags.Filter(tags, "LO"));
+        Assert.Empty(ImageTags.Filter(tags, "blau"));
+        Assert.Equal(3, ImageTags.Filter(tags, null).Count);
+        Assert.Equal(3, ImageTags.Filter(tags, "   ").Count);
+    }
+
+    [Fact]
     public void Grossschreibung_spielt_keine_rolle()
     {
         Assert.True(ImageTags.MatchesAny("Logo, ROT", new[] { "rot" }));

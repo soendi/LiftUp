@@ -155,5 +155,22 @@
         </Grid>
 
         <TextBlock x:Name="InfoText" Grid.Row="2" Style="{StaticResource LiftUpMutedText}" Margin="2,8,0,0" />
+
+        <Popup x:Name="TagFilterPopup" PlacementTarget="{Binding ElementName=TagFilterButton}" Placement="Bottom"
+               StaysOpen="False" AllowsTransparency="True">
+            <Border Background="White" BorderBrush="{StaticResource LiftUpBorder}" BorderThickness="1"
+                    CornerRadius="4" Padding="6">
+                <StackPanel Width="250">
+                    <TextBox x:Name="TagSearchBox" Margin="0,0,0,4"
+                             TextChanged="OnTagSearchChanged" PreviewKeyDown="OnTagSearchKeyDown"
+                             ToolTip="Schlagworte eingrenzen" />
+                    <TextBlock Text="Tippen grenzt die Liste ein, Enter wählt den ersten Treffer."
+                               Style="{StaticResource LiftUpMutedText}" TextWrapping="Wrap" Margin="0,0,0,6" />
+                    <ScrollViewer MaxHeight="240" VerticalScrollBarVisibility="Auto">
+                        <StackPanel x:Name="TagListPanel" />
+                    </ScrollViewer>
+                </StackPanel>
+            </Border>
+        </Popup>
     </Grid>
 </UserControl>

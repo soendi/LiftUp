@@ -15,6 +15,18 @@ public static class ImageTags
             : tags.Split(Separators, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
     /// <summary>
+    /// Schlagworte, die den Suchtext enthalten. Leerer Text liefert alle Einträge –
+    /// Grundlage für die Suche im Schlagwortmenü.
+    /// </summary>
+    public static IReadOnlyList<string> Filter(IEnumerable<string> tags, string? term)
+    {
+        var value = (term ?? string.Empty).Trim();
+        return value.Length == 0
+            ? tags.ToArray()
+            : tags.Where(tag => tag.Contains(value, StringComparison.CurrentCultureIgnoreCase)).ToArray();
+    }
+
+    /// <summary>
     /// Wahr, wenn eines der gewählten Schlagworte am Bild steht. Eine leere Auswahl
     /// bedeutet „nicht filtern“.
     /// </summary>

@@ -2,6 +2,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Input;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using LiftUp.Core.Domain;
@@ -27,6 +28,7 @@ public partial class ImagesView : UserControl
     private IReadOnlyList<ImageListItem> _items = [];
     private FileSystemWatcher? _folderWatcher;
     private bool _syncingFromWatcher;
+    private CheckBox? _allTagsCheckBox;
 
     public ImagesView(AppServices services)
     {
@@ -172,70 +174,109 @@ public partial class ImagesView : UserControl
     }
 
     /// <summary>
-    /// Öffnet die Schlagwortliste als Aufklappmenü mit Häkchen. Mehrere Schlagworte
-    /// lassen sich gleichzeitig wählen; ein Bild genügt, wenn eines davon passt.
+    /// Öffnet die Schlagwortliste als Aufklappfenster mit Häkchen und Suchfeld. Mehrere
+    /// Schlagworte lassen sich gleichzeitig wählen; bei langen Listen grenzt der
+    /// Suchtext die Auswahl ein.
     /// </summary>
     private void OnTagFilterClick(object sender, RoutedEventArgs e)
     {
-        var menu = new ContextMenu { PlacementTarget = TagFilterButton, Placement = PlacementMode.Bottom };
-        var tagItems = new List<MenuItem>();
+        TagSearchBox.Text = string.Empty;
+        RebuildTagPopup();
+        TagFilterPopup.IsOpen = true;
 
-        var all = new MenuItem
+        Dispatcher.BeginInvoke(new Action(() => TagSearchBox.Focus()));
+    }
+
+    private void OnTagSearchChanged(object sender, TextChangedEventArgs e) => RebuildTagPopup();
+
+    private void OnTagSearchKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape)
         {
-            Header = "Alle Schlagworte",
-            IsCheckable = true,
-            IsChecked = _selectedTags.Count == 0,
-            StaysOpenOnClick = true,
-        };
+            TagFilterPopup.IsOpen = false;
+            e.Handled = true;
+            return;
+        }
 
+        if (e.Key != Key.Enter)
+        {
+            return;
+        }
+
+        var matches = ImageTags.Filter(_availableTags, TagSearchBox.Text);
+        if (matches.Count > 0)
+        {
+            ToggleTag(matches[0]);
+            RebuildTagPopup();
+        }
+
+        e.Handled = true;
+    }
+
+    private void RebuildTagPopup()
+    {
+        TagListPanel.Children.Clear();
+
+        var all = new CheckBox
+        {
+            Content = "Alle Schlagworte",
+            IsChecked = _selectedTags.Count == 0,
+            Margin = new Thickness(2, 2, 2, 8),
+        };
         all.Click += (_, _) =>
         {
             _selectedTags.Clear();
-            foreach (var item in tagItems)
-            {
-                item.IsChecked = false;
-            }
-
             UpdateTagFilterButton();
             ApplyCategoryFilter();
+            RebuildTagPopup();
         };
+        _allTagsCheckBox = all;
+        TagListPanel.Children.Add(all);
 
-        menu.Items.Add(all);
-        menu.Items.Add(new Separator());
-
-        foreach (var tag in _availableTags)
+        var matches = ImageTags.Filter(_availableTags, TagSearchBox.Text);
+        if (matches.Count == 0)
         {
-            var item = new MenuItem
+            TagListPanel.Children.Add(new TextBlock
             {
-                Header = tag,
-                IsCheckable = true,
+                Text = _availableTags.Count == 0 ? "Keine Schlagworte vorhanden" : "Kein Schlagwort gefunden",
+                Style = (Style)FindResource("LiftUpMutedText"),
+                Margin = new Thickness(4, 2, 2, 2),
+            });
+            return;
+        }
+
+        foreach (var tag in matches)
+        {
+            var box = new CheckBox
+            {
+                Content = tag,
                 IsChecked = _selectedTags.Contains(tag),
-                StaysOpenOnClick = true,
+                Margin = new Thickness(2, 2, 2, 2),
             };
 
-            item.Click += (_, _) =>
+            box.Click += (_, _) =>
             {
-                if (!_selectedTags.Remove(tag))
+                ToggleTag(tag);
+                box.IsChecked = _selectedTags.Contains(tag);
+                if (_allTagsCheckBox is not null)
                 {
-                    _selectedTags.Add(tag);
+                    _allTagsCheckBox.IsChecked = _selectedTags.Count == 0;
                 }
-
-                item.IsChecked = _selectedTags.Contains(tag);
-                all.IsChecked = _selectedTags.Count == 0;
-                UpdateTagFilterButton();
-                ApplyCategoryFilter();
             };
 
-            tagItems.Add(item);
-            menu.Items.Add(item);
+            TagListPanel.Children.Add(box);
         }
+    }
 
-        if (_availableTags.Count == 0)
+    private void ToggleTag(string tag)
+    {
+        if (!_selectedTags.Remove(tag))
         {
-            menu.Items.Add(new MenuItem { Header = "Keine Schlagworte vorhanden", IsEnabled = false });
+            _selectedTags.Add(tag);
         }
 
-        menu.IsOpen = true;
+        UpdateTagFilterButton();
+        ApplyCategoryFilter();
     }
 
     private ImageListItem? Selected => ImagesGrid.SelectedItem as ImageListItem;
