@@ -217,6 +217,7 @@ public partial class DocumentComposerWindow : Window
         saveAsSnippet.Click += OnSaveSelectionAsSnippetClick;
 
         var insertImage = new Button { Content = "Bild einfügen", Margin = new Thickness(0) };
+        insertImage.ToolTip = "Bild einfügen – ein Klick auf ein Bild ändert Größe, Seite, Textfluss und Bildunterschrift.";
         insertImage.Click += OnInsertImageClick;
 
         var buttonRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
@@ -227,6 +228,11 @@ public partial class DocumentComposerWindow : Window
         var editor = new HtmlEditor();
         editor.EnableSnippetAutocomplete(SearchSnippets);
         editor.EnableImageAutocomplete(SearchImages);
+        editor.ImageFormatRequested = request =>
+        {
+            var dialog = new ImageFormatWindow(request.Current) { Owner = this };
+            return dialog.ShowDialog() == true ? dialog.Format : null;
+        };
         if (!string.IsNullOrWhiteSpace(html))
         {
             editor.SetHtml(html);
@@ -331,7 +337,7 @@ public partial class DocumentComposerWindow : Window
                 choices.Add(new HtmlEditor.ImageChoice(
                     image.Name,
                     detail,
-                    html,
+                    ImageFormat.Wrap(html),
                     ImagePreviews.DataUri(image.FilePath) ?? string.Empty));
             }
 
@@ -499,7 +505,7 @@ public partial class DocumentComposerWindow : Window
                 return;
             }
 
-            await draft.Editor.InsertHtmlAsync($"<p>{tag}</p>");
+            await draft.Editor.InsertHtmlAsync(ImageFormat.Wrap(tag));
         }
         catch (Exception exception)
         {

@@ -1,0 +1,88 @@
+<Window x:Class="LiftUp.App.Views.ImageFormatWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Bild anpassen"
+        Width="580"
+        SizeToContent="Height"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner"
+        Background="{StaticResource LiftUpBackground}">
+
+    <Border Margin="16" Style="{StaticResource LiftUpCard}">
+        <StackPanel>
+            <TextBlock Text="Bild anpassen" Style="{StaticResource LiftUpSubheading}" Margin="0,0,0,12" />
+
+            <TextBlock Text="Größe" Style="{StaticResource LiftUpFieldLabel}" Margin="0,0,0,4" />
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                <RadioButton x:Name="SizeSmall" GroupName="Size" Content="Klein" Margin="0,0,24,0" />
+                <RadioButton x:Name="SizeMedium" GroupName="Size" Content="Mittel" Margin="0,0,24,0" />
+                <RadioButton x:Name="SizeLarge" GroupName="Size" Content="Groß" />
+            </StackPanel>
+
+            <TextBlock Text="Seite" Style="{StaticResource LiftUpFieldLabel}" Margin="0,0,0,4" />
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                <RadioButton x:Name="PlaceLeft" GroupName="Place" Content="Links" Margin="0,0,20,0" />
+                <RadioButton x:Name="PlaceCenter" GroupName="Place" Content="Zentriert" Margin="0,0,20,0" />
+                <RadioButton x:Name="PlaceRight" GroupName="Place" Content="Rechts" Margin="0,0,20,0" />
+                <RadioButton x:Name="PlaceBelow" GroupName="Place" Content="Unter dem Text" />
+            </StackPanel>
+
+            <TextBlock Text="Textfluss" Style="{StaticResource LiftUpFieldLabel}" Margin="0,0,0,4" />
+            <StackPanel Margin="0,0,0,4">
+                <RadioButton x:Name="FlowInline" GroupName="Flow" Margin="0,0,0,6">
+                    <StackPanel>
+                        <TextBlock Text="Mit Text in Zeile" />
+                        <TextBlock Style="{StaticResource LiftUpMutedText}" TextWrapping="Wrap"
+                                   Text="Das Bild verhält sich wie ein großes Textzeichen: es sitzt im Textfluss und lässt sich nicht frei verschieben." />
+                    </StackPanel>
+                </RadioButton>
+
+                <RadioButton x:Name="FlowSquare" GroupName="Flow" Margin="0,0,0,6">
+                    <StackPanel>
+                        <TextBlock Text="Quadrat" />
+                        <TextBlock Style="{StaticResource LiftUpMutedText}" TextWrapping="Wrap"
+                                   Text="Der Text fließt rechteckig um den Rahmen des Bildes herum." />
+                    </StackPanel>
+                </RadioButton>
+
+                <RadioButton x:Name="FlowTight" GroupName="Flow" Margin="0,0,0,6">
+                    <StackPanel>
+                        <TextBlock Text="Passend" />
+                        <TextBlock Style="{StaticResource LiftUpMutedText}" TextWrapping="Wrap"
+                                   Text="Der Text rückt enger an das Bild heran – gedacht für freigestellte Bilder." />
+                    </StackPanel>
+                </RadioButton>
+
+                <RadioButton x:Name="FlowThrough" GroupName="Flow" Margin="0,0,0,6">
+                    <StackPanel>
+                        <TextBlock Text="Durchlaufend" />
+                        <TextBlock Style="{StaticResource LiftUpMutedText}" TextWrapping="Wrap"
+                                   Text="Der Text darf bis an das Bild reichen; der seitliche Abstand entfällt ganz." />
+                    </StackPanel>
+                </RadioButton>
+
+                <RadioButton x:Name="FlowTopBottom" GroupName="Flow">
+                    <StackPanel>
+                        <TextBlock Text="Oben und unten" />
+                        <TextBlock Style="{StaticResource LiftUpMutedText}" TextWrapping="Wrap"
+                                   Text="Über und unter dem Bild steht Text, links und rechts daneben bleibt die Zeile frei." />
+                    </StackPanel>
+                </RadioButton>
+            </StackPanel>
+
+            <TextBlock Style="{StaticResource LiftUpMutedText}" TextWrapping="Wrap" Margin="0,4,0,12"
+                       Text="Hinweis: HTML kann die Bildkontur nicht nachfahren. „Passend“ und „Durchlaufend“ regeln deshalb nur den Abstand zum Text enger bzw. gar nicht. „Unter dem Text“ sammelt die Bilder am Ende des Abschnitts – nebeneinander und gleich hoch." />
+
+            <TextBlock Text="Bildunterschrift" Style="{StaticResource LiftUpFieldLabel}" Margin="0,0,0,4" />
+            <TextBox x:Name="CaptionBox" />
+            <TextBlock Style="{StaticResource LiftUpMutedText}" TextWrapping="Wrap" Margin="0,2,0,0"
+                       Text="Optional; steht klein unter dem Bild." />
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
+                <Button Content="Abbrechen" Click="OnCancelClick" />
+                <Button Content="Übernehmen" IsDefault="True" Style="{StaticResource LiftUpPrimaryButton}"
+                        Margin="0" Click="OnApplyClick" />
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</Window>

@@ -15,10 +15,11 @@ public static class DocumentComposition
     /// <summary>Ab dieser Länge wird der erste Block nicht mehr mit der Überschrift zusammengehalten.</summary>
     private const int MaxGroupedLength = 1600;
 
-    private const string Style = """
+    private static readonly string Style = """
         <style>
           .liftup-section { margin: 0; }
           .liftup-section + .liftup-section { margin-top: 7mm; }
+          .liftup-section::after { content: ""; display: block; clear: both; }
           .liftup-section-first { page-break-before: always; break-before: page; }
           .liftup-section-start { page-break-inside: avoid; break-inside: avoid; }
           .liftup-section h2 {
@@ -31,7 +32,8 @@ public static class DocumentComposition
           .liftup-section p, .liftup-section li { orphans: 2; widows: 2; }
           .liftup-document body { orphans: 2; widows: 2; }
         </style>
-        """;
+        """
+        + ImageFormat.StyleElement;
 
     public static string Build(string titlePageHtml, IReadOnlyList<DocumentSectionContent> sections)
     {

@@ -24,7 +24,16 @@ public partial class HtmlEditor : UserControl
     /// </summary>
     public sealed record ImageChoice(string Name, string Detail, string Html, string Preview);
 
-    private const string EditorPage = """
+    /// <summary>Ein angeklicktes Bild mit seinen aktuellen Layout-Angaben.</summary>
+    public sealed record ImageFormatRequest(string Id, ImageFormat Current);
+
+    /// <summary>
+    /// Wird gesetzt, wenn im Text ein Bild angeklickt wurde. Liefert die neuen
+    /// Angaben oder <c>null</c>, wenn nichts geändert werden soll.
+    /// </summary>
+    public Func<ImageFormatRequest, ImageFormat?>? ImageFormatRequested { get; set; }
+
+    private const string EditorPageTemplate = """
         <!DOCTYPE html>
         <html lang="de">
         <head>
@@ -94,6 +103,7 @@ public partial class HtmlEditor : UserControl
                 border-radius: 3px;
                 flex: 0 0 auto;
             }
+            /* liftup-bildstil */
         </style>
         </head>
         <body contenteditable="true" spellcheck="false"></body>
@@ -372,6 +382,98 @@ public partial class HtmlEditor : UserControl
                 return holder.innerHTML;
             };
 
+            // ---- Bild anklicken: Größe, Seite, Textfluss und Unterschrift ändern ----
+            window.liftupFigCounter = 0;
+
+            window.liftupFigId = function (figure) {
+                if (!figure.dataset.liftupId) {
+                    window.liftupFigCounter += 1;
+                    figure.dataset.liftupId = 'fig' + window.liftupFigCounter;
+                }
+                return figure.dataset.liftupId;
+            };
+
+            document.addEventListener('click', function (event) {
+                var target = event.target;
+                if (!target || !target.closest) {
+                    return;
+                }
+                var figure = target.closest('figure.liftup-fig');
+                if (!figure) {
+                    return;
+                }
+                event.preventDefault();
+                var caption = figure.querySelector('figcaption');
+                try {
+                    window.chrome.webview.postMessage(JSON.stringify({
+                        type: 'imageFormat',
+                        requestId: 0,
+                        id: window.liftupFigId(figure),
+                        size: figure.dataset.liftupSize || 'medium',
+                        place: figure.dataset.liftupPlace || 'center',
+                        flow: figure.dataset.liftupFlow || 'inline',
+                        caption: caption ? caption.textContent : ''
+                    }));
+                } catch (error) {
+                    // Ohne Verbindung zur Anwendung bleibt das Bild unverändert.
+                }
+            });
+
+            window.liftupBelowStrip = function () {
+                var strip = document.getElementById('liftup-below');
+                if (!strip) {
+                    strip = document.createElement('div');
+                    strip.id = 'liftup-below';
+                    strip.className = 'liftup-fig-strip';
+                    document.body.appendChild(strip);
+                }
+                return strip;
+            };
+
+            window.liftupApplyImageFormat = function (value) {
+                if (!value || !value.id) {
+                    return false;
+                }
+                var figure = document.querySelector('[data-liftup-id="' + value.id + '"]');
+                if (!figure) {
+                    return false;
+                }
+
+                figure.className = 'liftup-fig liftup-fig-' + value.size
+                    + ' liftup-fig-' + value.place + ' liftup-fig-' + value.flow;
+                figure.dataset.liftupSize = value.size;
+                figure.dataset.liftupPlace = value.place;
+                figure.dataset.liftupFlow = value.flow;
+
+                var caption = figure.querySelector('figcaption');
+                if (value.caption) {
+                    if (!caption) {
+                        caption = document.createElement('figcaption');
+                        figure.appendChild(caption);
+                    }
+                    caption.textContent = value.caption;
+                } else if (caption && caption.parentNode) {
+                    caption.parentNode.removeChild(caption);
+                }
+
+                // „Unter dem Text“: das Bild wandert in den Streifen am Ende.
+                var anchor = document.querySelector('[data-liftup-anchor="' + value.id + '"]');
+                if (value.place === 'below') {
+                    if (!anchor) {
+                        anchor = document.createElement('span');
+                        anchor.setAttribute('data-liftup-anchor', value.id);
+                        if (figure.parentNode) {
+                            figure.parentNode.insertBefore(anchor, figure);
+                        }
+                    }
+                    window.liftupBelowStrip().appendChild(figure);
+                } else if (anchor && anchor.parentNode) {
+                    anchor.parentNode.replaceChild(figure, anchor);
+                }
+
+                return true;
+            };
+
             window.liftupGetHtml = function () {
                 window.liftupCloseSnippets();
                 return document.body.innerHTML;
@@ -379,6 +481,9 @@ public partial class HtmlEditor : UserControl
         </script>
         </html>
         """;
+
+    private static readonly string EditorPage =
+        EditorPageTemplate.Replace("/* liftup-bildstil */", ImageFormat.Css, StringComparison.Ordinal);
 
     private bool _ready;
     private bool _failed;
@@ -563,7 +668,7 @@ public partial class HtmlEditor : UserControl
     /// <summary>Beantwortet die „/“- und die „&amp;“-Suche aus dem Editor.</summary>
     private void OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
     {
-        if ((_snippetSearch is null && _imageSearch is null) || Browser.CoreWebView2 is null)
+        if (Browser.CoreWebView2 is null)
         {
             return;
         }
@@ -579,15 +684,21 @@ public partial class HtmlEditor : UserControl
             using var message = JsonDocument.Parse(payload);
             var root = message.RootElement;
 
-            if (!root.TryGetProperty("type", out var type) ||
-                !root.TryGetProperty("requestId", out var requestElement) ||
-                !requestElement.TryGetInt64(out var requestId))
+            if (!root.TryGetProperty("type", out var type))
             {
                 return;
             }
 
             var kind = type.GetString();
-            if (kind is not ("snippetQuery" or "imageQuery"))
+            if (kind == "imageFormat")
+            {
+                OnImageFormatRequested(root);
+                return;
+            }
+
+            if (kind is not ("snippetQuery" or "imageQuery") ||
+                !root.TryGetProperty("requestId", out var requestElement) ||
+                !requestElement.TryGetInt64(out var requestId))
             {
                 return;
             }
@@ -630,6 +741,56 @@ public partial class HtmlEditor : UserControl
         {
             // Eine fehlerhafte Suche darf die Eingabe nicht unterbrechen.
         }
+    }
+
+    /// <summary>
+    /// Fragt die Anwendung nach den neuen Angaben zu einem angeklickten Bild und
+    /// überträgt sie zurück in den Editor.
+    /// </summary>
+    private void OnImageFormatRequested(JsonElement root)
+    {
+        if (ImageFormatRequested is null)
+        {
+            return;
+        }
+
+        if (!root.TryGetProperty("id", out var idElement) || idElement.GetString() is not { Length: > 0 } id)
+        {
+            return;
+        }
+
+        string? Text(string name) =>
+            root.TryGetProperty(name, out var element) && element.ValueKind == JsonValueKind.String
+                ? element.GetString()
+                : null;
+
+        var current = ImageFormat.Parse(Text("size"), Text("place"), Text("flow"), Text("caption"));
+
+        // Der Dialog läuft nach dem Beantworten der Nachricht, damit Chromium nicht blockiert.
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (ImageFormatRequested is null || Browser.CoreWebView2 is null)
+            {
+                return;
+            }
+
+            var format = ImageFormatRequested(new ImageFormatRequest(id, current));
+            if (format is null)
+            {
+                return;
+            }
+
+            var script = "window.liftupApplyImageFormat(" + JsonSerializer.Serialize(new
+            {
+                id,
+                size = format.SizeToken,
+                place = format.PlacementToken,
+                flow = format.FlowToken,
+                caption = format.Caption ?? string.Empty,
+            }) + "); true";
+
+            _ = Browser.CoreWebView2.ExecuteScriptAsync(script);
+        });
     }
 
     private async Task ApplyHtmlAsync()
