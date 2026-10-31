@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+
+  <!-- LiftUp-Setup-Server.msi: installiert nur das Einrichtungswerkzeug.
+       PostgreSQL selbst wird beim Ausführen in der neuesten Version geladen. -->
+  <Package Name="LiftUp Server"
+           Manufacturer="Lukas Sonderegger"
+           Version="$(var.Version)"
+           UpgradeCode="7C1D5E42-9B38-4F60-A2D7-5E8C1B3F9A64"
+           Language="1031"
+           Scope="perMachine"
+           InstallerVersion="500"
+           Compressed="yes">
+
+    <SummaryInformation Description="LiftUp Server – Datenbank einrichten"
+                        Manufacturer="Lukas Sonderegger" />
+
+    <MajorUpgrade DowngradeErrorMessage="Eine neuere Version von LiftUp Server ist bereits installiert." />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <Icon Id="LiftUpIcon" SourceFile="$(var.IconPath)" />
+    <Property Id="ARPPRODUCTICON" Value="LiftUpIcon" />
+    <Property Id="ARPHELPLINK" Value="https://github.com/soendi/LiftUp" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="SERVERFOLDER" Name="LiftUp Server" />
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ServerProgramsFolder" Name="LiftUp Server" />
+    </StandardDirectory>
+
+    <Feature Id="Server" Title="LiftUp Server" Level="1">
+      <ComponentGroupRef Id="ServerFiles" />
+      <ComponentRef Id="ServerShortcut" />
+    </Feature>
+
+    <ComponentGroup Id="ServerFiles" Directory="SERVERFOLDER">
+      <Files Include="$(var.PublishDir)\**" />
+    </ComponentGroup>
+
+    <Component Id="ServerShortcut" Directory="ServerProgramsFolder" Guid="8D2E6F53-1C47-4A98-B3E5-6F9D2C8A1B73">
+      <Shortcut Id="ServerSetupShortcut"
+                Name="LiftUp Server einrichten"
+                Description="PostgreSQL holen und die LiftUp-Datenbank anlegen"
+                Target="[SERVERFOLDER]LiftUp.ServerSetup.exe"
+                WorkingDirectory="SERVERFOLDER"
+                Icon="LiftUpIcon" />
+      <RemoveFolder Id="RemoveServerProgramsFolder" Directory="ServerProgramsFolder" On="uninstall" />
+      <RegistryValue Root="HKLM" Key="Software\LiftUp\Server" Name="Shortcut" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+
+    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="SERVERFOLDER" />
+    <WixVariable Id="WixUILicenseRtf" Value="$(var.LicensePath)" />
+
+    <!-- Stille Installation: msiexec /i LiftUp-Setup-Server.msi /qn /norestart -->
+  </Package>
+</Wix>

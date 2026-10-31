@@ -10,11 +10,11 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
-Write-Host "1/5 Tests"
+Write-Host "1/7 Tests"
 dotnet test tests/LiftUp.Core.Tests/LiftUp.Core.Tests.csproj -c $Configuration | Out-Host
 if ($LASTEXITCODE -ne 0) { throw "Tests fehlgeschlagen." }
 
-Write-Host "2/5 Veröffentlichen (framework-abhängig, schlank)"
+Write-Host "2/7 Veröffentlichen (framework-abhängig, schlank)"
 dotnet publish src/LiftUp.App/LiftUp.App.csproj -c $Configuration -r $Runtime --self-contained false `
     -p:Version=$Version -p:DebugType=none -o artifacts/publish | Out-Host
 if ($LASTEXITCODE -ne 0) { throw "Veröffentlichen fehlgeschlagen." }
@@ -24,14 +24,14 @@ dotnet publish tools/LiftUp.Preflight/LiftUp.Preflight.csproj -c $Configuration 
     -p:Version=$Version -p:DebugType=none -o artifacts/publish | Out-Host
 if ($LASTEXITCODE -ne 0) { throw "Veröffentlichen des Prüfwerkzeugs fehlgeschlagen." }
 
-Write-Host "3/5 WiX bereitstellen"
+Write-Host "3/7 WiX bereitstellen"
 if (-not (Get-Command wix -ErrorAction SilentlyContinue)) {
     dotnet tool install --global wix --version 5.0.2 | Out-Host
     $env:PATH = "$env:PATH;$env:USERPROFILE\.dotnet\tools"
 }
 wix extension add -g WixToolset.UI.wixext/5.0.2 2>&1 | Out-Host
 
-Write-Host "4/5 MSI bauen"
+Write-Host "4/7 MSI bauen"
 $publishDir = (Resolve-Path artifacts/publish).Path
 wix build installer/LiftUp.wxs `
     -d Version=$Version `
@@ -46,7 +46,7 @@ wix build installer/LiftUp.wxs `
     -culture de-de `
     -o artifacts/LiftUp-Setup.msi | Out-Host
 
-Write-Host "5/5 Installationsprogramm bauen (lädt die .NET-Desktop-Runtime bei Bedarf nach)"
+Write-Host "5/7 Installationsprogramm bauen (lädt die .NET-Desktop-Runtime bei Bedarf nach)"
 # Burn braucht die Runtime-Datei beim Bauen, um ihre Prüfsumme zu kennen. Ausgeliefert
 # wird sie nicht: das Installationsprogramm lädt sie nur bei Bedarf aus dem Netz.
 $runtimePath = "artifacts/dotnet/windowsdesktop-runtime-8.0-win-x64.exe"
@@ -76,7 +76,35 @@ wix build installer/Bundle.wxs `
     -o artifacts/LiftUp-Setup.exe | Out-Host
 if ($LASTEXITCODE -ne 0) { throw "Installationsprogramm fehlgeschlagen." }
 
-$lines = foreach ($file in @("LiftUp-Setup.msi", "LiftUp-Setup.exe")) {
+Write-Host "6/7 Server-Setup veröffentlichen"
+dotnet publish tools/LiftUp.ServerSetup/LiftUp.ServerSetup.csproj -c $Configuration -r $Runtime --self-contained false `
+    -p:Version=$Version -p:DebugType=none -o artifacts/server | Out-Host
+if ($LASTEXITCODE -ne 0) { throw "Veröffentlichen des Server-Setups fehlgeschlagen." }
+
+Write-Host "7/7 Server-Installationsprogramm bauen"
+wix build installer/Server.wxs `
+    -d Version=$Version `
+    -d PublishDir="$((Resolve-Path artifacts/server).Path)" `
+    -d IconPath="$(Resolve-Path src/LiftUp.App/Assets/LiftUp.ico).Path" `
+    -d LicensePath="$(Resolve-Path installer/License.rtf).Path" `
+    -ext WixToolset.UI.wixext `
+    -culture de-de `
+    -o artifacts/LiftUp-Setup-Server.msi | Out-Host
+if ($LASTEXITCODE -ne 0) { throw "Server-MSI fehlgeschlagen." }
+
+wix build installer/ServerBundle.wxs `
+    -d Version=$Version `
+    -d MsiPath="$((Resolve-Path artifacts/LiftUp-Setup-Server.msi).Path)" `
+    -d DotNetInstaller="$((Resolve-Path $runtimePath).Path)" `
+    -d IconPath="$(Resolve-Path src/LiftUp.App/Assets/LiftUp.ico).Path" `
+    -d LicensePath="$(Resolve-Path installer/License.rtf).Path" `
+    -ext "$balExtension" `
+    -ext WixToolset.Netfx.wixext `
+    -culture de-de `
+    -o artifacts/LiftUp-Setup-Server.exe | Out-Host
+if ($LASTEXITCODE -ne 0) { throw "Server-Installationsprogramm fehlgeschlagen." }
+
+$lines = foreach ($file in @("LiftUp-Setup.msi", "LiftUp-Setup.exe", "LiftUp-Setup-Server.msi", "LiftUp-Setup-Server.exe")) {
     $hash = (Get-FileHash "artifacts/$file" -Algorithm SHA256).Hash.ToLowerInvariant()
     "$hash  $file"
 }

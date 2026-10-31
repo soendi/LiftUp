@@ -12,5 +12,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.10" />
+    <!-- Direkter Zugriff auf die zentrale PostgreSQL-Datenbank (Abgleich). -->
+    <PackageReference Include="Npgsql" Version="8.0.5" />
   </ItemGroup>
 </Project>

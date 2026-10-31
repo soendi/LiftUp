@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <RootNamespace>LiftUp.ServerSetup</RootNamespace>
+    <AssemblyName>LiftUp.ServerSetup</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\LiftUp.Core\LiftUp.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Erkennen, ob PostgreSQL bereits als Dienst läuft. -->
+    <PackageReference Include="System.ServiceProcess.ServiceController" Version="8.0.0" />
+  </ItemGroup>
+</Project>

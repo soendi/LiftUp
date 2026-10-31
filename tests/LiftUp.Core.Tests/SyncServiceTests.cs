@@ -10,19 +10,21 @@ public sealed class SyncServiceTests
 {
     private sealed class FakeTransport : ISyncTransport
     {
-        public List<ChangeLogEntry> Pushed { get; } = [];
+        public List<EntitySnapshot> Pushed { get; } = [];
+        public List<RemoteChange> Incoming { get; } = [];
 
         public string Name => "Testziel";
         public bool IsConfigured => true;
 
-        public Task PushAsync(IReadOnlyList<ChangeLogEntry> changes, CancellationToken cancellationToken)
+        public Task<PushResult> PushAsync(IReadOnlyList<EntitySnapshot> snapshots, CancellationToken cancellationToken)
         {
-            Pushed.AddRange(changes);
-            return Task.CompletedTask;
+            Pushed.AddRange(snapshots);
+            return Task.FromResult(new PushResult(snapshots.Count, []));
         }
 
-        public Task<IReadOnlyList<RemoteChange>> PullAsync(DateTime sinceUtc, CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlyList<RemoteChange>>([]);
+        public Task<IReadOnlyList<RemoteChange>> PullAsync(long afterChangeId, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<RemoteChange>>(
+                Incoming.Where(change => change.ChangeId > afterChangeId).ToList());
     }
 
     [Fact]
@@ -34,7 +36,7 @@ public sealed class SyncServiceTests
         var result = await sync.RunAsync();
 
         Assert.False(result.Attempted);
-        Assert.Contains("kein PostgreSQL-Ziel", result.Message);
+        Assert.Contains("Kein PostgreSQL-Ziel", result.Message);
     }
 
     [Fact]
@@ -60,6 +62,42 @@ public sealed class SyncServiceTests
 
         var second = await sync.RunAsync();
         Assert.Equal(0, second.Pushed);
-        Assert.Contains("bereits übertragen", second.Message);
+        Assert.Contains("bereits abgeglichen", second.Message);
+    }
+
+    [Fact]
+    public async Task Hereinkommende_aenderung_wird_uebernommen()
+    {
+        using var fixture = new TestDatabase();
+        var admin = fixture.LoginAsAdmin();
+        var project = new ProjectService(fixture.Database, admin).Create(new ProjectInput
+        {
+            Name = "Alt",
+            FolderPath = Path.Combine(fixture.Root, "remote"),
+            CreateFolderIfMissing = true,
+        });
+
+        var transport = new FakeTransport();
+        transport.Incoming.Add(new RemoteChange(
+            7,
+            "Project",
+            project.Id.ToString("D"),
+            $"{{\"Id\":\"{project.Id:D}\",\"Name\":\"Neu vom Server\",\"RowVersion\":2}}",
+            2,
+            false,
+            DateTime.UtcNow,
+            "anderer-arbeitsplatz"));
+
+        var sync = new SyncService(fixture.Database, transport);
+        var result = await sync.RunAsync();
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(1, result.Pulled);
+
+        using var connection = fixture.Database.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT Name FROM Projects WHERE Id = $id;";
+        command.Parameters.AddWithValue("$id", project.Id.ToString("D"));
+        Assert.Equal("Neu vom Server", command.ExecuteScalar() as string);
     }
 }

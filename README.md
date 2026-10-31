@@ -91,23 +91,53 @@ Jede fachliche Tabelle führt:
 - `IsDeleted` (weiches Löschen, damit Löschungen synchronisierbar bleiben),
 - UTC-Zeitstempel `CreatedUtc` / `UpdatedUtc` sowie `CreatedBy` / `UpdatedBy`.
 
-## Vorbereitung für PostgreSQL
+## Zentrale Datenbank (PostgreSQL)
 
-Der Abgleich ist bewusst noch nicht aktiv, aber vollständig vorbereitet:
+Der Abgleich ist aktiv, sobald im Reiter **Datenbank** Zugangsdaten hinterlegt sind. Ohne Eintrag
+arbeitet LiftUp unverändert rein lokal.
 
 1. **Änderungsprotokoll als Outbox** – jede schreibende Aktion schreibt in derselben Transaktion
    einen Eintrag nach `ChangeLog` (Entität, Id, Operation, JSON-Nutzlast, Geräte-Id, RowVersion).
-   Passwörter und Hashes stehen nie in der Nutzlast.
+   Passwörter und Hashes stehen nie in der Nutzlast. Beim eigentlichen Abgleich werden dagegen
+   vollständige Benutzersätze übertragen – einschließlich Passwort-Hash –, sonst könnte man sich auf
+   einem zweiten Arbeitsplatz nicht anmelden.
 2. **Geräte-Id** – beim ersten Start wird eine `DeviceId` erzeugt und in `Settings` abgelegt, damit
-   Änderungen ihrem Ursprungsarbeitsplatz zugeordnet werden können.
-3. **Transport-Schnittstelle** – `ISyncTransport` (`PushAsync` / `PullAsync`) kapselt den Server.
-   `SyncService` überträgt offene Einträge und bestätigt sie erst nach erfolgreichem Push.
-   Ohne konfiguriertes Ziel meldet die Anwendung „lokal“ und ändert nichts.
+   Änderungen ihrem Ursprungsarbeitsplatz zugeordnet werden.
+3. **Transport** – `PostgresSyncTransport` überträgt per Npgsql vollständige Datensätze, nicht die
+   Kurznotizen des Protokolls. Der Server hält je Datensatz den letzten Stand (`liftup.entities`)
+   und ein fortlaufendes Protokoll (`liftup.change_log`); jedes Gerät merkt sich seine letzte Nummer
+   und überspringt eigene Änderungen.
+4. **Konfliktregel** – der höhere `RowVersion` gewinnt. Bei Gleichstand gilt der Serverstand: er
+   schickt seinen Satz zurück, der Client übernimmt ihn. So bleiben beide Arbeitsplätze nach einer
+   gleichzeitigen Änderung gleich. Löschungen sind weiche Löschungen (`IsDeleted`) und werden
+   mitübertragen.
 
-Für den echten Betrieb fehlen zwei Schritte: eine `ISyncTransport`-Implementierung (z. B. REST-
-Endpunkt vor PostgreSQL oder Npgsql direkt) und die Konfliktregel pro Entität. Empfohlen:
-RowVersion vergleichen, bei Konflikt feldweise zusammenführen und Löschungen über `IsDeleted`
-gewinnen lassen.
+   **Verbindungsabbrüche** – offene Änderungen gehen paketweise (200 Sätze) zum Server und gelten
+   erst als erledigt, wenn der Server sie angenommen und ein etwaiger Konflikt lokal geklärt ist.
+   Beim Holen wird der Lesestand nach jeder Seite (1000 Sätze) gespeichert. Bricht die Verbindung
+   ab, wiederholt der Client den Lauf bis zu dreimal mit wachsender Pause und macht beim nächsten
+   Start genau dort weiter, wo er aufgehört hat.
+
+   **Test gegen einen echten Server** – `tools/postgres-sync-test.sh` holt PostgreSQL als entpackte
+   Pakete nach `~/.local/pg16`, startet einen Wegwerf-Cluster auf Port 55432 und lässt zwei
+   Arbeitsplätze gegeneinander abgleichen: Anlegen, Änderung von B zu A, gleichzeitige Änderung
+   mit Konfliktauflösung und erneutes Senden nach einem Absturz. Ohne die Umgebungsvariable
+   `LIFTUP_TEST_POSTGRES` werden diese Tests übersprungen. GitHub Actions führt denselben Test bei
+   jedem Push und Pull Request aus (`.github/workflows/postgres-sync-test.yml`), dort mit einer
+   PostgreSQL-16-Dienstinstanz und ohne Überspringen.
+
+   **Server-Installer** – `.github/workflows/server-installer-test.yml` baut auf einem
+   Windows-Runner `LiftUp-Setup-Server.msi` und `LiftUp-Setup-Server.exe`, installiert das Paket
+   still, legt gegen ein portables PostgreSQL Datenbank, Benutzer, Schema und Rechte an, prüft die
+   Zugangsdatei und den zweiten Lauf und deinstalliert wieder.
+
+Abgeglichen werden Projekte, Benutzer, Rollen, Vorlagen, Textbausteine und Dokumenttypen. Erzeugte
+PDFs und Bilder bleiben am jeweiligen Arbeitsplatz, weil dort auch die Dateien liegen; ihre
+Protokolleinträge werden bestätigt, ohne dass ein Pfad übertragen wird.
+
+Der Abgleich läuft beim Anmelden, alle fünf Minuten und vor dem Schließen (höchstens 15 Sekunden
+Wartezeit). Ist der Server nicht erreichbar, arbeitet die Anwendung weiter und meldet es in der
+Statuszeile; die Änderungen bleiben in der Outbox und gehen beim nächsten Versuch mit.
 
 ## Projektstruktur
 
@@ -250,7 +280,7 @@ So geht das Setup damit um:
 | Prüfung | Verhalten |
 | --- | --- |
 | Lokale Datenbank | SQLite ist in der Anwendung enthalten (`e_sqlite3.dll`), es gibt nichts zu installieren. Datei und Schema entstehen beim ersten Start – bzw. beim ersten Lauf von `LiftUp.Preflight` – unter dem Konto des Anwenders. |
-| Server-Datenbank | `LiftUp.Preflight` prüft die Erreichbarkeit (TCP auf 5432). Das Setup installiert sie nicht still mit – Begründung unten. |
+| Server-Datenbank | Das **LiftUp-Server-Setup** installiert PostgreSQL in der neuesten Version (über winget), legt Datenbank, Benutzer, Schema und Tabellen an und schreibt die Zugangsdatei. `LiftUp.Preflight` prüft danach die Erreichbarkeit (TCP auf 5432). Das Client-Setup installiert sie nicht mit – Begründung unten. |
 | .NET 8 Desktop Runtime | Das MSI prüft sie über eine Launch-Bedingung und bricht mit klarem Hinweis ab, wenn sie fehlt. |
 
 Prüfen, ohne die Oberfläche zu starten:
@@ -267,18 +297,27 @@ Das Werkzeug liegt nach der Installation neben `LiftUp.App.exe`.
 Server-Datenbank einrichten (einmalig auf dem Datenbank-Server, als Administrator):
 
 ```powershell
-.\installer\Install-ServerDatabase.ps1 -SuperuserPassword "…" -UserPassword "…"
-.\installer\Install-ServerDatabase.ps1 -WhatIf      # nur prüfen, nichts ändern
+.\LiftUp-Setup-Server.exe          # installiert das Einrichtungswerkzeug
+LiftUp.ServerSetup.exe             # richtet PostgreSQL und die Datenbank ein
 ```
 
-Das Skript erkennt eine vorhandene Installation (Dienst `postgresql*`, Registry, Port 5432) und
-überspringt sie; sonst installiert es PostgreSQL still über winget und legt Datenbank und Benutzer
-idempotent an. Clients finden den Server über `LIFTUP_PG_HOST` und `LIFTUP_PG_PORT`.
+Das Werkzeug fragt die aktuelle PostgreSQL-Version bei postgresql.org ab und installiert genau diese
+über winget – es ist keine Version fest eingebaut. Danach legt es Benutzer, Datenbank, Schema und
+Tabellen an (wiederholbar: vorhandene Teile bleiben stehen) und schreibt die Zugangsdatei
+`LiftUp-Datenbank-Zugang.json` auf den Desktop. Optionen: `--port`, `--database`, `--user`,
+`--password`, `--superuser-password`, `--host` (Adresse in der Datei), `--output`, `--whatif`.
+
+Im Client den Reiter **Datenbank** öffnen, „Datei einlesen …“ wählen und speichern – damit sind Host,
+Port, Datenbank, Benutzer und Passwort gesetzt. Alternativ lassen sich die Werte von Hand eintragen;
+„Verbindung testen“ prüft sie sofort.
+
+Das ältere PowerShell-Skript `installer/Install-ServerDatabase.ps1` bleibt als Alternative für
+Server, auf denen winget nicht zur Verfügung steht; es arbeitet mit denselben Schritten.
 
 **Warum nicht automatisch im Client-Setup?** Eine PostgreSQL-Installation braucht Administratorrechte,
 läuft als Dienst und gehört auf den Datenbank-Server, nicht auf jeden Arbeitsplatz. Sie würde außerdem
-die Benutzer-Installation verlassen und damit die stillen Updates aushebeln. Deshalb prüft das
-Client-Setup und meldet, während das Server-Skript einrichtet.
+die Benutzer-Installation verlassen und damit die stillen Updates aushebeln. Deshalb gibt es dafür ein
+eigenes Installationsprogramm (`LiftUp-Setup-Server.exe` / `.msi`).
 
 ### Marken-Assets
 

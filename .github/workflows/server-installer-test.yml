@@ -1,0 +1,328 @@
+name: Server-Installer (Windows)
+
+# Baut LiftUp-Setup-Server.msi und LiftUp-Setup-Server.exe auf einem echten
+# Windows-Runner, installiert das Paket still und spielt die Einrichtung durch:
+# PostgreSQL bereitstellen, Datenbank samt Schema und Rechten anlegen,
+# Zugangsdatei prüfen, zweiter Lauf (muss wiederholbar sein), Deinstallation.
+#
+# PostgreSQL wird dabei nicht über winget geholt (das würde eine interaktive
+# Installation mit Dienst und Neustart bedeuten), sondern als portable Fassung
+# gestartet. Das Einrichtungswerkzeug erkennt den antwortenden Port und
+# überspringt die Installation – alles andere ist der echte Ablauf.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: server-installer-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  server-installer:
+    name: Installation und Datenbankanlage
+    runs-on: windows-latest
+    timeout-minutes: 40
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Version bestimmen
+        id: version
+        shell: pwsh
+        run: |
+          $match = Select-String -Path Directory.Build.props -Pattern '<Version>([^<]+)</Version>'
+          if (-not $match) { throw "Version konnte nicht bestimmt werden." }
+          $version = $match.Matches[0].Groups[1].Value
+          "value=$version" >> $env:GITHUB_OUTPUT
+          Write-Host "Version: $version"
+
+      - name: Server-Setup veröffentlichen
+        shell: pwsh
+        run: |
+          dotnet publish tools/LiftUp.ServerSetup/LiftUp.ServerSetup.csproj -c Release -r win-x64 --self-contained false `
+            -p:Version=${{ steps.version.outputs.value }} -p:DebugType=none -o artifacts/server 2>&1 |
+            Tee-Object -FilePath artifacts/publish-server.log
+          if ($LASTEXITCODE -ne 0) { throw "Veröffentlichen des Server-Setups fehlgeschlagen." }
+
+      - name: WiX bereitstellen
+        shell: pwsh
+        run: |
+          dotnet tool install --global wix --version 5.0.2 2>&1 | Tee-Object -FilePath artifacts/wix.log
+          "$env:USERPROFILE\.dotnet\tools" | Out-File -FilePath $env:GITHUB_PATH -Append
+          wix extension add -g WixToolset.UI.wixext/5.0.2 2>&1 | Tee-Object -Append -FilePath artifacts/wix.log
+
+      - name: Server-MSI bauen
+        shell: pwsh
+        run: |
+          wix build installer/Server.wxs `
+            -d Version=${{ steps.version.outputs.value }} `
+            -d PublishDir="$((Resolve-Path artifacts/server).Path)" `
+            -d IconPath="$(Resolve-Path src/LiftUp.App/Assets/LiftUp.ico).Path" `
+            -d LicensePath="$(Resolve-Path installer/License.rtf).Path" `
+            -ext WixToolset.UI.wixext `
+            -culture de-de `
+            -o artifacts/LiftUp-Setup-Server.msi 2>&1 | Tee-Object -FilePath artifacts/msi.log
+          if ($LASTEXITCODE -ne 0) { throw "Server-MSI-Bau fehlgeschlagen." }
+
+      # Burn braucht die Runtime-Datei beim Bauen, um ihre Prüfsumme zu kennen.
+      - name: .NET-Runtime für das Installationsprogramm laden
+        shell: pwsh
+        run: |
+          $target = "artifacts/dotnet/windowsdesktop-runtime-8.0-win-x64.exe"
+          New-Item -ItemType Directory -Force artifacts/dotnet | Out-Null
+          if (-not (Test-Path $target)) {
+            Invoke-WebRequest -OutFile $target `
+              -Uri "https://builds.dotnet.microsoft.com/dotnet/WindowsDesktop/8.0.33/windowsdesktop-runtime-8.0.33-win-x64.exe"
+          }
+          "Runtime: $((Get-Item $target).Length) Bytes"
+
+      - name: Server-Installationsprogramm bauen
+        shell: pwsh
+        run: |
+          wix extension add -g WixToolset.Bal.wixext/5.0.2 2>&1 | Tee-Object -FilePath artifacts/bundle.log
+          wix extension add -g WixToolset.Netfx.wixext/5.0.2 2>&1 | Tee-Object -Append -FilePath artifacts/bundle.log
+          # Die Bal-Erweiterung heißt als Assembly "BootstrapperApplications"; deshalb den Pfad übergeben.
+          $bal = (Get-ChildItem "$env:USERPROFILE\.wix\extensions\WixToolset.Bal.wixext" -Recurse -Filter *.dll |
+            Select-Object -First 1).FullName
+          if (-not $bal) { throw "Bal-Erweiterung nicht gefunden." }
+          wix build installer/ServerBundle.wxs `
+            -d Version=${{ steps.version.outputs.value }} `
+            -d MsiPath="$((Resolve-Path artifacts/LiftUp-Setup-Server.msi).Path)" `
+            -d DotNetInstaller="$((Resolve-Path artifacts/dotnet/windowsdesktop-runtime-8.0-win-x64.exe).Path)" `
+            -d IconPath="$(Resolve-Path src/LiftUp.App/Assets/LiftUp.ico).Path" `
+            -d LicensePath="$(Resolve-Path installer/License.rtf).Path" `
+            -ext "$bal" `
+            -ext WixToolset.Netfx.wixext `
+            -culture de-de `
+            -o artifacts/LiftUp-Setup-Server.exe 2>&1 | Tee-Object -Append -FilePath artifacts/bundle.log
+          if ($LASTEXITCODE -ne 0) { throw "Server-Installationsprogramm fehlgeschlagen." }
+
+      - name: Beide Pakete prüfen
+        shell: pwsh
+        run: |
+          foreach ($file in @("artifacts/LiftUp-Setup-Server.msi", "artifacts/LiftUp-Setup-Server.exe")) {
+            if (-not (Test-Path $file)) { throw "$file wurde nicht gebaut." }
+            $size = (Get-Item $file).Length
+            if ($size -lt 100KB) { throw "$file ist verdächtig klein ($size Bytes)." }
+            Write-Host "$file`: $size Bytes"
+          }
+
+      # --- PostgreSQL für den echten Datenbanklauf -------------------------
+
+      - name: PostgreSQL bereitstellen
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force artifacts/pg | Out-Null
+          $index = Invoke-RestMethod -Uri "https://www.postgresql.org/versions.json"
+          $entry = $index | Where-Object { $_.major -eq "16" } | Select-Object -First 1
+          if (-not $entry) { throw "Keine PostgreSQL-16-Version gefunden." }
+          $version = "$($entry.major).$($entry.latestMinor)"
+          Write-Host "PostgreSQL $version"
+
+          $targets = @(
+            "https://get.enterprisedb.com/postgresql/postgresql-$version-1-windows-x64-binaries.zip",
+            "https://get.enterprisedb.com/postgresql/postgresql-$version-windows-x64-binaries.zip"
+          )
+          $ok = $false
+          foreach ($uri in $targets) {
+            try {
+              Write-Host "Lade $uri"
+              Invoke-WebRequest -Uri $uri -OutFile artifacts/pg/postgresql.zip -TimeoutSec 900
+              $ok = $true
+              break
+            } catch {
+              Write-Host "Nicht verfügbar: $($_.Exception.Message)"
+            }
+          }
+          if (-not $ok) { throw "PostgreSQL-Binaries konnten nicht geladen werden." }
+
+          Expand-Archive -Path artifacts/pg/postgresql.zip -DestinationPath artifacts/pg -Force
+          if (-not (Test-Path "artifacts/pg/pgsql/bin/initdb.exe")) { throw "Entpacktes PostgreSQL unvollständig." }
+
+      - name: PostgreSQL starten
+        shell: pwsh
+        run: |
+          $bin = (Resolve-Path artifacts/pg/pgsql/bin).Path
+          & "$bin/initdb.exe" -D artifacts/pg/data -U postgres --auth=trust --encoding=UTF8 2>&1 |
+            Tee-Object -FilePath artifacts/pg-initdb.log
+          if ($LASTEXITCODE -ne 0) { throw "initdb fehlgeschlagen." }
+
+          & "$bin/pg_ctl.exe" -D artifacts/pg/data -l artifacts/pg/server.log -o "-p 5432" -w start
+          if ($LASTEXITCODE -ne 0) {
+            Get-Content artifacts/pg/server.log -ErrorAction SilentlyContinue
+            throw "PostgreSQL startet nicht."
+          }
+
+          $answer = & "$bin/psql.exe" -h 127.0.0.1 -p 5432 -U postgres -d postgres -tAc "select version();"
+          if ($LASTEXITCODE -ne 0) { throw "PostgreSQL antwortet nicht." }
+          Write-Host $answer
+
+      # --- Installation des Pakets -----------------------------------------
+
+      - name: Installer still installieren
+        shell: pwsh
+        run: |
+          $bundle = (Resolve-Path artifacts/LiftUp-Setup-Server.exe).Path
+          $process = Start-Process -FilePath $bundle -ArgumentList "/quiet", "/norestart" -Wait -PassThru
+          Write-Host "Exitcode: $($process.ExitCode)"
+          if ($process.ExitCode -notin 0, 3010) { throw "Installation fehlgeschlagen (Exitcode $($process.ExitCode))." }
+
+          $setup = Join-Path $env:ProgramFiles "LiftUp Server\LiftUp.ServerSetup.exe"
+          if (-not (Test-Path $setup)) { throw "LiftUp.ServerSetup.exe wurde nicht installiert." }
+
+          $shortcut = Join-Path $env:ProgramData "Microsoft\Windows\Start Menu\Programs\LiftUp Server\LiftUp Server einrichten.lnk"
+          if (-not (Test-Path $shortcut)) { throw "Startmenü-Verknüpfung fehlt." }
+
+          $product = Get-ItemProperty "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*" |
+            Where-Object { $_.DisplayName -eq "LiftUp Server" } | Select-Object -First 1
+          if (-not $product) { throw "LiftUp Server steht nicht in der Liste installierter Programme." }
+          Write-Host "Installiert: $($product.DisplayName) $($product.DisplayVersion)"
+
+      - name: Vorschau-Lauf des installierten Werkzeugs
+        shell: pwsh
+        run: |
+          $setup = Join-Path $env:ProgramFiles "LiftUp Server\LiftUp.ServerSetup.exe"
+          $output = & $setup --whatif --output artifacts/connection/whatif.json 2>&1
+          $code = $LASTEXITCODE
+          $output | Tee-Object -FilePath artifacts/setup-whatif.log
+          if ($code -ne 0) { throw "Vorschau-Lauf fehlgeschlagen (Exitcode $code)." }
+          if (-not ($output -match "WhatIf")) { throw "Der Vorschau-Lauf hat keine Vorschau ausgegeben." }
+          if (Test-Path artifacts/connection/whatif.json) { throw "Der Vorschau-Lauf darf keine Zugangsdatei schreiben." }
+          if (-not ($output -match "bereits vorhanden")) {
+            throw "Der Vorschau-Lauf hat PostgreSQL nicht erkannt (Port 5432 antwortet)."
+          }
+
+      - name: Datenbank anlegen
+        shell: pwsh
+        run: |
+          $setup = Join-Path $env:ProgramFiles "LiftUp Server\LiftUp.ServerSetup.exe"
+          $arguments = @(
+            "--port", "5432",
+            "--database", "liftup_ci",
+            "--user", "liftup_ci",
+            "--password", "CiPasswort123",
+            "--superuser-password", "postgres",
+            "--connect-host", "127.0.0.1",
+            "--host", "127.0.0.1",
+            "--output", "artifacts/connection/LiftUp-Datenbank-Zugang.json"
+          )
+          $output = & $setup @arguments 2>&1
+          $code = $LASTEXITCODE
+          $output | Tee-Object -FilePath artifacts/setup-install.log
+          if ($code -ne 0) { throw "Einrichten fehlgeschlagen (Exitcode $code)." }
+          if (-not (Test-Path "artifacts/connection/LiftUp-Datenbank-Zugang.json")) {
+            throw "Die Zugangsdatei wurde nicht geschrieben."
+          }
+
+      - name: Zugangsdatei prüfen
+        shell: pwsh
+        run: |
+          $path = "artifacts/connection/LiftUp-Datenbank-Zugang.json"
+          if (-not (Test-Path $path)) { throw "Die Zugangsdatei fehlt." }
+
+          $file = Get-Content $path -Raw | ConvertFrom-Json
+          if ($file.produkt -ne "LiftUp") { throw "Produkt fehlt in der Zugangsdatei." }
+          if ($file.art -notmatch "PostgreSQL") { throw "Art fehlt in der Zugangsdatei." }
+          if ($file.server -ne "127.0.0.1") { throw "Server steht falsch in der Datei: $($file.server)" }
+          if ($file.port -ne 5432) { throw "Port steht falsch in der Datei: $($file.port)" }
+          if ($file.datenbank -ne "liftup_ci") { throw "Datenbank steht falsch in der Datei: $($file.datenbank)" }
+          if ($file.benutzer -ne "liftup_ci") { throw "Benutzer steht falsch in der Datei: $($file.benutzer)" }
+          if ($file.passwort -ne "CiPasswort123") { throw "Passwort fehlt in der Datei." }
+          if ([string]::IsNullOrWhiteSpace($file.postgresql)) { throw "PostgreSQL-Version fehlt in der Datei." }
+          Write-Host "Zugangsdatei in Ordnung (PostgreSQL $($file.postgresql))."
+
+      - name: Schema und Rechte prüfen
+        shell: pwsh
+        run: |
+          $bin = (Resolve-Path artifacts/pg/pgsql/bin).Path
+          $tables = & "$bin/psql.exe" -h 127.0.0.1 -p 5432 -U postgres -d liftup_ci -tAc `
+            "select string_agg(table_name, ',' order by table_name) from information_schema.tables where table_schema = 'liftup';"
+          if ($LASTEXITCODE -ne 0) { throw "Schemaabfrage fehlgeschlagen." }
+          $expected = "change_log,devices,entities,info"
+          if ($tables.Trim() -ne $expected) { throw "Tabellen unerwartet: $($tables.Trim())" }
+
+          $version = & "$bin/psql.exe" -h 127.0.0.1 -p 5432 -U postgres -d liftup_ci -tAc `
+            "select schema_version from liftup.info;"
+          if ($version.Trim() -ne "1") { throw "Schema-Version unerwartet: $($version.Trim())" }
+
+          # Der Client-Benutzer muss schreiben und lesen dürfen.
+          & "$bin/psql.exe" -h 127.0.0.1 -p 5432 -U liftup_ci -d liftup_ci -v ON_ERROR_STOP=1 -c `
+            "insert into liftup.devices (device_id) values ('ci-check') on conflict (device_id) do nothing;"
+          if ($LASTEXITCODE -ne 0) { throw "Der Client-Benutzer darf nicht schreiben." }
+
+          $read = & "$bin/psql.exe" -h 127.0.0.1 -p 5432 -U liftup_ci -d liftup_ci -tAc `
+            "select count(*) from liftup.entities;"
+          if ($LASTEXITCODE -ne 0) { throw "Der Client-Benutzer darf nicht lesen." }
+          Write-Host "Schema und Rechte in Ordnung (entities: $($read.Trim()))."
+
+      - name: Zweiter Lauf muss wiederholbar sein
+        shell: pwsh
+        run: |
+          $setup = Join-Path $env:ProgramFiles "LiftUp Server\LiftUp.ServerSetup.exe"
+          $arguments = @(
+            "--port", "5432",
+            "--database", "liftup_ci",
+            "--user", "liftup_ci",
+            "--password", "CiPasswort123",
+            "--superuser-password", "postgres",
+            "--connect-host", "127.0.0.1",
+            "--host", "127.0.0.1",
+            "--output", "artifacts/connection/zweiter-lauf.json"
+          )
+          $output = & $setup @arguments 2>&1
+          $code = $LASTEXITCODE
+          $output | Tee-Object -FilePath artifacts/setup-second.log
+          if ($code -ne 0) { throw "Der zweite Lauf ist fehlgeschlagen (Exitcode $code)." }
+          if (-not ($output -match "war bereits vorhanden")) {
+            throw "Der zweite Lauf hat den bestehenden Stand nicht erkannt."
+          }
+          if (-not (Test-Path "artifacts/connection/zweiter-lauf.json")) {
+            throw "Der zweite Lauf hat keine Zugangsdatei geschrieben."
+          }
+
+      - name: Deinstallieren
+        shell: pwsh
+        run: |
+          $bundle = (Resolve-Path artifacts/LiftUp-Setup-Server.exe).Path
+          $process = Start-Process -FilePath $bundle -ArgumentList "/uninstall", "/quiet", "/norestart" -Wait -PassThru
+          Write-Host "Exitcode: $($process.ExitCode)"
+          if ($process.ExitCode -notin 0, 3010) { throw "Deinstallation fehlgeschlagen (Exitcode $($process.ExitCode))." }
+
+          $setup = Join-Path $env:ProgramFiles "LiftUp Server\LiftUp.ServerSetup.exe"
+          if (Test-Path $setup) { throw "LiftUp.ServerSetup.exe ist nach der Deinstallation noch vorhanden." }
+
+          $shortcut = Join-Path $env:ProgramData "Microsoft\Windows\Start Menu\Programs\LiftUp Server\LiftUp Server einrichten.lnk"
+          if (Test-Path $shortcut) { throw "Die Startmenü-Verknüpfung blieb zurück." }
+
+          $product = Get-ItemProperty "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*" |
+            Where-Object { $_.DisplayName -eq "LiftUp Server" } | Select-Object -First 1
+          if ($product) { throw "LiftUp Server steht weiterhin in der Liste installierter Programme." }
+
+      - name: PostgreSQL stoppen
+        if: always()
+        shell: pwsh
+        run: |
+          $ctl = "artifacts/pg/pgsql/bin/pg_ctl.exe"
+          if (Test-Path $ctl) {
+            & $ctl -D artifacts/pg/data -m fast stop 2>&1 | Out-Host
+          }
+
+      - name: Protokolle bei Fehlschlag hochladen
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-installer-logs
+          path: |
+            artifacts/*.log
+            artifacts/pg/server.log
+            artifacts/connection/*.json
+          if-no-files-found: warn

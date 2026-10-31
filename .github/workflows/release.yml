@@ -127,10 +127,48 @@ jobs:
             -o artifacts/LiftUp-Setup.exe 2>&1 | Tee-Object -Append -FilePath logs/07-bundle.log
           if ($LASTEXITCODE -ne 0) { throw "Installationsprogramm fehlgeschlagen." }
 
+      - name: Server-Setup veröffentlichen
+        shell: pwsh
+        run: |
+          dotnet publish tools/LiftUp.ServerSetup/LiftUp.ServerSetup.csproj -c Release -r win-x64 --self-contained false `
+            -p:Version=${{ steps.version.outputs.value }} -p:DebugType=none -o artifacts/server 2>&1 |
+            Tee-Object -FilePath logs/09-publish-server.log
+          if ($LASTEXITCODE -ne 0) { throw "Veröffentlichen des Server-Setups fehlgeschlagen." }
+
+      - name: Server-MSI bauen
+        shell: pwsh
+        run: |
+          wix build installer/Server.wxs `
+            -d Version=${{ steps.version.outputs.value }} `
+            -d PublishDir="$((Resolve-Path artifacts/server).Path)" `
+            -d IconPath="$(Resolve-Path src/LiftUp.App/Assets/LiftUp.ico).Path" `
+            -d LicensePath="$(Resolve-Path installer/License.rtf).Path" `
+            -ext WixToolset.UI.wixext `
+            -culture de-de `
+            -o artifacts/LiftUp-Setup-Server.msi 2>&1 | Tee-Object -FilePath logs/10-server-msi.log
+          if ($LASTEXITCODE -ne 0) { throw "Server-MSI-Bau fehlgeschlagen." }
+
+      - name: Server-Installationsprogramm bauen
+        shell: pwsh
+        run: |
+          $bal = (Get-ChildItem "$env:USERPROFILE\.wix\extensions\WixToolset.Bal.wixext" -Recurse -Filter *.dll |
+            Select-Object -First 1).FullName
+          wix build installer/ServerBundle.wxs `
+            -d Version=${{ steps.version.outputs.value }} `
+            -d MsiPath="$((Resolve-Path artifacts/LiftUp-Setup-Server.msi).Path)" `
+            -d DotNetInstaller="$((Resolve-Path artifacts/dotnet/windowsdesktop-runtime-8.0-win-x64.exe).Path)" `
+            -d IconPath="$(Resolve-Path src/LiftUp.App/Assets/LiftUp.ico).Path" `
+            -d LicensePath="$(Resolve-Path installer/License.rtf).Path" `
+            -ext "$bal" `
+            -ext WixToolset.Netfx.wixext `
+            -culture de-de `
+            -o artifacts/LiftUp-Setup-Server.exe 2>&1 | Tee-Object -FilePath logs/11-server-bundle.log
+          if ($LASTEXITCODE -ne 0) { throw "Server-Installationsprogramm fehlgeschlagen." }
+
       - name: Prüfsumme schreiben
         shell: pwsh
         run: |
-          $lines = foreach ($file in @("LiftUp-Setup.msi", "LiftUp-Setup.exe")) {
+          $lines = foreach ($file in @("LiftUp-Setup.msi", "LiftUp-Setup.exe", "LiftUp-Setup-Server.msi", "LiftUp-Setup-Server.exe")) {
             $hash = (Get-FileHash "artifacts/$file" -Algorithm SHA256).Hash.ToLowerInvariant()
             "$hash  $file"
           }
@@ -155,6 +193,8 @@ jobs:
           files: |
             artifacts/LiftUp-Setup.exe
             artifacts/LiftUp-Setup.msi
+            artifacts/LiftUp-Setup-Server.exe
+            artifacts/LiftUp-Setup-Server.msi
             artifacts/SHA256SUMS.txt
           generate_release_notes: true
           fail_on_unmatched_files: true

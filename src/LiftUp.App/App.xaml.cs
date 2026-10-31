@@ -55,7 +55,9 @@ public sealed class AppServices(Database database)
 {
     public Database Database { get; } = database;
     public AuthService Auth { get; } = new(database);
-    public SyncService Sync { get; } = new(database, new NotConfiguredSyncTransport());
+    // Ohne gespeicherte Zugangsdaten bleibt der Abgleich lokal; die Einstellungen
+    // liest der Dienst bei jedem Lauf neu ein (Reiter „Datenbank“).
+    public SyncService Sync { get; } = new(database);
 
     public UpdateService Updates { get; } = new(
         GitHubReleaseSource.Owner,

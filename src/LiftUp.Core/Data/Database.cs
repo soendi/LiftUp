@@ -35,7 +35,9 @@ public sealed class Database
         var connection = new SqliteConnection(_connectionString);
         connection.Open();
         using var pragma = connection.CreateCommand();
-        pragma.CommandText = "PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;";
+        // busy_timeout: Bei gleichzeitigen Schreibzugriffen (etwa durch die
+        // Synchronisation) wartet SQLite kurz, statt sofort abzubrechen.
+        pragma.CommandText = "PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;";
         pragma.ExecuteNonQuery();
         return connection;
     }

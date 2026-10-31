@@ -1,0 +1,65 @@
+name: PostgreSQL-Abgleich
+
+# Prüft bei jedem Push und jedem Pull Request, dass der Abgleich zweier
+# Arbeitsplätze gegen eine echte PostgreSQL-Datenbank funktioniert.
+# Lokal lässt sich dasselbe mit tools/postgres-sync-test.sh ausführen.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  postgres-sync:
+    name: Abgleich mit zwei Clients
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DOTNET_NOLOGO: "true"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+      LIFTUP_TEST_POSTGRES: "Host=127.0.0.1;Port=5432;Database=postgres;Username=postgres;Password=postgres"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Testdatenbank prüfen
+        run: |
+          test -n "$LIFTUP_TEST_POSTGRES" || { echo "LIFTUP_TEST_POSTGRES fehlt – die Tests würden übersprungen."; exit 1; }
+          until pg_isready -h 127.0.0.1 -p 5432 -U postgres; do sleep 2; done
+
+      - name: Abgleich gegen PostgreSQL testen
+        shell: bash
+        run: |
+          set -o pipefail
+          dotnet test tests/LiftUp.Core.Tests/LiftUp.Core.Tests.csproj -c Release \
+            --filter "FullyQualifiedName~PostgresSyncEndToEndTests" \
+            --logger "console;verbosity=normal" | tee postgres-test.log
+
+      - name: Übersprungene Tests als Fehler werten
+        run: |
+          if grep -q "Skipped:" postgres-test.log; then
+            echo "Der Lauf hat Tests übersprungen – das zählt nicht als bestanden."
+            exit 1
+          fi

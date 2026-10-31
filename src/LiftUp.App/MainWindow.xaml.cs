@@ -1,5 +1,7 @@
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Threading;
 using LiftUp.App.Views;
 using LiftUp.Core.Domain;
 using LiftUp.Core.Updates;
@@ -9,7 +11,11 @@ namespace LiftUp.App;
 public partial class MainWindow : Window
 {
     private readonly AppServices _services;
+    private readonly DispatcherTimer _syncTimer;
     private bool _updateRunning;
+    private bool _syncRunning;
+    private bool _closingAfterSync;
+    private bool _skipSyncOnClose;
 
     public MainWindow(AppServices services)
     {
@@ -68,6 +74,11 @@ public partial class MainWindow : Window
         groups.Add(administration);
 
         var system = new List<TabItem>();
+        if (session.Can(Permission.ChangeSettings))
+        {
+            system.Add(CreateTab("Datenbank", new DatabaseView(_services)));
+        }
+
         if (session.Can(Permission.ViewChangeLog))
         {
             system.Add(CreateTab("Protokoll", new ChangeLogView(_services)));
@@ -102,10 +113,15 @@ public partial class MainWindow : Window
         Tabs.SelectedIndex = Tabs.Items.Count > 0 ? 0 : -1;
 
         StatusText.Text = $"Angemeldet als {session.UserName} · Datenbank: {_services.Database.FilePath}";
-        SyncText.Text = _services.Sync.IsConfigured
-            ? "Synchronisation: verbunden"
-            : "Synchronisation: lokal (PostgreSQL später)";
+        UpdateSyncText();
         UpdateText.Text = $"Version {_services.Updates.CurrentVersion}";
+
+        // Nach dem Speichern im Reiter „Datenbank“ sofort den neuen Stand anzeigen.
+        _services.Sync.ConfigurationChanged += (_, _) => UpdateSyncText();
+
+        // Abgleich beim Start, alle fünf Minuten und vor dem Schließen.
+        _syncTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(5) };
+        _syncTimer.Tick += async (_, _) => await TrySyncAsync();
 
         if (Tabs.Items.Count == 0)
         {
@@ -128,7 +144,74 @@ public partial class MainWindow : Window
             {
                 await RunUpdateAsync(userInitiated: false);
             }
+
+            await TrySyncAsync();
+            _syncTimer.Start();
         };
+    }
+
+    private void UpdateSyncText()
+    {
+        SyncText.Text = _services.Sync.IsConfigured
+            ? $"Synchronisation: {_services.Sync.TransportName}"
+            : "Synchronisation: lokal";
+    }
+
+    /// <summary>
+    /// Gleicht die Datenbank ab. Fehler werden nur in der Statuszeile gemeldet –
+    /// ohne erreichbaren Server soll die Anwendung normal weiterlaufen.
+    /// </summary>
+    private async Task TrySyncAsync()
+    {
+        if (_syncRunning || !_services.Sync.IsConfigured)
+        {
+            return;
+        }
+
+        _syncRunning = true;
+        try
+        {
+            SyncText.Text = "Synchronisation: läuft …";
+            var result = await _services.Sync.RunAsync();
+            SyncText.Text = result.Succeeded
+                ? $"Synchronisation: {result.Message}"
+                : "Synchronisation: nicht möglich";
+        }
+        finally
+        {
+            _syncRunning = false;
+            UpdateSyncText();
+        }
+    }
+
+    /// <summary>Letzter Abgleich vor dem Schließen; höchstens 15 Sekunden warten.</summary>
+    protected override async void OnClosing(CancelEventArgs e)
+    {
+        base.OnClosing(e);
+        _syncTimer.Stop();
+
+        if (_closingAfterSync || _skipSyncOnClose || !_services.Sync.IsConfigured)
+        {
+            return;
+        }
+
+        e.Cancel = true;
+        _closingAfterSync = true;
+        StatusText.Text = "Synchronisierung vor dem Beenden …";
+
+        try
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            await _services.Sync.RunAsync(timeout.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            // Zeitlimit erreicht: Das Schließen darf nicht daran scheitern.
+        }
+        finally
+        {
+            Close();
+        }
     }
 
     private static TabItem CreateTab(string header, object content) =>
@@ -200,6 +283,7 @@ public partial class MainWindow : Window
                 return;
             }
 
+            _skipSyncOnClose = true;
             System.Windows.Application.Current.Shutdown();
         }
         catch (Exception exception)
