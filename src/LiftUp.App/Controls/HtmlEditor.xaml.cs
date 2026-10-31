@@ -9,9 +9,14 @@ namespace LiftUp.App.Controls;
 /// Einfacher WYSIWYG-Editor für Textbausteine: der Inhalt wird wie in einem
 /// Textprogramm bearbeitet, gespeichert und gelesen wird aber HTML.
 /// Fehlt die WebView2-Laufzeit, steht ein reines HTML-Feld als Rückfall bereit.
+/// Optional schlägt der Editor nach einem „/“ passende Textbausteine direkt am
+/// Cursor vor.
 /// </summary>
 public partial class HtmlEditor : UserControl
 {
+    /// <summary>Ein Treffer der „/“-Suche: Name, Zusatzinfo und einzufügender HTML-Inhalt.</summary>
+    public sealed record SnippetChoice(string Name, string Detail, string Html);
+
     private const string EditorPage = """
         <!DOCTYPE html>
         <html lang="de">
@@ -42,6 +47,37 @@ public partial class HtmlEditor : UserControl
             td, th { border: 1px solid #DCE1E8; padding: 4px 6px; }
             a { color: #2D6CDF; }
             img { max-width: 100%; }
+            .liftup-snippets {
+                position: absolute;
+                z-index: 40;
+                min-width: 250px;
+                max-width: 420px;
+                padding: 4px;
+                background: #FFFFFF;
+                border: 1px solid #C7D0DD;
+                border-radius: 6px;
+                box-shadow: 0 8px 20px rgba(31, 42, 68, 0.18);
+                font-size: 13px;
+                line-height: 1.3;
+            }
+            .liftup-snippets-row {
+                display: flex;
+                gap: 10px;
+                align-items: baseline;
+                padding: 5px 8px;
+                border-radius: 4px;
+                cursor: pointer;
+            }
+            .liftup-snippets-row.active { background: #E8F0FE; }
+            .liftup-snippets-name { color: #1F2A44; white-space: nowrap; }
+            .liftup-snippets-detail {
+                color: #6B7686;
+                font-size: 12px;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            .liftup-snippets-empty { padding: 6px 8px; color: #6B7686; }
         </style>
         </head>
         <body contenteditable="true" spellcheck="false"></body>
@@ -62,6 +98,221 @@ public partial class HtmlEditor : UserControl
                 }
                 document.execCommand(command, false, value === undefined ? null : value);
             };
+
+            // ---- Vorschläge für Textbausteine („/Text“) ----
+            window.liftupSnippetEnabled = false;
+            window.liftupSnippetPanel = null;
+            window.liftupSnippetItems = [];
+            window.liftupSnippetIndex = 0;
+            window.liftupSnippetToken = null;
+            window.liftupSnippetRequest = 0;
+
+            window.liftupEnableSnippets = function (on) {
+                window.liftupSnippetEnabled = !!on;
+                if (!on) {
+                    window.liftupCloseSnippets();
+                }
+            };
+
+            window.liftupRemoveSnippetPanel = function () {
+                var panel = window.liftupSnippetPanel;
+                if (panel && panel.parentNode) {
+                    panel.parentNode.removeChild(panel);
+                }
+                window.liftupSnippetPanel = null;
+            };
+
+            window.liftupCloseSnippets = function () {
+                window.liftupRemoveSnippetPanel();
+                window.liftupSnippetItems = [];
+                window.liftupSnippetIndex = 0;
+                window.liftupSnippetToken = null;
+            };
+
+            window.liftupSnippetTokenAtCaret = function () {
+                var selection = window.getSelection();
+                if (!selection || selection.rangeCount === 0 || !selection.isCollapsed) {
+                    return null;
+                }
+                var node = selection.anchorNode;
+                if (!node || node.nodeType !== 3) {
+                    return null;
+                }
+                var offset = selection.anchorOffset;
+                var before = node.nodeValue.substring(0, offset);
+                var match = /(^|[\s\u00a0>])\/([^\s\/]{0,40})$/.exec(before);
+                if (!match) {
+                    return null;
+                }
+                return { node: node, start: offset - match[2].length - 1, query: match[2] };
+            };
+
+            window.liftupCaretRect = function () {
+                var selection = window.getSelection();
+                if (!selection || selection.rangeCount === 0) {
+                    return null;
+                }
+                var range = selection.getRangeAt(0).cloneRange();
+                var rect = range.getBoundingClientRect();
+                if (rect && (rect.width > 0 || rect.height > 0)) {
+                    return rect;
+                }
+                var marker = document.createElement('span');
+                marker.textContent = '\u200b';
+                range.insertNode(marker);
+                rect = marker.getBoundingClientRect();
+                if (marker.parentNode) {
+                    marker.parentNode.removeChild(marker);
+                }
+                return rect;
+            };
+
+            window.liftupRenderSnippets = function () {
+                window.liftupRemoveSnippetPanel();
+                var rect = window.liftupCaretRect();
+                if (!rect) {
+                    return;
+                }
+
+                var panel = document.createElement('div');
+                panel.className = 'liftup-snippets';
+                panel.setAttribute('contenteditable', 'false');
+
+                var items = window.liftupSnippetItems;
+                if (items.length === 0) {
+                    var empty = document.createElement('div');
+                    empty.className = 'liftup-snippets-empty';
+                    empty.textContent = 'Keine Textbausteine gefunden';
+                    panel.appendChild(empty);
+                } else {
+                    items.forEach(function (item, position) {
+                        var row = document.createElement('div');
+                        row.className = 'liftup-snippets-row' + (position === window.liftupSnippetIndex ? ' active' : '');
+
+                        var name = document.createElement('span');
+                        name.className = 'liftup-snippets-name';
+                        name.textContent = item.name;
+
+                        var detail = document.createElement('span');
+                        detail.className = 'liftup-snippets-detail';
+                        detail.textContent = item.detail || '';
+
+                        row.appendChild(name);
+                        row.appendChild(detail);
+                        row.addEventListener('mousedown', function (event) {
+                            event.preventDefault();
+                            window.liftupInsertSnippet(item);
+                        });
+                        panel.appendChild(row);
+                    });
+                }
+
+                panel.style.top = (rect.bottom + window.scrollY + 2) + 'px';
+                panel.style.left = Math.max(6, rect.left + window.scrollX) + 'px';
+                document.body.appendChild(panel);
+                window.liftupSnippetPanel = panel;
+            };
+
+            window.liftupSnippetQuery = function () {
+                if (!window.liftupSnippetEnabled) {
+                    return;
+                }
+                var token = window.liftupSnippetTokenAtCaret();
+                if (!token) {
+                    window.liftupCloseSnippets();
+                    return;
+                }
+                window.liftupSnippetToken = token;
+                var requestId = ++window.liftupSnippetRequest;
+                try {
+                    window.chrome.webview.postMessage(JSON.stringify({
+                        type: 'snippetQuery',
+                        requestId: requestId,
+                        query: token.query
+                    }));
+                } catch (error) {
+                    window.liftupCloseSnippets();
+                }
+            };
+
+            window.liftupSnippetResults = function (requestId, matches) {
+                if (!window.liftupSnippetEnabled || requestId !== window.liftupSnippetRequest) {
+                    return;
+                }
+                if (!window.liftupSnippetToken) {
+                    return;
+                }
+                window.liftupSnippetItems = Array.isArray(matches) ? matches : [];
+                window.liftupSnippetIndex = 0;
+                window.liftupRenderSnippets();
+            };
+
+            window.liftupMoveSnippet = function (step) {
+                var count = window.liftupSnippetItems.length;
+                if (count === 0) {
+                    return;
+                }
+                window.liftupSnippetIndex = (window.liftupSnippetIndex + step + count) % count;
+                window.liftupRenderSnippets();
+            };
+
+            window.liftupInsertSnippet = function (item) {
+                var token = window.liftupSnippetToken;
+                var selection = window.getSelection();
+                window.liftupCloseSnippets();
+                if (!item || !token || !selection || selection.rangeCount === 0) {
+                    return;
+                }
+                if (!token.node || !token.node.isConnected) {
+                    return;
+                }
+
+                var range = document.createRange();
+                var end = token.start + 1 + token.query.length;
+                try {
+                    range.setStart(token.node, token.start);
+                    range.setEnd(token.node, Math.min(end, token.node.nodeValue.length));
+                } catch (error) {
+                    return;
+                }
+
+                range.deleteContents();
+                selection.removeAllRanges();
+                selection.addRange(range);
+                document.execCommand('insertHTML', false, item.html || '');
+            };
+
+            document.addEventListener('keydown', function (event) {
+                if (!window.liftupSnippetEnabled || !window.liftupSnippetPanel) {
+                    return;
+                }
+                if (event.key === 'ArrowDown') {
+                    event.preventDefault();
+                    window.liftupMoveSnippet(1);
+                } else if (event.key === 'ArrowUp') {
+                    event.preventDefault();
+                    window.liftupMoveSnippet(-1);
+                } else if (event.key === 'Enter') {
+                    event.preventDefault();
+                    if (window.liftupSnippetItems.length > 0) {
+                        window.liftupInsertSnippet(window.liftupSnippetItems[window.liftupSnippetIndex]);
+                    } else {
+                        window.liftupCloseSnippets();
+                    }
+                } else if (event.key === 'Escape') {
+                    event.preventDefault();
+                    window.liftupCloseSnippets();
+                }
+            }, true);
+
+            document.addEventListener('input', function () {
+                window.liftupSnippetQuery();
+            });
+
+            window.liftupGetHtml = function () {
+                window.liftupCloseSnippets();
+                return document.body.innerHTML;
+            };
         </script>
         </html>
         """;
@@ -70,6 +321,7 @@ public partial class HtmlEditor : UserControl
     private bool _failed;
     private Task? _initialization;
     private string _pendingHtml = string.Empty;
+    private Func<string, IReadOnlyList<SnippetChoice>>? _snippetSearch;
 
     public HtmlEditor()
     {
@@ -109,7 +361,8 @@ public partial class HtmlEditor : UserControl
 
         try
         {
-            var json = await Browser.CoreWebView2.ExecuteScriptAsync("document.body.innerHTML");
+            var json = await Browser.CoreWebView2.ExecuteScriptAsync(
+                "window.liftupGetHtml ? window.liftupGetHtml() : document.body.innerHTML");
             var html = Normalize(JsonSerializer.Deserialize<string>(json));
             _pendingHtml = html;
             return html;
@@ -117,6 +370,33 @@ public partial class HtmlEditor : UserControl
         catch (Exception exception)
         {
             throw new InvalidOperationException("Der Inhalt des Editors konnte nicht gelesen werden.", exception);
+        }
+    }
+
+    /// <summary>
+    /// Schaltet die Vorschläge ein: sobald im Text ein „/“ getippt wird, sucht der
+    /// Editor über <paramref name="search"/> nach passenden Textbausteinen und
+    /// zeigt sie am Cursor an. Auswahl mit Pfeiltasten, Einfügen mit Enter.
+    /// </summary>
+    public void EnableSnippetAutocomplete(Func<string, IReadOnlyList<SnippetChoice>> search)
+    {
+        _snippetSearch = search;
+
+        if (_ready && Browser.CoreWebView2 is not null)
+        {
+            _ = EnableSnippetsAsync();
+        }
+    }
+
+    private async Task EnableSnippetsAsync()
+    {
+        try
+        {
+            await Browser.CoreWebView2.ExecuteScriptAsync("window.liftupEnableSnippets(true); true");
+        }
+        catch (Exception)
+        {
+            // Die Vorschläge sind eine Bedienhilfe; ohne sie bleibt der Editor nutzbar.
         }
     }
 
@@ -156,12 +436,19 @@ public partial class HtmlEditor : UserControl
                 Browser.NavigationCompleted -= OnNavigationCompleted;
             }
 
+            Browser.CoreWebView2.WebMessageReceived += OnWebMessageReceived;
+
             // Absätze statt <div>-Zeilen, damit der erzeugte HTML-Code ruhig bleibt.
             await Browser.CoreWebView2.ExecuteScriptAsync(
                 "document.execCommand('defaultParagraphSeparator', false, 'p');");
 
             _ready = true;
             await ApplyHtmlAsync();
+
+            if (_snippetSearch is not null)
+            {
+                await EnableSnippetsAsync();
+            }
         }
         catch (Exception exception) when (
             exception is InvalidOperationException
@@ -170,6 +457,46 @@ public partial class HtmlEditor : UserControl
                 or DllNotFoundException)
         {
             ShowFallback();
+        }
+    }
+
+    /// <summary>Beantwortet die „/“-Suche aus dem Editor mit den passenden Bausteinen.</summary>
+    private void OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
+    {
+        if (_snippetSearch is null || Browser.CoreWebView2 is null)
+        {
+            return;
+        }
+
+        try
+        {
+            using var message = JsonDocument.Parse(e.WebMessageAsJson);
+            var root = message.RootElement;
+
+            if (!root.TryGetProperty("type", out var type) ||
+                !string.Equals(type.GetString(), "snippetQuery", StringComparison.Ordinal) ||
+                !root.TryGetProperty("requestId", out var requestElement) ||
+                !requestElement.TryGetInt64(out var requestId))
+            {
+                return;
+            }
+
+            var query = root.TryGetProperty("query", out var queryElement)
+                ? queryElement.GetString() ?? string.Empty
+                : string.Empty;
+
+            var matches = _snippetSearch(query)
+                .Select(choice => new { name = choice.Name, detail = choice.Detail, html = choice.Html })
+                .ToArray();
+
+            var script = "window.liftupSnippetResults(" + requestId + ", "
+                         + JsonSerializer.Serialize(matches) + "); true";
+
+            _ = Browser.CoreWebView2.ExecuteScriptAsync(script);
+        }
+        catch (Exception)
+        {
+            // Eine fehlerhafte Suche darf die Eingabe nicht unterbrechen.
         }
     }
 

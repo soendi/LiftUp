@@ -37,6 +37,7 @@ public partial class DocumentComposerWindow : Window
     private readonly Guid? _presetProjectId;
     private readonly Guid? _presetTemplateId;
     private IReadOnlyList<DocumentSectionContent>? _presetSections;
+    private IReadOnlyList<TextSnippet>? _snippetBodies;
     private string? _lastPdfPath;
 
     public DocumentComposerWindow(
@@ -211,6 +212,7 @@ public partial class DocumentComposerWindow : Window
         buttonRow.Children.Add(insertImage);
 
         var editor = new HtmlEditor();
+        editor.EnableSnippetAutocomplete(SearchSnippets);
         if (!string.IsNullOrWhiteSpace(html))
         {
             editor.SetHtml(html);
@@ -232,6 +234,34 @@ public partial class DocumentComposerWindow : Window
         _sections.Add(new SectionDraft { Tab = tab, TitleBox = titleBox, Editor = editor });
         SectionTabs.Items.Add(tab);
         SectionTabs.SelectedItem = tab;
+    }
+
+    /// <summary>
+    /// Sucht für die „/“-Eingabe im Editor nach Textbausteinen. Die Inhalte werden
+    /// beim ersten Aufruf geladen und bis zum Schließen des Fensters wiederverwendet.
+    /// </summary>
+    private IReadOnlyList<HtmlEditor.SnippetChoice> SearchSnippets(string query)
+    {
+        try
+        {
+            _snippetBodies ??= _services.Snippets.GetAll()
+                .Select(item => _services.Snippets.Get(item.Id))
+                .ToArray();
+
+            return SnippetAutocomplete.Search(_snippetBodies, query)
+                .Select(snippet => new HtmlEditor.SnippetChoice(
+                    snippet.Name,
+                    string.IsNullOrWhiteSpace(snippet.Category)
+                        ? SnippetAutocomplete.Preview(snippet.Html)
+                        : snippet.Category!,
+                    snippet.Html))
+                .ToArray();
+        }
+        catch (LiftUpException exception)
+        {
+            InfoText.Text = exception.Message;
+            return [];
+        }
     }
 
     private void OnAddSectionClick(object sender, RoutedEventArgs e) => AddSection(string.Empty);
