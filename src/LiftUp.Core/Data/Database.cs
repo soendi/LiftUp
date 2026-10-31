@@ -94,6 +94,44 @@ public sealed class Database
         command.ExecuteNonQuery();
     }
 
+    /// <summary>
+    /// Tabellen und Spalten der lokalen Datenbank in der Reihenfolge des Schemas.
+    /// Damit lässt sich prüfen, ob eine Schemaänderung auch auf dem Server
+    /// angekommen ist (siehe <c>installer/sql/liftup-schema.sql</c>).
+    /// </summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<string>> GetSchemaColumns()
+    {
+        using var connection = Open();
+
+        var tables = new List<string>();
+        using (var command = Db.Command(connection,
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name;"))
+        using (var reader = command.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                tables.Add(reader.GetString(0));
+            }
+        }
+
+        var result = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
+        foreach (var table in tables)
+        {
+            var quoted = "\"" + table.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"";
+            var columns = new List<string>();
+            using var info = Db.Command(connection, $"PRAGMA table_info({quoted});");
+            using var reader = info.ExecuteReader();
+            while (reader.Read())
+            {
+                columns.Add(reader.GetString(1));
+            }
+
+            result[table] = columns;
+        }
+
+        return result;
+    }
+
     /// <summary>Eindeutige Kennung dieses Arbeitsplatzes für das Änderungsprotokoll.</summary>
     public string GetDeviceId()
     {

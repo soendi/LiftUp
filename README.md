@@ -59,12 +59,30 @@ Benutzer verwalten, Rollen und Rechte verwalten. Die Prüfung passiert in der Co
 ### Änderungsprotokoll
 
 - Jede schreibende Aktion landet in `ChangeLog`: Bereich, Vorgang, betroffener Datensatz, Bearbeiter,
-  Arbeitsplatz und Zeitpunkt. Das Protokoll dient gleichzeitig als Outbox für den späteren Abgleich.
+  Arbeitsplatz und Zeitpunkt. Das Protokoll dient gleichzeitig als Outbox für den Abgleich.
 - Der Reiter „Protokoll“ zeigt die Einträge, neueste zuerst, filterbar nach Bereich, Bearbeiter,
   Zeitraum und Freitext. Die Detailanzeige zeigt die gespeicherte Nutzlast.
 - Sichtbar ist der Reiter für Rollen mit dem Recht „Änderungsprotokoll ansehen“; Administrator und
   Projektleiter haben es voreingestellt.
 - Passwörter und Hashes stehen nie in der Nutzlast.
+
+### Datenbank (Abgleich mit PostgreSQL)
+
+- Der Reiter „Datenbank“ (Recht „Benutzer verwalten“) liest die vom Installer erzeugte
+  `liftup-server.json` ein und zeigt Server, Port, Datenbank, Schema, Benutzer, SSL-Modus,
+  Serverversion, Schemastand, Erstellungszeitpunkt und die Tabellen des Schemas.
+- „Verbindung prüfen“ meldet sich mit den eingelesenen Zugangsdaten am PostgreSQL-Server an
+  (Npgsql) und vergleicht Schemastand und Tabellenzahl; weicht der Schemastand von der lokalen
+  Datenbank ab, steht das im Hinweis.
+- Die Angaben bleiben in der lokalen Datenbank gespeichert; das Passwort liegt getrennt davon und
+  ist unter Windows über DPAPI an den angemeldeten Benutzer gebunden. „Einstellungen entfernen“
+  löscht nur die lokalen Angaben, nicht die Datei auf dem Server.
+- „Jetzt abgleichen“ überträgt die offenen Protokolleinträge an den Server und übernimmt die
+  Einträge der anderen Arbeitsplätze. Darunter stehen der letzte Lauf und die Zahl der offenen
+  Einträge; die Zeile „Synchronisation“ in der Fußleiste zeigt Ziel und Rückstand. Einzelheiten
+  im Abschnitt „Abgleich mit PostgreSQL“.
+- Den Abgleich startet nur, wer das Recht „Synchronisierung ausführen“ hat (voreingestellt beim
+  Administrator).
 
 ### Projekte
 
@@ -91,23 +109,48 @@ Jede fachliche Tabelle führt:
 - `IsDeleted` (weiches Löschen, damit Löschungen synchronisierbar bleiben),
 - UTC-Zeitstempel `CreatedUtc` / `UpdatedUtc` sowie `CreatedBy` / `UpdatedBy`.
 
-## Vorbereitung für PostgreSQL
+## Abgleich mit PostgreSQL
 
-Der Abgleich ist bewusst noch nicht aktiv, aber vollständig vorbereitet:
+Der Abgleich überträgt das Änderungsprotokoll als Outbox; die Verbindungsdatei aus dem Reiter
+„Datenbank“ gibt das Ziel vor (`NpgsqlSyncTransport`).
 
-1. **Änderungsprotokoll als Outbox** – jede schreibende Aktion schreibt in derselben Transaktion
-   einen Eintrag nach `ChangeLog` (Entität, Id, Operation, JSON-Nutzlast, Geräte-Id, RowVersion).
-   Passwörter und Hashes stehen nie in der Nutzlast.
-2. **Geräte-Id** – beim ersten Start wird eine `DeviceId` erzeugt und in `Settings` abgelegt, damit
-   Änderungen ihrem Ursprungsarbeitsplatz zugeordnet werden können.
-3. **Transport-Schnittstelle** – `ISyncTransport` (`PushAsync` / `PullAsync`) kapselt den Server.
-   `SyncService` überträgt offene Einträge und bestätigt sie erst nach erfolgreichem Push.
-   Ohne konfiguriertes Ziel meldet die Anwendung „lokal“ und ändert nichts.
+1. **Hinauf** – offene Einträge aus `ChangeLog` gehen seitenweise (200) an die Tabelle
+   `"ChangeLog"` des Servers. Eindeutig sind sie über (`OriginDeviceId`, `OriginEntryId`), also
+   Gerät plus lokale Nummer: ein abgebrochener Lauf legt beim nächsten Mal nichts doppelt an.
+   Erst nach dem Commit werden sie lokal als abgeglichen vermerkt.
+2. **Herunter** – der Server liefert die Einträge der anderen Arbeitsplätze ab der zuletzt
+   gesehenen Servernummer. Der Lesestand steht je Ziel in `Settings` (`SyncWatermark|…`);
+   Einträge und Lesestand werden in einer Transaktion gespeichert. Übernommene Einträge gelten
+   sofort als abgeglichen, damit sie nicht wieder hinaufgehen.
+3. **Auslösen** – Reiter „Datenbank“ → „Jetzt abgleichen“ (Recht „Synchronisierung ausführen“).
+   Fehlt die Verbindung, bleibt alles offen und der Hinweis nennt den Grund.
+4. **Nachrüsten** – ältere Installationen kennen die Spalten `OriginEntryId` und `ReceivedUtc`
+   noch nicht; die Anwendung ergänzt sie samt eindeutigem Index beim ersten Abgleich selbst.
 
-Für den echten Betrieb fehlen zwei Schritte: eine `ISyncTransport`-Implementierung (z. B. REST-
-Endpunkt vor PostgreSQL oder Npgsql direkt) und die Konfliktregel pro Entität. Empfohlen:
-RowVersion vergleichen, bei Konflikt feldweise zusammenführen und Löschungen über `IsDeleted`
-gewinnen lassen.
+Bewusst nicht übertragen werden die Feldinhalte: die Nutzlast eines Protokolleintrags nennt nur,
+was sich geändert hat (etwa `{"Name":"…"}`), keine vollständigen Datensätze – Bilder und PDFs
+liegen ohnehin im Dateisystem. Für einen echten Datenabgleich kommt deshalb als nächster Schritt
+eine Entitätenübertragung mit Konfliktregel dazu: RowVersion vergleichen, bei Konflikt feldweise
+zusammenführen und Löschungen über `IsDeleted` gewinnen lassen. Die Tabellen auf dem Server sind
+dafür bereits angelegt.
+
+### Schemaänderungen: Anwendung und Server gemeinsam
+
+Das lokale SQLite-Schema steht in `Database.Schema`, das Server-Schema in
+`installer/sql/liftup-schema.sql`. Beide gehören zusammen; eine neue Tabelle oder Spalte in der
+Anwendung ist erst fertig, wenn sie auch auf dem Server ankommt:
+
+1. Tabelle/Spalte lokal ergänzen und `Database.CurrentSchemaVersion` erhöhen.
+2. Denselben Schritt in `installer/sql/liftup-schema.sql` nachziehen – `CREATE TABLE IF NOT EXISTS`
+für neue Tabellen, `ALTER TABLE … ADD COLUMN IF NOT EXISTS` für neue Spalten bestehender Tabellen.
+3. Den Schemastand im `INSERT INTO "SchemaInfo"` der Datei mitziehen.
+
+Der Test `ServerSchemaTests` vergleicht die lokale Datenbank mit der Server-Datei und schlägt
+fehl, sobald eine lokale Tabelle oder Spalte dort fehlt – eine vergessene Server-Änderung fällt
+also beim Testlauf auf, nicht erst auf dem Server. „Verbindung prüfen“ im Reiter „Datenbank“
+nennt zusätzlich alle Tabellen, die auf dem Server fehlen. Eingespielt wird mit einem erneuten
+Lauf von `installer/Install-ServerDatabase.ps1`: Das Skript ist idempotent, ergänzt nur Fehlendes
+und lässt vorhandene Daten stehen.
 
 ## Projektstruktur
 
@@ -208,6 +251,13 @@ Administratorfreigabe, mit Verknüpfungen im Startmenü und auf dem Desktop. Das
 den deutschen WiX-Assistenten mit eigenem Banner, Dialogbild, Symbol und Lizenztext mit.
 Verknüpfungen, Programmeintrag und Deinstallation verwaltet Windows selbst.
 
+Mit installiert wird der Installer für die **Server-Datenbank**:
+`%LOCALAPPDATA%\Programs\LiftUp\server\Install-ServerDatabase.ps1` samt `server\sql\liftup-schema.sql`.
+Diesen Ordner auf den Datenbank-Server kopieren, dort als Administrator ausführen (er braucht
+PowerShell und `psql`; beides bringt er sich über die PostgreSQL-Installation mit) und die
+erzeugte `liftup-server.json` in LiftUp im Reiter „Datenbank“ einlesen. Der Reiter nennt den
+Pfad des mitgelieferten Installers, solange noch keine Verbindungsdatei eingelesen ist.
+
 Stille Installation und Deinstallation:
 
 ```
@@ -267,13 +317,26 @@ Das Werkzeug liegt nach der Installation neben `LiftUp.App.exe`.
 Server-Datenbank einrichten (einmalig auf dem Datenbank-Server, als Administrator):
 
 ```powershell
-.\installer\Install-ServerDatabase.ps1 -SuperuserPassword "…" -UserPassword "…"
+.\installer\Install-ServerDatabase.ps1 -SuperuserPassword "…" -HostName "db-server.firma.local"
 .\installer\Install-ServerDatabase.ps1 -WhatIf      # nur prüfen, nichts ändern
 ```
 
-Das Skript erkennt eine vorhandene Installation (Dienst `postgresql*`, Registry, Port 5432) und
-überspringt sie; sonst installiert es PostgreSQL still über winget und legt Datenbank und Benutzer
-idempotent an. Clients finden den Server über `LIFTUP_PG_HOST` und `LIFTUP_PG_PORT`.
+Das Skript ermittelt die aktuelle PostgreSQL-Version über `postgresql.org/versions.json` und
+installiert sie still (winget, ohne winget der Original-Installer von EnterpriseDB). Eine
+vorhandene Installation (Dienst `postgresql*`, Registry, `psql`) wird erkannt und übersprungen.
+Anschließend legt es Rolle, Datenbank und das Schema aus `installer/sql/liftup-schema.sql`
+idempotent an und schreibt **`liftup-server.json`** – Server, Port, Datenbank, Schema, Benutzer,
+Passwort, SSL-Modus, Schemastand und Tabellenliste. Ohne `-UserPassword` wird ein zufälliges
+Passwort erzeugt; ein vorhandenes wird dabei neu gesetzt, damit Datei und Server zusammenpassen.
+
+Die Datei enthält das Passwort im Klartext (ihre Rechte werden auf den ausführenden Benutzer
+beschränkt) und gehört nicht ins Repository. Weitere Clients im Netz lassen sich mit
+`-ClientCidr "10.0.0.0/8"` freigeben; das Skript ergänzt dann `pg_hba.conf` und lädt sie neu.
+
+Einlesen in der Anwendung: Reiter **Datenbank** (vor „Protokoll“, nur mit Recht „Benutzer
+verwalten“), Datei wählen, „Einlesen“. LiftUp merkt sich die Angaben in der lokalen Datenbank,
+zeigt Schemastand und Tabellenliste und prüft auf Wunsch die Verbindung samt Anmeldung gegen den
+Server. `LIFTUP_PG_HOST` und `LIFTUP_PG_PORT` gelten weiterhin für `LiftUp.Preflight`.
 
 **Warum nicht automatisch im Client-Setup?** Eine PostgreSQL-Installation braucht Administratorrechte,
 läuft als Dienst und gehört auf den Datenbank-Server, nicht auf jeden Arbeitsplatz. Sie würde außerdem
@@ -339,8 +402,11 @@ Berechtigungen: Microsoft `offline_access Files.ReadWrite.AppFolder`, Google `dr
 - Das MSI konnte in dieser Entwicklungsumgebung nicht erzeugt werden: WiX 5 läuft nur unter Windows.
   Die Definition ist syntaktisch geprüft, das Paket selbst entsteht über `build-installer.ps1` oder die CI.
 - Die Update-Logik ist gegen einen HTTP-Stub getestet, nicht gegen ein echtes GitHub-Release.
-- `installer/Install-ServerDatabase.ps1` konnte hier nicht ausgeführt werden (kein PowerShell unter Linux);
-  geprüft ist nur die Logik, nicht der Lauf gegen einen echten PostgreSQL-Server.
+- `installer/Install-ServerDatabase.ps1` ist gegen einen echten PostgreSQL-Server durchgespielt
+  (PostgreSQL 16 unter Linux): Rolle, Datenbank, Schema, Wiederholung ohne Änderung und die erzeugte
+  Verbindungsdatei inklusive Verbindungsprüfung aus der Anwendung. Nicht geprüft ist der
+  Installationspfad über winget bzw. den EnterpriseDB-Installer – dafür braucht es Windows und
+  Administratorrechte.
 
 ## Prüfliste vor der Auslieferung (Windows)
 

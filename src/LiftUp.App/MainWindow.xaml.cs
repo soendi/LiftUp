@@ -68,6 +68,11 @@ public partial class MainWindow : Window
         groups.Add(administration);
 
         var system = new List<TabItem>();
+        if (session.Can(Permission.ManageUsers))
+        {
+            system.Add(CreateTab("Datenbank", new DatabaseView(_services)));
+        }
+
         if (session.Can(Permission.ViewChangeLog))
         {
             system.Add(CreateTab("Protokoll", new ChangeLogView(_services)));
@@ -102,9 +107,12 @@ public partial class MainWindow : Window
         Tabs.SelectedIndex = Tabs.Items.Count > 0 ? 0 : -1;
 
         StatusText.Text = $"Angemeldet als {session.UserName} · Datenbank: {_services.Database.FilePath}";
-        SyncText.Text = _services.Sync.IsConfigured
-            ? "Synchronisation: verbunden"
-            : "Synchronisation: lokal (PostgreSQL später)";
+        // Der Reiter „Datenbank“ merkt sich die Verbindungsangaben; die Zeile zeigt,
+        // ob der Abgleich eingerichtet ist und wie viele Einträge noch offen sind.
+        var sync = _services.CreateSync();
+        SyncText.Text = sync.IsConfigured
+            ? $"Synchronisation: {sync.TransportName} · {sync.PendingCount} offen"
+            : "Synchronisation: lokal (PostgreSQL nicht eingerichtet)";
         UpdateText.Text = $"Version {_services.Updates.CurrentVersion}";
 
         if (Tabs.Items.Count == 0)

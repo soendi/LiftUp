@@ -13,6 +13,7 @@ public sealed class ChangeLogEntry
     public DateTime ChangedUtc { get; init; }
     public string OriginDeviceId { get; init; } = string.Empty;
     public long RowVersion { get; init; }
+    public string OriginUser { get; init; } = string.Empty;
     public DateTime? SyncedUtc { get; init; }
 }
 
@@ -67,7 +68,7 @@ public sealed class ChangeLogWriter(Database database, string? actorName = null)
     public static IReadOnlyList<ChangeLogEntry> GetPending(SqliteConnection connection, SqliteTransaction? transaction, int maximum = 500)
     {
         using var command = Db.Command(connection, """
-            SELECT Id, EntityType, EntityId, Operation, Payload, ChangedUtc, OriginDeviceId, RowVersion, SyncedUtc
+            SELECT Id, EntityType, EntityId, Operation, Payload, ChangedUtc, OriginDeviceId, RowVersion, SyncedUtc, OriginUser
             FROM ChangeLog
             WHERE SyncedUtc IS NULL
             ORDER BY Id
@@ -90,6 +91,7 @@ public sealed class ChangeLogWriter(Database database, string? actorName = null)
                 OriginDeviceId = reader.Text(6),
                 RowVersion = reader.Int64(7),
                 SyncedUtc = reader.DateOrNull(8),
+                OriginUser = reader.Text(9),
             });
         }
 

@@ -13,4 +13,9 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.10" />
   </ItemGroup>
+
+  <ItemGroup>
+    <!-- Verbindungsprüfung zur zentralen PostgreSQL-Datenbank (Reiter "Datenbank"). -->
+    <PackageReference Include="Npgsql" Version="8.0.9" />
+  </ItemGroup>
 </Project>

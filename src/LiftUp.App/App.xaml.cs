@@ -55,7 +55,29 @@ public sealed class AppServices(Database database)
 {
     public Database Database { get; } = database;
     public AuthService Auth { get; } = new(database);
-    public SyncService Sync { get; } = new(database, new NotConfiguredSyncTransport());
+    /// <summary>
+    /// Abgleich gegen den eingelesenen Server. Ohne Verbindungsdatei bleibt alles lokal;
+    /// die gespeicherten Angaben werden bei jedem Aufruf frisch gelesen.
+    /// </summary>
+    public SyncService CreateSync()
+    {
+        ServerProfile? profile;
+        try
+        {
+            profile = ServerProfiles.Load();
+        }
+        catch (LiftUpException)
+        {
+            profile = null;
+        }
+
+        return profile is null
+            ? new SyncService(Database, new NotConfiguredSyncTransport())
+            : new SyncService(Database, new NpgsqlSyncTransport(profile, Database.GetDeviceId()));
+    }
+
+    public SyncService Sync => CreateSync();
+    public ServerProfileStore ServerProfiles { get; } = new(database);
 
     public UpdateService Updates { get; } = new(
         GitHubReleaseSource.Owner,

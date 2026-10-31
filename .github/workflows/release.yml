@@ -69,6 +69,22 @@ jobs:
             Tee-Object -FilePath logs/03-publish-preflight.log
           if ($LASTEXITCODE -ne 0) { throw "Veröffentlichen des Prüfwerkzeugs fehlgeschlagen." }
 
+      # Der Installer für die Server-Datenbank gehört mit ins Paket: nach der
+      # Installation liegt er unter "server\" neben dem Programm.
+      - name: Server-Installer mitliefern
+        shell: pwsh
+        run: |
+          $server = "artifacts/publish/server"
+          New-Item -ItemType Directory -Force $server | Out-Null
+          Copy-Item installer/Install-ServerDatabase.ps1 $server -Force 2>&1 |
+            Tee-Object -FilePath logs/03b-server-installer.log
+          Copy-Item installer/sql (Join-Path $server "sql") -Recurse -Force 2>&1 |
+            Tee-Object -Append -FilePath logs/03b-server-installer.log
+          if (-not (Test-Path (Join-Path $server "sql/liftup-schema.sql"))) {
+            throw "Server-Installer unvollständig."
+          }
+          Get-ChildItem $server -Recurse | Out-File -Append -FilePath logs/03b-server-installer.log
+
       - name: WiX installieren
         shell: pwsh
         run: |

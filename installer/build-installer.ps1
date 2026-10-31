@@ -24,6 +24,15 @@ dotnet publish tools/LiftUp.Preflight/LiftUp.Preflight.csproj -c $Configuration 
     -p:Version=$Version -p:DebugType=none -o artifacts/publish | Out-Host
 if ($LASTEXITCODE -ne 0) { throw "Veröffentlichen des Prüfwerkzeugs fehlgeschlagen." }
 
+# Den Installer für die Server-Datenbank mit ins Paket legen: nach der Installation
+# liegt er unter "server\" neben dem Programm und kann auf den Datenbank-Server
+# kopiert werden. Die Verbindungsdatei liest die Anwendung im Reiter „Datenbank“.
+Write-Host "2b/5 Server-Installer mitliefern"
+$serverTarget = "artifacts/publish/server"
+New-Item -ItemType Directory -Force $serverTarget | Out-Null
+Copy-Item installer/Install-ServerDatabase.ps1 $serverTarget -Force
+Copy-Item installer/sql (Join-Path $serverTarget "sql") -Recurse -Force
+
 Write-Host "3/5 WiX bereitstellen"
 if (-not (Get-Command wix -ErrorAction SilentlyContinue)) {
     dotnet tool install --global wix --version 5.0.2 | Out-Host

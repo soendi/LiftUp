@@ -8,3 +8,5 @@ obj/
 *.db-wal
 TestResults/
 artifacts/
+# Verbindungsdatei des Server-Installers enthält das Passwort im Klartext.
+liftup-server.json
