@@ -12,7 +12,7 @@ namespace LiftUp.Core.Data;
 /// </summary>
 public sealed class Database
 {
-    public const int CurrentSchemaVersion = 7;
+    public const int CurrentSchemaVersion = 8;
 
     private readonly string _connectionString;
 
@@ -137,6 +137,9 @@ public sealed class Database
 
         // Version 7 ergänzt die Kundenanschrift und eigene Ansprechpersonen.
         MigrateCustomerContacts(connection);
+
+        // Version 8 gibt dem Administrator Rechte, die erst nach dem Anlegen der Rolle dazukamen.
+        MigrateAdministratorPermissions(connection);
 
         using var command = Db.Command(connection, "UPDATE SchemaInfo SET Version = $version;");
         command.With("$version", CurrentSchemaVersion);
@@ -276,6 +279,23 @@ public sealed class Database
             CREATE INDEX IF NOT EXISTS IX_ProjectContacts_Project ON ProjectContacts (ProjectId);
             """);
         create.ExecuteNonQuery();
+    }
+
+    /// <summary>
+    /// Version 8: Rollen speichern ihre Rechte als Maske, die beim Anlegen einmalig
+    /// geschrieben wird. Später ergänzte Rechte – etwa <c>ManageSnippets</c> – fehlten
+    /// dadurch in älteren Datenbanken selbst beim Administrator. Er gilt in der
+    /// Rollenverwaltung ohnehin immer als voll berechtigt, deshalb bekommt er hier
+    /// alle Rechte. Selbst angelegte Rollen bleiben unverändert.
+    /// </summary>
+    private static void MigrateAdministratorPermissions(SqliteConnection connection)
+    {
+        using var command = Db.Command(connection, """
+            UPDATE Roles SET Permissions = $all, RowVersion = RowVersion + 1
+            WHERE Name = 'Administrator' AND IsSystem = 1 AND Permissions <> $all;
+            """);
+        command.With("$all", (int)Permission.All);
+        command.ExecuteNonQuery();
     }
 
     /// <summary>Übernimmt vorhandene Typnamen bestehender Vorlagen in die Typenliste.</summary>

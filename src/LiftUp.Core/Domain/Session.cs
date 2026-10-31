@@ -30,7 +30,7 @@ public sealed class Session
     {
         if (!Can(permission))
         {
-            throw new PermissionDeniedException(permission);
+            throw new PermissionDeniedException(permission, RoleName);
         }
     }
 }
@@ -39,8 +39,15 @@ public class LiftUpException(string message) : Exception(message);
 
 public sealed class ValidationException(string message) : LiftUpException(message);
 
-public sealed class PermissionDeniedException(Permission missing)
-    : LiftUpException($"Ihre Rolle ({missing}) erlaubt diese Aktion nicht. Fehlendes Recht: {PermissionCatalog.Describe(missing)}.")
+public sealed class PermissionDeniedException : LiftUpException
 {
-    public Permission MissingPermission { get; } = missing;
+    public PermissionDeniedException(Permission missing, string? roleName = null)
+        : base(string.IsNullOrWhiteSpace(roleName)
+            ? $"Ihre Rolle erlaubt diese Aktion nicht. Fehlendes Recht: {PermissionCatalog.Describe(missing)}."
+            : $"Ihre Rolle ({roleName}) erlaubt diese Aktion nicht. Fehlendes Recht: {PermissionCatalog.Describe(missing)}.")
+    {
+        MissingPermission = missing;
+    }
+
+    public Permission MissingPermission { get; }
 }
