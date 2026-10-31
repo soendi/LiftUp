@@ -84,10 +84,20 @@ internal static class Program
             Console.WriteLine(portAnswers
                 ? $"PostgreSQL ist bereits vorhanden – Port {options.Port} antwortet, es wird nichts installiert."
                 : $"PostgreSQL ist bereits vorhanden – Dienst \u201E{serviceName}\u201C, es wird nichts installiert.");
-            if (!portAnswers)
+            if (!portAnswers && serviceName is not null)
             {
-                Console.WriteLine($"Achtung: Auf Port {options.Port} antwortet kein PostgreSQL. Läuft der Dienst?");
-                Console.WriteLine("Falls der Server auf einem anderen Port läuft, den mit --port angeben.");
+                Console.WriteLine($"Der Dienst „{serviceName}“ antwortet auf Port {options.Port} nicht – er wird gestartet …");
+                if (PostgreSqlLocator.TryStartService(serviceName) &&
+                    await WaitForPortAsync("127.0.0.1", options.Port, TimeSpan.FromSeconds(30)))
+                {
+                    portAnswers = true;
+                    Console.WriteLine("Der Dienst läuft, der Port antwortet.");
+                }
+                else
+                {
+                    Console.WriteLine($"Achtung: Auf Port {options.Port} antwortet weiterhin kein PostgreSQL.");
+                    Console.WriteLine("Falls der Server auf einem anderen Port läuft, den mit --port angeben.");
+                }
             }
         }
         else
@@ -411,6 +421,32 @@ internal static class PostgreSqlLocator
     /// </summary>
     public static bool IsInstalled(int port) =>
         PortAnswers("127.0.0.1", port) || ServiceExists();
+
+    /// <summary>
+    /// Startet einen vorhandenen, aber gestoppten Dienst und meldet, ob er läuft.
+    /// Auf einem Server mit bereits installiertem PostgreSQL ist das der
+    /// Unterschied zwischen „Datenbank wird angelegt“ und „Verbindung abgelehnt“.
+    /// </summary>
+    public static bool TryStartService(string serviceName)
+    {
+        try
+        {
+            using var service = new ServiceController(serviceName);
+            if (service.Status != ServiceControllerStatus.Running)
+            {
+                service.Start();
+                service.WaitForStatus(ServiceControllerStatus.Running, TimeSpan.FromSeconds(30));
+            }
+
+            service.Refresh();
+            return service.Status == ServiceControllerStatus.Running;
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or UnauthorizedAccessException
+                                              or PlatformNotSupportedException or System.ComponentModel.Win32Exception)
+        {
+            return false;
+        }
+    }
 
     /// <summary>Name des ersten PostgreSQL-Dienstes, sonst null.</summary>
     public static string? FindServiceName()
