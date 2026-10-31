@@ -12,6 +12,7 @@ public partial class ImagesView : UserControl
     private sealed record ProjectOption(Guid? Id, string Name);
 
     private const string AllCategories = "Alle Kategorien";
+    private const string AllTags = "Alle Schlagworte";
 
     private readonly AppServices _services;
     private IReadOnlyList<ImageListItem> _items = [];
@@ -51,6 +52,9 @@ public partial class ImagesView : UserControl
         {
             _items = _services.Images.Search(SelectedProjectId, SearchBox.Text, ArchiveToggle.IsChecked == true);
 
+            var previousCategory = CategoryFilterBox.SelectedItem as string;
+            var previousTag = TagFilterBox.SelectedItem as string;
+
             var categories = new List<string> { AllCategories };
             categories.AddRange(_items
                 .Select(item => item.Category)
@@ -58,8 +62,21 @@ public partial class ImagesView : UserControl
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderBy(category => category, StringComparer.OrdinalIgnoreCase));
 
+            var tags = new List<string> { AllTags };
+            tags.AddRange(_items
+                .SelectMany(item => SplitTags(item.Tags))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(tag => tag, StringComparer.CurrentCultureIgnoreCase));
+
             CategoryFilterBox.ItemsSource = categories;
-            CategoryFilterBox.SelectedIndex = 0;
+            CategoryFilterBox.SelectedItem = previousCategory is not null && categories.Contains(previousCategory)
+                ? previousCategory
+                : AllCategories;
+
+            TagFilterBox.ItemsSource = tags;
+            TagFilterBox.SelectedItem = previousTag is not null && tags.Contains(previousTag)
+                ? previousTag
+                : AllTags;
 
             ApplyCategoryFilter();
         }
@@ -69,16 +86,36 @@ public partial class ImagesView : UserControl
         }
     }
 
+    /// <summary>Grenzt die Liste nach Kategorie und Schlagwort ein; beide Filter gelten zusammen.</summary>
     private void ApplyCategoryFilter()
     {
         var category = CategoryFilterBox.SelectedItem as string;
-        var filtered = string.IsNullOrWhiteSpace(category) || category == AllCategories
-            ? _items
-            : _items.Where(item => string.Equals(item.Category, category, StringComparison.OrdinalIgnoreCase)).ToArray();
+        var tag = TagFilterBox.SelectedItem as string;
 
-        ImagesGrid.ItemsSource = filtered;
-        InfoText.Text = filtered.Count == 1 ? "1 Bild" : $"{filtered.Count} Bilder";
+        IEnumerable<ImageListItem> filtered = _items;
+
+        if (!string.IsNullOrWhiteSpace(category) && category != AllCategories)
+        {
+            filtered = filtered.Where(item =>
+                string.Equals(item.Category, category, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (!string.IsNullOrWhiteSpace(tag) && tag != AllTags)
+        {
+            filtered = filtered.Where(item =>
+                SplitTags(item.Tags).Contains(tag, StringComparer.CurrentCultureIgnoreCase));
+        }
+
+        var result = filtered.ToArray();
+        ImagesGrid.ItemsSource = result;
+        InfoText.Text = result.Length == 1 ? "1 Bild" : $"{result.Length} Bilder";
     }
+
+    /// <summary>Schlagworte eines Bildes; in der Datenbank durch Komma getrennt.</summary>
+    private static string[] SplitTags(string? tags) =>
+        string.IsNullOrWhiteSpace(tags)
+            ? []
+            : tags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
     private ImageListItem? Selected => ImagesGrid.SelectedItem as ImageListItem;
 
@@ -145,6 +182,8 @@ public partial class ImagesView : UserControl
     private void OnFilterChanged(object sender, SelectionChangedEventArgs e) => LoadImages();
 
     private void OnCategoryChanged(object sender, SelectionChangedEventArgs e) => ApplyCategoryFilter();
+
+    private void OnTagChanged(object sender, SelectionChangedEventArgs e) => ApplyCategoryFilter();
 
     private void OnSearchChanged(object sender, TextChangedEventArgs e) => LoadImages();
 
