@@ -159,7 +159,7 @@ public partial class HtmlEditor : UserControl
                 var offset = selection.anchorOffset;
                 var before = node.nodeValue.substring(0, offset);
 
-                // „&&bild“ sucht in allen Projekten, „&bild“ nur im aktiven Projekt.
+                // „&&bild“ sucht im aktiven Projekt plus globaler Bibliothek, „&bild“ nur im Projekt.
                 var image = /(^|[\s\u00a0>])(&{1,2})([^\s&]{0,40})$/.exec(before);
                 if (image) {
                     var prefix = image[2].length;
@@ -474,8 +474,9 @@ public partial class HtmlEditor : UserControl
     }
 
     /// <summary>
-    /// Schaltet die Bildsuche ein: nach „&amp;“ sucht der Editor im aktiven Projekt, nach
-    /// „&amp;&amp;“ in allen Projekten. Jeder Treffer zeigt ein Vorschaubild.
+    /// Schaltet die Bildsuche ein: nach „&amp;“ sucht der Editor nur im aktiven Projekt, nach
+    /// „&amp;&amp;“ zusätzlich in der globalen Bibliothek – in anderen Projekten nie.
+    /// Jeder Treffer zeigt ein Vorschaubild.
     /// </summary>
     public void EnableImageAutocomplete(Func<string, bool, IReadOnlyList<ImageChoice>> search)
     {

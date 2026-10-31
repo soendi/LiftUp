@@ -13,7 +13,7 @@ public sealed class ImageRepository
     /// <summary>
     /// Sucht Bilder. Ohne Projekt enthält das Ergebnis die globale Bibliothek, mit Projekt
     /// zusätzlich dessen eigene Bilder. <paramref name="allProjects"/> hebt die
-    /// Projektgrenze auf (für „&amp;&amp;bild“ im Dokumenteditor).
+    /// Projektgrenze auf (Bilderansicht mit „Alle Projekte“).
     /// </summary>
     public IReadOnlyList<ImageListItem> Search(
         SqliteConnection connection,

@@ -83,6 +83,29 @@ public sealed class ImageLibraryTests
     }
 
     [Fact]
+    public void Dokumentensuche_bleibt_im_aktiven_projekt()
+    {
+        using var fixture = new TestDatabase();
+        var session = fixture.LoginAsAdmin();
+        var images = Images(fixture, session);
+        var first = CreateProject(fixture, session, "Projekt Eins");
+        var second = CreateProject(fixture, session, "Projekt Zwei");
+
+        images.Import(CreateImage(fixture, "global.png"), new ImageInput { Name = "Global" });
+        images.Import(CreateImage(fixture, "p1.png"), new ImageInput { Name = "Plan", ProjectId = first.Id });
+        images.Import(CreateImage(fixture, "p2.png"), new ImageInput { Name = "Detail", ProjectId = second.Id });
+
+        // „&“ sucht nur im gewählten Projekt, nicht in der globalen Bibliothek.
+        var onlyProject = images.SearchForDocument(first.Id, null, includeGlobal: false);
+        Assert.Equal("Plan", Assert.Single(onlyProject).Name);
+
+        // „&&“ nimmt die globale Bibliothek dazu, aber kein fremdes Projekt.
+        var withGlobal = images.SearchForDocument(first.Id, null, includeGlobal: true);
+        Assert.Equal(2, withGlobal.Count);
+        Assert.DoesNotContain(withGlobal, item => item.Name == "Detail");
+    }
+
+    [Fact]
     public void Bearbeiten_aendert_name_kategorie_und_schlagworte()
     {
         using var fixture = new TestDatabase();

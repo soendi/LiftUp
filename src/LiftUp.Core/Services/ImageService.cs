@@ -46,6 +46,22 @@ public sealed class ImageService
         return _images.Search(connection, null, projectId, search, includeArchived, allProjects);
     }
 
+    /// <summary>
+    /// Sucht Bilder für die „&amp;“-Eingabe in einem Dokument: immer nur das gewählte Projekt,
+    /// mit <paramref name="includeGlobal"/> zusätzlich die globale Bibliothek. Bilder anderer
+    /// Projekte werden nie geliefert, auch nicht bei leerer Suche.
+    /// </summary>
+    public IReadOnlyList<ImageListItem> SearchForDocument(Guid projectId, string? search, bool includeGlobal)
+    {
+        _actor.Require(Permission.ViewProjects);
+        using var connection = _database.Open();
+
+        // Die Abfrage liefert Projekt plus globale Bibliothek; ohne Globale wird gefiltert.
+        return _images.Search(connection, null, projectId, search, includeArchived: false)
+            .Where(image => !image.IsGlobal || includeGlobal)
+            .ToArray();
+    }
+
     /// <summary>Liefert ein Bild aus der Bibliothek.</summary>
     public LibraryImage Get(Guid id)
     {

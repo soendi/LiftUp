@@ -182,7 +182,7 @@ public partial class DocumentComposerWindow : Window
         }
 
         SelectFirstSection();
-        InfoText.Text = $"{template.Name}: {defined.Count} Abschnitt(e) fließen mit Abstand untereinander; der erste beginnt auf Seite 2. Im Text mit /Textbaustein und &Bild suchen (&&Bild für alle Projekte).";
+        InfoText.Text = $"{template.Name}: {defined.Count} Abschnitt(e) fließen mit Abstand untereinander; der erste beginnt auf Seite 2. Im Text mit /Textbaustein und &Bild suchen (&Bild im Projekt, &&Bild auch in der globalen Bibliothek).";
     }
 
     /// <summary>
@@ -288,11 +288,11 @@ public partial class DocumentComposerWindow : Window
     }
 
     /// <summary>
-    /// Sucht für die „&amp;“-Eingabe im Editor nach Bildern. „&amp;“ durchsucht die Bilder
-    /// des aktiven Projekts (globale Bibliothek plus Projektbilder), „&amp;&amp;“ alle.
+    /// Sucht für die „&amp;“-Eingabe im Editor nach Bildern. „&amp;“ durchsucht nur das aktive
+    /// Projekt, „&amp;&amp;“ zusätzlich die globale Bibliothek – Bilder anderer Projekte nie.
     /// Jeder Treffer bringt ein kleines Vorschaubild für die Liste mit.
     /// </summary>
-    private IReadOnlyList<HtmlEditor.ImageChoice> SearchImages(string query, bool allProjects)
+    private IReadOnlyList<HtmlEditor.ImageChoice> SearchImages(string query, bool includeGlobal)
     {
         var project = SelectedProject;
         if (project is null)
@@ -309,7 +309,7 @@ public partial class DocumentComposerWindow : Window
                 _services.Images.SyncProjectFolder(project.Id);
             }
 
-            var images = _services.Images.Search(project.Id, query, allProjects: allProjects);
+            var images = _services.Images.SearchForDocument(project.Id, query, includeGlobal);
             var choices = new List<HtmlEditor.ImageChoice>();
 
             foreach (var image in images)
