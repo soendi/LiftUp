@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using LiftUp.Core.Domain;
 using Microsoft.Win32;
 
@@ -22,12 +23,21 @@ public partial class ImagesView : UserControl
     public IReadOnlyCollection<string> ActiveTags => _selectedTags;
 
     private readonly AppServices _services;
+    private readonly DispatcherTimer _folderTimer;
     private IReadOnlyList<ImageListItem> _items = [];
+    private FileSystemWatcher? _folderWatcher;
+    private bool _syncingFromWatcher;
 
     public ImagesView(AppServices services)
     {
         _services = services;
         InitializeComponent();
+
+        // Änderungen im Projektordner werden gebündelt und dann eingelesen.
+        _folderTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(700) };
+        _folderTimer.Tick += OnFolderTimerTick;
+        Loaded += (_, _) => StartFolderWatcher();
+        Unloaded += (_, _) => StopFolderWatcher();
 
         LoadProjects();
         LoadImages();
@@ -380,6 +390,112 @@ public partial class ImagesView : UserControl
         if (sync.Any)
         {
             InfoText.Text = DescribeSync(sync);
+        }
+
+        StartFolderWatcher();
+    }
+
+    /// <summary>
+    /// Beobachtet den Projektordner, damit neue, verschobene und umbenannte Bilder ohne
+    /// manuellen Abgleich erscheinen. Die Ereignisse werden gebündelt, damit eine größere
+    /// Änderung nicht viele Abgleiche auf einmal auslöst.
+    /// </summary>
+    private void StartFolderWatcher()
+    {
+        StopFolderWatcher();
+
+        if (SelectedProjectId is not { } projectId)
+        {
+            return;
+        }
+
+        try
+        {
+            var project = _services.Projects.GetProject(projectId);
+            if (string.IsNullOrWhiteSpace(project.FolderPath) || !Directory.Exists(project.FolderPath))
+            {
+                return;
+            }
+
+            _folderWatcher = new FileSystemWatcher(project.FolderPath)
+            {
+                IncludeSubdirectories = true,
+                Filter = "*.*",
+                NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName |
+                               NotifyFilters.LastWrite | NotifyFilters.Size,
+                EnableRaisingEvents = true,
+            };
+
+            _folderWatcher.Created += OnFolderChanged;
+            _folderWatcher.Changed += OnFolderChanged;
+            _folderWatcher.Deleted += OnFolderChanged;
+            _folderWatcher.Renamed += OnFolderRenamed;
+            _folderWatcher.Error += OnFolderWatcherError;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or LiftUpException)
+        {
+            InfoText.Text = "Der Projektordner kann nicht überwacht werden: " + exception.Message;
+        }
+    }
+
+    private void StopFolderWatcher()
+    {
+        _folderTimer.Stop();
+
+        if (_folderWatcher is null)
+        {
+            return;
+        }
+
+        _folderWatcher.EnableRaisingEvents = false;
+        _folderWatcher.Created -= OnFolderChanged;
+        _folderWatcher.Changed -= OnFolderChanged;
+        _folderWatcher.Deleted -= OnFolderChanged;
+        _folderWatcher.Renamed -= OnFolderRenamed;
+        _folderWatcher.Error -= OnFolderWatcherError;
+        _folderWatcher.Dispose();
+        _folderWatcher = null;
+    }
+
+    private void OnFolderChanged(object sender, FileSystemEventArgs e) => QueueFolderSync();
+
+    private void OnFolderRenamed(object sender, RenamedEventArgs e) => QueueFolderSync();
+
+    private void OnFolderWatcherError(object sender, ErrorEventArgs e) => QueueFolderSync();
+
+    /// <summary>Dateiereignisse kommen aus dem Hintergrund; der Zeitgeber gehört zur Oberfläche.</summary>
+    private void QueueFolderSync() => Dispatcher.BeginInvoke(new Action(() =>
+    {
+        if (_folderWatcher is null)
+        {
+            return;
+        }
+
+        _folderTimer.Stop();
+        _folderTimer.Start();
+    }));
+
+    private void OnFolderTimerTick(object? sender, EventArgs e)
+    {
+        _folderTimer.Stop();
+        if (_syncingFromWatcher || _folderWatcher is null)
+        {
+            return;
+        }
+
+        _syncingFromWatcher = true;
+        try
+        {
+            var sync = SyncProjectFolder();
+            if (sync.Any)
+            {
+                LoadImages();
+                InfoText.Text = DescribeSync(sync);
+            }
+        }
+        finally
+        {
+            _syncingFromWatcher = false;
         }
     }
 
