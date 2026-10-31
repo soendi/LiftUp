@@ -171,16 +171,29 @@ jobs:
 
       # --- Installation des Pakets -----------------------------------------
 
-      - name: Installer still installieren
+      - name: Server-MSI still installieren
         shell: pwsh
         run: |
-          $bundle = (Resolve-Path artifacts/LiftUp-Setup-Server.exe).Path
-          $process = Start-Process -FilePath $bundle -ArgumentList "/quiet", "/norestart" -Wait -PassThru
-          Write-Host "Exitcode: $($process.ExitCode)"
-          if ($process.ExitCode -notin 0, 3010) { throw "Installation fehlgeschlagen (Exitcode $($process.ExitCode))." }
+          $msi = (Resolve-Path artifacts/LiftUp-Setup-Server.msi).Path
+          $installLog = Join-Path $env:GITHUB_WORKSPACE "artifacts/msi-install.log"
+          $arguments = "/i `"$msi`" /qn /norestart /l*v `"$installLog`""
+          $process = Start-Process -FilePath msiexec.exe -ArgumentList $arguments -Wait -PassThru
+          Write-Host "MSI-Exitcode: $($process.ExitCode)"
+          if ($process.ExitCode -notin 0, 3010) {
+            Get-Content $installLog -Tail 40 -ErrorAction SilentlyContinue
+            throw "Installation fehlgeschlagen (Exitcode $($process.ExitCode))."
+          }
 
           $setup = Join-Path $env:ProgramFiles "LiftUp Server\LiftUp.ServerSetup.exe"
-          if (-not (Test-Path $setup)) { throw "LiftUp.ServerSetup.exe wurde nicht installiert." }
+          if (-not (Test-Path $setup)) {
+            Write-Host "Inhalt von $env:ProgramFiles:"
+            Get-ChildItem $env:ProgramFiles -Directory | Select-Object -ExpandProperty Name | Out-Host
+            Write-Host "Gefundene ServerSetup-Dateien:"
+            Get-ChildItem $env:ProgramFiles -Recurse -Filter "LiftUp.ServerSetup.exe" -ErrorAction SilentlyContinue |
+              Select-Object -ExpandProperty FullName | Out-Host
+            Get-Content $installLog -Tail 40 -ErrorAction SilentlyContinue
+            throw "LiftUp.ServerSetup.exe wurde nicht installiert."
+          }
 
           $shortcut = Join-Path $env:ProgramData "Microsoft\Windows\Start Menu\Programs\LiftUp Server\LiftUp Server einrichten.lnk"
           if (-not (Test-Path $shortcut)) { throw "Startmenü-Verknüpfung fehlt." }
@@ -295,10 +308,15 @@ jobs:
       - name: Deinstallieren
         shell: pwsh
         run: |
-          $bundle = (Resolve-Path artifacts/LiftUp-Setup-Server.exe).Path
-          $process = Start-Process -FilePath $bundle -ArgumentList "/uninstall", "/quiet", "/norestart" -Wait -PassThru
-          Write-Host "Exitcode: $($process.ExitCode)"
-          if ($process.ExitCode -notin 0, 3010) { throw "Deinstallation fehlgeschlagen (Exitcode $($process.ExitCode))." }
+          $msi = (Resolve-Path artifacts/LiftUp-Setup-Server.msi).Path
+          $uninstallLog = Join-Path $env:GITHUB_WORKSPACE "artifacts/msi-uninstall.log"
+          $arguments = "/x `"$msi`" /qn /norestart /l*v `"$uninstallLog`""
+          $process = Start-Process -FilePath msiexec.exe -ArgumentList $arguments -Wait -PassThru
+          Write-Host "MSI-Exitcode: $($process.ExitCode)"
+          if ($process.ExitCode -notin 0, 3010) {
+            Get-Content $uninstallLog -Tail 40 -ErrorAction SilentlyContinue
+            throw "Deinstallation fehlgeschlagen (Exitcode $($process.ExitCode))."
+          }
 
           $setup = Join-Path $env:ProgramFiles "LiftUp Server\LiftUp.ServerSetup.exe"
           if (Test-Path $setup) { throw "LiftUp.ServerSetup.exe ist nach der Deinstallation noch vorhanden." }
