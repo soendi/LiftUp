@@ -500,6 +500,32 @@ public partial class DocumentComposerWindow : Window
             return;
         }
 
+        // Fehlende Bilder vor dem Erzeugen melden – geschrieben wird dann nichts.
+        IReadOnlyList<string> missingImages;
+        try
+        {
+            missingImages = _services.Documents.FindMissingImages(project.Id, template.Id);
+        }
+        catch (LiftUpException exception)
+        {
+            InfoText.Text = exception.Message;
+            return;
+        }
+
+        if (missingImages.Count > 0)
+        {
+            InfoText.Text = "PDF nicht erzeugt: In der Vorlage fehlen Bilder.";
+            MessageBox.Show(
+                "Diese Bilder aus der Vorlage fehlen:\n\n"
+                + string.Join("\n", missingImages.Select(name => "• " + name))
+                + "\n\nBitte die Bilder in der Bilderansicht ergänzen, im Projektordner ablegen "
+                + "oder die Platzhalter aus der Vorlage entfernen.",
+                "Bilder fehlen",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
         var contents = new List<DocumentSectionContent>();
         try
         {

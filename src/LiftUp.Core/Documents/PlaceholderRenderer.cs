@@ -75,6 +75,22 @@ public static class PlaceholderRenderer
             .ToArray();
     }
 
+    /// <summary>
+    /// Bildnamen aus <c>{{bild:Name}}</c> bzw. <c>{{image:Name}}</c>, ohne Doppelte.
+    /// Grundlage für die Prüfung vor dem Erzeugen eines PDFs.
+    /// </summary>
+    public static IReadOnlyList<string> FindImageNames(string? html) =>
+        FindPlaceholders(html ?? string.Empty)
+            .Select(token => token.StartsWith(ImagePrefix, StringComparison.OrdinalIgnoreCase)
+                ? token[ImagePrefix.Length..]
+                : token.StartsWith(ImagePrefixEnglish, StringComparison.OrdinalIgnoreCase)
+                    ? token[ImagePrefixEnglish.Length..]
+                    : null)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Select(name => name!.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
     public static string Render(string html, PlaceholderContext context)
     {
         ArgumentNullException.ThrowIfNull(context);

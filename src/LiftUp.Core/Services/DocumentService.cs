@@ -48,6 +48,56 @@ public sealed class DocumentService
         return sections is { Count: > 0 } ? DocumentComposition.Build(html, sections) : html;
     }
 
+    /// <summary>
+    /// Prüft die Bild-Platzhalter der Vorlage vor dem Erzeugen: Namen, für die es kein
+    /// aktives Bild oder keine Datei mehr gibt. Eine leere Liste bedeutet „alles da“.
+    /// </summary>
+    public IReadOnlyList<string> FindMissingImages(Guid projectId, Guid templateId)
+    {
+        _actor.Require(Permission.CreateDocuments);
+
+        using var connection = _database.Open();
+        var project = _projects.GetById(connection, null, projectId)
+                      ?? throw new ValidationException("Das Projekt wurde nicht gefunden.");
+        var version = _templates.GetLatestVersion(connection, null, templateId)
+                      ?? throw new ValidationException("Für diese Vorlage gibt es noch keine Version.");
+
+        return FindMissingImages(connection, null, project.Id, version.Html);
+    }
+
+    private IReadOnlyList<string> FindMissingImages(
+        Microsoft.Data.Sqlite.SqliteConnection connection,
+        Microsoft.Data.Sqlite.SqliteTransaction? transaction,
+        Guid projectId,
+        string html)
+    {
+        var names = PlaceholderRenderer.FindImageNames(html);
+        if (names.Count == 0)
+        {
+            return [];
+        }
+
+        var images = BuildImageLookup(connection, transaction, projectId);
+        return names
+            .Where(name => !images.TryGetValue(name, out var image) || !File.Exists(image.FilePath))
+            .ToArray();
+    }
+
+    /// <summary>Bricht ab, bevor eine Datei geschrieben wird, wenn Bilder fehlen.</summary>
+    private static void EnsureImagesPresent(IReadOnlyList<string> missing)
+    {
+        if (missing.Count == 0)
+        {
+            return;
+        }
+
+        throw new ValidationException(missing.Count == 1
+            ? $"Das Bild \"{missing[0]}\" fehlt. Bitte in der Bilderansicht ergänzen, im Projektordner ablegen " +
+              "oder den Platzhalter aus der Vorlage entfernen."
+            : $"Diese Bilder fehlen: {string.Join(", ", missing.Select(name => $"\"{name}\""))}. " +
+              "Bitte ergänzen oder die Platzhalter aus der Vorlage entfernen.");
+    }
+
     public async Task<ProjectDocument> CreatePdfAsync(
         Guid projectId,
         Guid templateId,
@@ -66,6 +116,8 @@ public sealed class DocumentService
                        ?? throw new ValidationException("Die Vorlage wurde nicht gefunden.");
         var version = _templates.GetLatestVersion(connection, transaction, templateId)
                       ?? throw new ValidationException("Für diese Vorlage gibt es noch keine Version.");
+
+        EnsureImagesPresent(FindMissingImages(connection, transaction, project.Id, version.Html));
 
         var html = RenderTitlePage(connection, transaction, project, version);
         return await SavePdfAsync(connection, transaction, project, template, version, html, null, settings, cancellationToken)
@@ -96,6 +148,8 @@ public sealed class DocumentService
                        ?? throw new ValidationException("Die Vorlage wurde nicht gefunden.");
         var version = _templates.GetLatestVersion(connection, transaction, templateId)
                       ?? throw new ValidationException("Für diese Vorlage gibt es noch keine Version.");
+
+        EnsureImagesPresent(FindMissingImages(connection, transaction, project.Id, version.Html));
 
         var titlePage = RenderTitlePage(connection, transaction, project, version);
         var html = DocumentComposition.Build(titlePage, sections);
