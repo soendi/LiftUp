@@ -121,6 +121,27 @@ public partial class ImagesView : UserControl
         InfoText.Text = result.Length == 1 ? "1 Bild" : $"{result.Length} Bilder";
     }
 
+    /// <summary>
+    /// Filtert direkt über ein Schlagwort in der Liste. Ein erneuter Klick auf dasselbe
+    /// Schlagwort hebt den Filter wieder auf.
+    /// </summary>
+    private void OnTagClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: string tag } || string.IsNullOrWhiteSpace(tag))
+        {
+            return;
+        }
+
+        if (!_selectedTags.Remove(tag))
+        {
+            _selectedTags.Add(tag);
+        }
+
+        UpdateTagFilterButton();
+        ApplyCategoryFilter();
+        e.Handled = true;
+    }
+
     /// <summary>Zeigt die aktuelle Schlagwortauswahl auf dem Knopf.</summary>
     private void UpdateTagFilterButton()
     {

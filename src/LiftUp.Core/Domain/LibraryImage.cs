@@ -54,6 +54,9 @@ public sealed class ImageListItem
 
     public string ScopeText => IsGlobal ? "global" : "Projekt";
     public string StatusText => IsArchived ? "archiviert" : "aktiv";
+
+    /// <summary>Einzelne Schlagworte für die Klickliste in der Bilderansicht.</summary>
+    public IReadOnlyList<string> TagList => ImageTags.Split(Tags);
     public string FileStatusText => FileExists ? "vorhanden" : "fehlt";
     public string Placeholder => $"{{{{bild:{Name}}}}}";
     public string CreatedText { get; init; } = string.Empty;

@@ -39,6 +39,7 @@ public sealed class ImageLibraryTests
 
         var listed = Assert.Single(images.Search(null, "rot"));
         Assert.Equal("logo, rot", listed.Tags);
+        Assert.Equal(["logo", "rot"], listed.TagList);
         Assert.Single(images.Search(null, "Grundriss"));
         Assert.Single(images.Search(null, "plan"));
         Assert.Single(images.Search(null, "logo rot"));
