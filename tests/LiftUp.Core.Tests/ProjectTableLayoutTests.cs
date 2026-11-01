@@ -36,6 +36,29 @@ public sealed class ProjectTableLayoutTests
     }
 
     [Fact]
+    public void Querformat_tabelle_passt_genau_auf_die_seite()
+    {
+        var html = ProjectTableSheet.RenderDocument(
+            ProjectTableCatalog.Zustandsanalyse,
+            [Row()],
+            new PdfPageSettings(Landscape: true));
+
+        // A4 quer (297 mm) abzüglich zweimal 15 mm Rand.
+        Assert.Contains("width:267mm;table-layout:fixed", html);
+
+        var widths = Regex.Matches(html, "<col style=\"width:([0-9.]+)mm\"")
+            .Select(match => double.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture))
+            .ToList();
+
+        Assert.Equal(ProjectTableCatalog.Zustandsanalyse.Columns.Count, widths.Count);
+        Assert.InRange(widths.Sum(), 266.0, 268.0);
+
+        // Keine Spalte ist doppelt so breit, wie sie sein müsste.
+        Assert.InRange(widths.Max(), 10, 30);
+        Assert.InRange(widths.Min(), 3, 8);
+    }
+
+    [Fact]
     public void Alle_ueberschriften_stehen_gedreht()
     {
         var html = ProjectTableSheet.Render(ProjectTableCatalog.Zustandsanalyse, [Row()], pageBreak: false);

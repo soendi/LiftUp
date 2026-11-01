@@ -13,10 +13,15 @@ public static class ProjectTableSheet
 {
     /// <summary>HTML des Blattes; leer, wenn es keine Zeilen gibt.</summary>
     /// <param name="pageBreak">Beim Anhängen an das Dokument <c>true</c>, als eigenes Blatt <c>false</c>.</param>
+    /// <param name="availableWidthMm">
+    /// Druckbare Breite der Seite. Ist sie gesetzt, bekommt die Tabelle genau diese Breite und
+    /// die Spalten teilen sie sich nach ihrem Bedarf; ohne Angabe teilen sie sich in Prozent.
+    /// </param>
     public static string Render(
         ProjectTableDefinition definition,
         IReadOnlyList<ProjectTableRow> rows,
-        bool pageBreak = true)
+        bool pageBreak = true,
+        double availableWidthMm = 0)
     {
         ArgumentNullException.ThrowIfNull(definition);
         ArgumentNullException.ThrowIfNull(rows);
@@ -36,8 +41,9 @@ public static class ProjectTableSheet
 
         // Feste Spaltenbreiten und gedrehte Überschriften halten die Tabelle in der
         // Seitenbreite; ohne table-layout würde der Browser die Spalten wieder aufblähen.
-        builder.Append("<table style=\"width:100%;table-layout:fixed;border-collapse:collapse;font-size:6.8pt;\">");
-        AppendColumnWidths(builder, definition.Columns);
+        var tableWidth = availableWidthMm > 0 ? Mm(availableWidthMm) : "100%";
+        builder.Append($"<table style=\"width:{tableWidth};table-layout:fixed;border-collapse:collapse;font-size:6.8pt;\">");
+        AppendColumnWidths(builder, definition.Columns, availableWidthMm);
         AppendHead(builder, definition.Columns);
         builder.Append("<tbody>");
 
@@ -52,12 +58,12 @@ public static class ProjectTableSheet
                 if (column.Kind == ProjectTableColumnKind.Rating)
                 {
                     var fill = RatingBackground(value) ?? "#ffffff";
-                    builder.Append($"<td style=\"border:1px solid #9aa3ac;padding:2pt;background:{fill};\">&#160;</td>");
+                    builder.Append($"<td style=\"border:1px solid #9aa3ac;padding:1.2pt;background:{fill};box-sizing:border-box;\">&#160;</td>");
                     continue;
                 }
 
                 var align = column.Kind == ProjectTableColumnKind.Number ? "right" : "left";
-                var style = $"border:1px solid #9aa3ac;padding:2pt;text-align:{align};vertical-align:top;overflow-wrap:anywhere;";
+                var style = $"border:1px solid #9aa3ac;padding:1.2pt;text-align:{align};vertical-align:top;overflow-wrap:anywhere;box-sizing:border-box;";
 
                 builder.Append($"<td style=\"{style}\">").Append(EncodeCell(value)).Append("</td>");
             }
@@ -142,7 +148,7 @@ public static class ProjectTableSheet
         IReadOnlyList<ProjectTableRow> rows,
         PdfPageSettings? settings = null)
     {
-        var body = Render(definition, rows, pageBreak: false);
+        var body = Render(definition, rows, pageBreak: false, availableWidthMm: AvailableWidthMm(settings));
         if (body.Length == 0)
         {
             return string.Empty;
@@ -201,9 +207,13 @@ public static class ProjectTableSheet
     /// </summary>
     private static double ColumnWeight(ProjectTableColumn column) => column.Kind switch
     {
-        ProjectTableColumnKind.Rating => 24,
-        ProjectTableColumnKind.Number or ProjectTableColumnKind.Date => 55,
-        _ => Math.Max(column.Width, 40),
+        // Bewertungen zeigen nur ein Farbfeld, Zahlen brauchen wenig Platz.
+        ProjectTableColumnKind.Rating => 6,
+        ProjectTableColumnKind.Number or ProjectTableColumnKind.Date => 11,
+
+        // Textspalten: die gewünschte Breite der Definition, aber gebremst – die gedrehten
+        // Überschriften brauchen keine Breite, und lange Texte brechen in der Zelle um.
+        _ => Math.Clamp(column.Width * 0.14, 15, 24),
     };
 
     /// <summary>
@@ -211,18 +221,47 @@ public static class ProjectTableSheet
     /// Breite mehr, also bestimmen die Werte den Platz. Zusammen ergibt das genau 100 %,
     /// damit die Tabelle auf die A4-Querseite passt.
     /// </summary>
-    private static void AppendColumnWidths(StringBuilder builder, IReadOnlyList<ProjectTableColumn> columns)
+    private static void AppendColumnWidths(
+        StringBuilder builder,
+        IReadOnlyList<ProjectTableColumn> columns,
+        double availableWidthMm)
     {
         var weights = columns.Select(ColumnWeight).ToArray();
         var total = weights.Sum();
         builder.Append("<colgroup>");
         for (var index = 0; index < columns.Count; index++)
         {
-            var share = weights[index] / total * 100;
-            builder.Append($"<col style=\"width:{share.ToString("0.##", CultureInfo.InvariantCulture)}%\" />");
+            var share = total > 0 ? weights[index] / total : 1.0 / columns.Count;
+            var width = availableWidthMm > 0
+                ? Mm(share * availableWidthMm)
+                : (share * 100).ToString("0.##", CultureInfo.InvariantCulture) + "%";
+            builder.Append($"<col style=\"width:{width}\" />");
         }
 
         builder.Append("</colgroup>");
+    }
+
+    /// <summary>Breite als CSS-Wert in Millimetern.</summary>
+    private static string Mm(double value) =>
+        value.ToString("0.##", CultureInfo.InvariantCulture) + "mm";
+
+    /// <summary>
+    /// Druckbare Breite der Seite in Millimetern – abzüglich der Ränder links und rechts.
+    /// Die Tabelle bekommt genau diese Breite, damit rechts nichts abgeschnitten wird.
+    /// </summary>
+    private static double AvailableWidthMm(PdfPageSettings? settings)
+    {
+        var (widthMm, heightMm) = string.Equals(settings?.Format, "A3", StringComparison.OrdinalIgnoreCase)
+            ? (297.0, 420.0)
+            : (210.0, 297.0);
+
+        if (settings?.Landscape == true)
+        {
+            (widthMm, heightMm) = (heightMm, widthMm);
+        }
+
+        var margin = settings?.MarginMm is { } value ? Math.Max(value, 0) : 15;
+        return Math.Max(widthMm - 2 * margin, 60);
     }
 
     /// <summary>
@@ -246,7 +285,7 @@ public static class ProjectTableSheet
                     span++;
                 }
 
-                builder.Append($"<th colspan=\"{span}\" style=\"border:1px solid #9aa3ac;padding:2pt;background:{GroupBackground(group)};\">")
+                builder.Append($"<th colspan=\"{span}\" style=\"border:1px solid #9aa3ac;padding:1.2pt;background:{GroupBackground(group)};box-sizing:border-box;\">")
                     .Append(Encode(group))
                     .Append("</th>");
                 index += span;
@@ -259,7 +298,7 @@ public static class ProjectTableSheet
         foreach (var column in columns)
         {
             const string style =
-                "border:1px solid #9aa3ac;padding:2pt;text-align:left;vertical-align:bottom;background:#eef1f4;";
+                "border:1px solid #9aa3ac;padding:1.2pt;text-align:left;vertical-align:bottom;background:#eef1f4;box-sizing:border-box;";
 
             builder.Append($"<th style=\"{style}\">")
                 .Append("<div style=\"writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;\">")
