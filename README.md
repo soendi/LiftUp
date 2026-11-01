@@ -100,7 +100,8 @@ Zwei projektbezogene Tabellen, die direkt hinter dem Reiter "Projekte" liegen:
   eine Zeile: Jahr und Anlagendaten, danach **Variante 1 – Modernisierung** und
   **Variante 2 – Ersatzanlage** mit Massnahme, Kosten und Erläuterung. Massnahme und Erläuterung
   sind mehrzeilig: **Enter** und **Shift+Enter** setzen einen Umbruch, fertig ist die Zelle mit
-  **Tab** oder einem Klick daneben. Im PDF erscheinen die Umbrüche als Zeilenumbrüche.
+  **Tab** oder einem Klick daneben. Im PDF erscheinen die Umbrüche als Zeilenumbrüche. Die Zeilen
+  der Investitionsplanung sind dafür fünf Textzeilen hoch, damit der ganze Text sichtbar ist.
 
 Alle projektbezogenen Tabellen führen dieselben Aufzüge: **Speichern der Zustandsanalyse legt je
 Zeile die passende Zeile der Investitionsplanung und der Anlagedaten („1. Anlagedaten“ der

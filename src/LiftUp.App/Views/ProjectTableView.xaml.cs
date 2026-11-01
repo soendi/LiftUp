@@ -43,6 +43,12 @@ public partial class ProjectTableView : UserControl, ITabFillSource
     /// <summary>Ob seit dem letzten Lesen etwas geändert wurde – dann bleibt der Reiter stehen.</summary>
     private bool _dirty;
 
+    /// <summary>
+    /// Höhe einer Zeile mit mehrzeiligen Feldern: fünf Textzeilen à 16 Pixel. So sind
+    /// „Massnahme“ und „Erläuterung“ in der Investitionsplanung ohne Scrollen lesbar.
+    /// </summary>
+    private const double MultilineRowHeight = 5 * 16;
+
     /// <param name="showProjectSelector">
     /// <c>false</c>, wenn die Tabelle in einem Reiter mit eigener Projektauswahl steht
     /// (etwa „1. Anlagedaten“ der Analyse); das Projekt kommt dann über <see cref="SelectProject"/>.
@@ -64,6 +70,13 @@ public partial class ProjectTableView : UserControl, ITabFillSource
         _draftRows = draftRows;
 
         InitializeComponent();
+
+        // Die Investitionsplanung hat mehrzeilige Felder: Ihre Zeilen sind fünf Textzeilen hoch,
+        // damit man den ganzen Text sieht. Die übrigen Tabellen bleiben bei einer Zeile.
+        if (_definition.Columns.Any(column => column.Multiline))
+        {
+            RowsGrid.RowHeight = MultilineRowHeight;
+        }
 
         if (!showProjectSelector)
         {
