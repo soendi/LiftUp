@@ -79,7 +79,7 @@ public sealed class LiftPhotosPanel : Grid
 
     private FrameworkElement BuildToolbar()
     {
-        var add = new Button { Content = "Foto hinzufügen …" };
+        var add = new Button { Content = "Fotos hinzufügen …" };
         add.Click += OnAddClick;
 
         _edit.Click += OnEditClick;
@@ -159,42 +159,94 @@ public sealed class LiftPhotosPanel : Grid
         }
     }
 
+    /// <summary>
+    /// Bilderordner des Projekts. Die Auswahl startet dort, damit die Fotos aus dem Projekt
+    /// nicht erst gesucht werden müssen; fehlt der Ordner, bleibt der zuletzt geöffnete.
+    /// </summary>
+    private string? PhotoFolder()
+    {
+        try
+        {
+            var folder = Path.Combine(_services.Projects.GetProject(_projectId).FolderPath, ProjectFolders.Images);
+            return Directory.Exists(folder) ? folder : null;
+        }
+        catch (LiftUpException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Übernimmt ein oder mehrere Fotos; ein Fehler bricht die übrigen nicht ab.</summary>
     private void OnAddClick(object sender, RoutedEventArgs e)
     {
         var dialog = new OpenFileDialog
         {
-            Title = "Foto hinzufügen",
+            Title = "Fotos hinzufügen",
             Filter = "Bilder|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.webp;*.svg|Alle Dateien|*.*",
             CheckFileExists = true,
+            Multiselect = true,
         };
 
-        if (dialog.ShowDialog() != true)
+        if (PhotoFolder() is { } folder)
+        {
+            dialog.InitialDirectory = folder;
+        }
+
+        if (dialog.ShowDialog() != true || dialog.FileNames.Length == 0)
         {
             return;
         }
 
-        try
-        {
-            var path = _services.Analysis.ImportPhoto(_projectId, dialog.FileName);
-            var (width, height) = ReadPixelSize(path);
-            var row = new PhotoRow(new ProjectAnalysisPhoto
-            {
-                ProjectId = _projectId,
-                LiftKey = _liftKey,
-                FilePath = path,
-                ImageWidth = width,
-                ImageHeight = height,
-            });
+        PhotoRow? first = null;
+        var added = 0;
+        var errors = new List<string>();
 
-            _rows.Add(row);
-            _list.SelectedItem = row;
-            _info.Text = "Foto übernommen – bitte speichern.";
-            PhotosChanged?.Invoke(this, EventArgs.Empty);
-        }
-        catch (LiftUpException exception)
+        foreach (var file in dialog.FileNames)
         {
-            _info.Text = exception.Message;
+            try
+            {
+                var path = _services.Analysis.ImportPhoto(_projectId, file);
+                var (width, height) = ReadPixelSize(path);
+                var row = new PhotoRow(new ProjectAnalysisPhoto
+                {
+                    ProjectId = _projectId,
+                    LiftKey = _liftKey,
+                    FilePath = path,
+                    ImageWidth = width,
+                    ImageHeight = height,
+                });
+
+                _rows.Add(row);
+                first ??= row;
+                added++;
+            }
+            catch (LiftUpException exception)
+            {
+                errors.Add($"{Path.GetFileName(file)}: {exception.Message}");
+            }
         }
+
+        if (first is not null)
+        {
+            _list.SelectedItem = first;
+        }
+
+        if (added == 0)
+        {
+            _info.Text = string.Join(" ", errors);
+            return;
+        }
+
+        _info.Text = added == 1
+            ? "Foto übernommen – bitte speichern."
+            : $"{added} Fotos übernommen – bitte speichern.";
+
+        if (errors.Count > 0)
+        {
+            _info.Text += " " + string.Join(" ", errors);
+        }
+
+        PhotosChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private void OnEditClick(object sender, RoutedEventArgs e)
