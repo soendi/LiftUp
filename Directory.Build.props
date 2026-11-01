@@ -3,7 +3,7 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Version>1.0.23</Version>
+    <Version>1.0.24</Version>
     <Authors>Lukas Sonderegger</Authors>
     <NeutralLanguage>de-DE</NeutralLanguage>
     <!-- Erlaubt das Kompilieren der Windows-Desktop-Projekte auch auf Nicht-Windows-Hosts (CI). -->
