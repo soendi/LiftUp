@@ -1,5 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Input;
 using System.Windows.Media;
 using LiftUp.App.Controls;
 using LiftUp.App.Documents;
@@ -16,15 +18,52 @@ public partial class AnalysisView : UserControl, ITabFillSource
 {
     private sealed record ProjectOption(Guid Id, string DisplayText);
 
-    private sealed record SectionDraft(ProjectAnalysisSection Section, HtmlEditor Editor)
+    /// <summary>Ein Analysepunkt „2.1 … 2.n“ mit Untertitel und Text.</summary>
+    private sealed class SectionDraft
     {
+        public SectionDraft(string key, HtmlEditor editor, TextBox? titleBox = null)
+        {
+            Key = key;
+            Editor = editor;
+            TitleBox = titleBox;
+        }
+
+        /// <summary>Schlüssel des gespeicherten Textes; bleibt beim Umbenennen gleich.</summary>
+        public string Key { get; }
+
+        public HtmlEditor Editor { get; }
+
+        /// <summary>Feld für den Untertitel; beim Fazit gibt es keins.</summary>
+        public TextBox? TitleBox { get; }
+
+        /// <summary>Untertitel, wie er im Reiter nach der Nummer steht.</summary>
+        public string Title => (TitleBox?.Text ?? string.Empty).Trim();
+
         /// <summary>Ob im Reiter etwas steht – bestimmt seine Farbe.</summary>
         public bool Filled { get; set; }
+
+        /// <summary>Reiter samt Farbe; entsteht beim Aufbau der Unter-Reiter.</summary>
+        public TabStatus? Status { get; set; }
     }
 
     private readonly AppServices _services;
     private readonly ProjectSelection _selection;
+
+    /// <summary>Die Analysepunkte „2.1 … 2.n“ – je Punkt ein Reiter unter „2. Analyse“.</summary>
     private readonly List<SectionDraft> _sections = [];
+
+    /// <summary>Der eine Punkt unter „3. Fazit / Empfehlung“.</summary>
+    private SectionDraft? _fazit;
+
+    /// <summary>Reiter der Analysepunkte; er wird bei jedem Laden neu aufgebaut.</summary>
+    private TabControl? _analysisTabs;
+
+    /// <summary>Beginn und Punkt eines begonnenen Ziehvorgangs in der Reiterleiste.</summary>
+    private Point _dragStart;
+    private SectionDraft? _dragDraft;
+
+    /// <summary>Füllstand der Analysepunkte für die Farbe von „2. Analyse“.</summary>
+    private readonly List<TabStatus> _analysisStatuses = [];
 
     /// <summary>Suche für „/“ (Textbausteine) und „&amp;“ / „&amp;&amp;“ (Bilder) in den Editoren.</summary>
     private readonly EditorSearch _search;
@@ -128,33 +167,26 @@ public partial class AnalysisView : UserControl, ITabFillSource
                 continue;
             }
 
+            // „2. Analyse“: Die Punkte 2.1 … 2.n stehen nicht fest – sie entstehen aus den
+            // erfassten Texten und lassen sich im Reiter hinzufügen und löschen.
+            if (chapter.Key == ProjectAnalysisCatalog.AnalyseKey)
+            {
+                _analysisTabs = new TabControl();
+                AddChapterTab(chapter.Heading, BuildAnalysisPanel(_analysisTabs),
+                    () => Combine(_analysisStatuses));
+                continue;
+            }
+
             // Ein Haupttitel mit nur einem Punkt bekommt keinen Unter-Reiter: Der Editor steht
             // direkt darunter („3. Fazit / Empfehlung“ ohne „3.1 …“).
             if (chapter.Sections.Count == 1)
             {
-                var single = CreateDraft(chapter.Sections[0]);
+                var single = CreateDraft(chapter.Sections[0].Key);
+                _fazit = single;
                 AddChapterTab(chapter.Heading, single.Editor,
                     () => single.Filled ? TabFill.Full : TabFill.None);
                 continue;
             }
-
-            var sections = new TabControl();
-            var sectionTabs = new List<TabStatus>();
-            foreach (var section in chapter.Sections)
-            {
-                var draft = CreateDraft(section);
-
-                var tab = new TabItem { Content = draft.Editor };
-                var status = new TabStatus(tab, section.Heading,
-                    () => draft.Filled ? TabFill.Full : TabFill.None);
-
-                sectionTabs.Add(status);
-                _tabStatuses.Add(status);
-                sections.Items.Add(tab);
-            }
-
-            sections.SelectedIndex = sections.Items.Count > 0 ? 0 : -1;
-            AddChapterTab(chapter.Heading, sections, () => Combine(sectionTabs));
         }
 
         // „4. Fotos“: je Aufzug aus der Zustandsanalyse ein Unter-Reiter mit Bildern.
@@ -179,15 +211,35 @@ public partial class AnalysisView : UserControl, ITabFillSource
     }
 
     /// <summary>Editor eines Analysepunkts samt „/“-, „//“- und „&amp;“-Suche und Farbsignal.</summary>
-    private SectionDraft CreateDraft(ProjectAnalysisSection section)
+    private HtmlEditor CreateEditor()
     {
         var editor = new HtmlEditor();
         editor.EnableSnippetAutocomplete(_search.SearchSnippets);
         editor.EnableImageAutocomplete(_search.SearchImages);
         editor.EnableTableAutocomplete(_search.SearchTableValues);
+        return editor;
+    }
 
-        var draft = new SectionDraft(section, editor);
-        _sections.Add(draft);
+    /// <summary>Neuer Punkt mit Editor, optionalem Untertitel-Feld und Farbsignal.</summary>
+    private SectionDraft CreateDraft(string key, bool withTitle = false)
+    {
+        var editor = CreateEditor();
+        TextBox? titleBox = null;
+
+        if (withTitle)
+        {
+            titleBox = new TextBox
+            {
+                Width = 420,
+                FontSize = 14,
+                FontWeight = FontWeights.SemiBold,
+                ToolTip = "Untertitel des Punkts, etwa „Aggregat“",
+            };
+            // Der Reiter heißt sofort „2.1 Untertitel“, sobald einer gesetzt ist.
+            titleBox.TextChanged += (_, _) => NumberSections();
+        }
+
+        var draft = new SectionDraft(key, editor, titleBox);
 
         editor.ContentChanged += (_, _) =>
         {
@@ -196,6 +248,334 @@ public partial class AnalysisView : UserControl, ITabFillSource
         };
 
         return draft;
+    }
+
+    /// <summary>Reiter „2. Analyse“: Knöpfe für neue und gelöschte Punkte über den Unter-Reitern.</summary>
+    private FrameworkElement BuildAnalysisPanel(TabControl tabs)
+    {
+        var toolbar = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Margin = new Thickness(0, 0, 0, 8),
+        };
+
+        var add = new Button { Content = "Punkt hinzufügen" };
+        add.Click += (_, _) => AddSection();
+
+        var remove = new Button
+        {
+            Content = "Punkt löschen",
+            Style = (Style)FindResource("LiftUpDangerButton"),
+        };
+        remove.Click += (_, _) => RemoveSelectedSection();
+
+        toolbar.Children.Add(add);
+        toolbar.Children.Add(remove);
+
+        // Reihenfolge ändern: einen Reiter greifen und auf einen anderen fallen lassen.
+        tabs.AllowDrop = true;
+        tabs.PreviewMouseLeftButtonDown += OnAnalysisTabMouseDown;
+        tabs.PreviewMouseMove += OnAnalysisTabMouseMove;
+        tabs.DragOver += OnAnalysisTabDragOver;
+        tabs.Drop += OnAnalysisTabDrop;
+
+        var grid = new Grid();
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        Grid.SetRow(toolbar, 0);
+        Grid.SetRow(tabs, 1);
+        grid.Children.Add(toolbar);
+        grid.Children.Add(tabs);
+        return grid;
+    }
+
+    /// <summary>
+    /// Baut die Unter-Reiter von „2. Analyse“ aus den gespeicherten Texten. Ohne erfasste
+    /// Punkte steht genau „2.1“ da – weitere Punkte kommen über „Punkt hinzufügen“.
+    /// </summary>
+    private void BuildAnalysisTabs(IReadOnlyList<ProjectAnalysisText> texts)
+    {
+        if (_analysisTabs is null)
+        {
+            return;
+        }
+
+        foreach (var draft in _sections)
+        {
+            if (draft.Status is not { } status)
+            {
+                continue;
+            }
+
+            _tabStatuses.Remove(status);
+            _analysisStatuses.Remove(status);
+        }
+
+        _sections.Clear();
+        _analysisTabs.Items.Clear();
+
+        var points = texts.Where(text => !ProjectAnalysisCatalog.IsFazit(text.SectionKey)).ToArray();
+        if (points.Length == 0)
+        {
+            AddSectionTab(NewSectionKey(), string.Empty, string.Empty);
+        }
+        else
+        {
+            foreach (var point in points)
+            {
+                AddSectionTab(point.SectionKey, point.Title, point.Html);
+            }
+        }
+
+        _analysisTabs.SelectedIndex = 0;
+        NumberSections();
+    }
+
+    /// <summary>Hängt einen Analysepunkte-Reiter mit Untertitel-Feld und Text an.</summary>
+    private void AddSectionTab(string key, string title, string html)
+    {
+        var draft = CreateDraft(key, withTitle: true);
+        draft.TitleBox!.Text = title;
+        draft.Editor.SetHtml(html);
+        draft.Filled = draft.Editor.HasText;
+
+        _sections.Add(draft);
+
+        var tab = new TabItem { Content = SectionContent(draft), Tag = draft };
+        var status = new TabStatus(tab, string.Empty, () => draft.Filled ? TabFill.Full : TabFill.None);
+        draft.Status = status;
+
+        _tabStatuses.Add(status);
+        _analysisStatuses.Add(status);
+        _analysisTabs!.Items.Add(tab);
+        NumberSections();
+    }
+
+    /// <summary>Untertitel-Feld über dem Text des Punkts.</summary>
+    private FrameworkElement SectionContent(SectionDraft draft)
+    {
+        var header = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Margin = new Thickness(0, 0, 0, 6),
+        };
+        header.Children.Add(new TextBlock
+        {
+            Text = "Untertitel",
+            Style = (Style)FindResource("LiftUpFieldLabel"),
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 8, 0),
+        });
+        header.Children.Add(draft.TitleBox!);
+
+        var grid = new Grid();
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        Grid.SetRow(header, 0);
+        Grid.SetRow(draft.Editor, 1);
+        grid.Children.Add(header);
+        grid.Children.Add(draft.Editor);
+        return grid;
+    }
+
+    /// <summary>
+    /// Nummeriert die Reiter nach ihrer Reihenfolge und übernimmt den Untertitel:
+    /// aus „2.1“ wird „2.1 Aggregat“, sobald einer gesetzt ist.
+    /// </summary>
+    private void NumberSections()
+    {
+        for (var index = 0; index < _sections.Count; index++)
+        {
+            var draft = _sections[index];
+            var number = $"2.{index + 1}";
+            draft.Status?.SetHeader(draft.Title.Length == 0 ? number : $"{number} {draft.Title}");
+        }
+
+        UpdateTabColors();
+    }
+
+    /// <summary>Merkt sich den gedrückten Reiter – Grundlage für das Ziehen.</summary>
+    private void OnAnalysisTabMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not TabControl tabs)
+        {
+            return;
+        }
+
+        _dragStart = e.GetPosition(tabs);
+        var (inHeader, tab) = HitHeader(tabs, _dragStart);
+        _dragDraft = inHeader ? tab?.Tag as SectionDraft : null;
+    }
+
+    private void OnAnalysisTabMouseMove(object sender, MouseEventArgs e)
+    {
+        if (sender is not TabControl tabs || _dragDraft is not { } draft)
+        {
+            return;
+        }
+
+        if (e.LeftButton != MouseButtonState.Pressed)
+        {
+            _dragDraft = null;
+            return;
+        }
+
+        var position = e.GetPosition(tabs);
+        if (Math.Abs(position.X - _dragStart.X) < SystemParameters.MinimumHorizontalDragDistance
+            && Math.Abs(position.Y - _dragStart.Y) < SystemParameters.MinimumVerticalDragDistance)
+        {
+            return;
+        }
+
+        _dragDraft = null;
+        DragDrop.DoDragDrop(draft.Status!.Tab, new DataObject(typeof(SectionDraft), draft), DragDropEffects.Move);
+    }
+
+    private void OnAnalysisTabDragOver(object sender, DragEventArgs e)
+    {
+        if (e.Data.GetDataPresent(typeof(SectionDraft)))
+        {
+            e.Effects = DragDropEffects.Move;
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>Setzt den gezogenen Punkt an die Stelle des Reiters, auf den er fällt.</summary>
+    private void OnAnalysisTabDrop(object sender, DragEventArgs e)
+    {
+        if (sender is not TabControl tabs || e.Data.GetData(typeof(SectionDraft)) is not SectionDraft draft)
+        {
+            return;
+        }
+
+        var (inHeader, target) = HitHeader(tabs, e.GetPosition(tabs));
+        if (!inHeader)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        MoveSection(draft, target?.Tag as SectionDraft);
+    }
+
+    /// <summary>Verschiebt einen Punkt vor den Punkt, auf den er gezogen wurde.</summary>
+    private void MoveSection(SectionDraft draft, SectionDraft? target)
+    {
+        if (_analysisTabs is null)
+        {
+            return;
+        }
+
+        var from = _sections.IndexOf(draft);
+        if (from < 0)
+        {
+            return;
+        }
+
+        // Ohne Reiter unter dem Zeiger landet der Punkt am Ende.
+        var to = target is null ? _sections.Count - 1 : _sections.IndexOf(target);
+        if (to < 0 || to == from)
+        {
+            return;
+        }
+
+        _sections.RemoveAt(from);
+        _sections.Insert(to, draft);
+
+        _analysisTabs.Items.RemoveAt(from);
+        _analysisTabs.Items.Insert(to, draft.Status!.Tab);
+        _analysisTabs.SelectedItem = draft.Status.Tab;
+        NumberSections();
+    }
+
+    /// <summary>
+    /// Treffer in der Reiterleiste: ob der Zeiger auf den Reitern steht und auf welchem.
+    /// Der Text darunter darf kein Ziehen auslösen.
+    /// </summary>
+    private static (bool InHeader, TabItem? Tab) HitHeader(TabControl tabs, Point position)
+    {
+        var panel = FindHeaderPanel(tabs);
+        if (panel is null)
+        {
+            return (false, null);
+        }
+
+        var bounds = panel.TransformToAncestor(tabs).TransformBounds(new Rect(panel.RenderSize));
+        if (!bounds.Contains(position))
+        {
+            return (false, null);
+        }
+
+        var hit = tabs.InputHitTest(position) as DependencyObject;
+        while (hit is not null and not TabItem)
+        {
+            hit = VisualTreeHelper.GetParent(hit);
+        }
+
+        return (true, hit as TabItem);
+    }
+
+    /// <summary>Der Streifen mit den Reitern im Template des TabControl.</summary>
+    private static TabPanel? FindHeaderPanel(DependencyObject root)
+    {
+        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(root); index++)
+        {
+            var child = VisualTreeHelper.GetChild(root, index);
+            if (child is TabPanel panel)
+            {
+                return panel;
+            }
+
+            if (FindHeaderPanel(child) is { } found)
+            {
+                return found;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Schlüssel eines neuen Punkts; er bleibt beim Speichern und Umbenennen gleich.</summary>
+    private static string NewSectionKey() => "P" + Guid.NewGuid().ToString("N");
+
+    private void AddSection()
+    {
+        AddSectionTab(NewSectionKey(), string.Empty, string.Empty);
+        if (_analysisTabs is not null)
+        {
+            _analysisTabs.SelectedIndex = _analysisTabs.Items.Count - 1;
+        }
+
+        _sections[^1].TitleBox?.Focus();
+    }
+
+    /// <summary>Entfernt den gewählten Punkt; ohne Punkte bleibt „2.1“ stehen.</summary>
+    private void RemoveSelectedSection()
+    {
+        if (_analysisTabs is null || _sections.Count == 0)
+        {
+            return;
+        }
+
+        var index = Math.Clamp(_analysisTabs.SelectedIndex, 0, _sections.Count - 1);
+        var draft = _sections[index];
+
+        if (draft.Status is { } status)
+        {
+            _tabStatuses.Remove(status);
+            _analysisStatuses.Remove(status);
+        }
+
+        _analysisTabs.Items.RemoveAt(index);
+        _sections.RemoveAt(index);
+
+        if (_sections.Count == 0)
+        {
+            AddSectionTab(NewSectionKey(), string.Empty, string.Empty);
+        }
+
+        _analysisTabs.SelectedIndex = Math.Min(index, _sections.Count - 1);
+        NumberSections();
     }
 
     private void LoadProjects(bool keepSelection = false)
@@ -245,21 +625,26 @@ public partial class AnalysisView : UserControl, ITabFillSource
 
         try
         {
-            var texts = _services.Analysis.Get(project.Id)
-                .ToDictionary(text => text.SectionKey, text => text.Html, StringComparer.OrdinalIgnoreCase);
+            var texts = _services.Analysis.Get(project.Id);
+            var byKey = texts.ToDictionary(text => text.SectionKey, StringComparer.OrdinalIgnoreCase);
 
-            foreach (var draft in _sections)
+            if (_fazit is not null)
             {
-                draft.Editor.SetHtml(texts.TryGetValue(draft.Section.Key, out var html) ? html : string.Empty);
-                draft.Filled = draft.Editor.HasText;
+                _fazit.Editor.SetHtml(byKey.TryGetValue(_fazit.Key, out var fazit) ? fazit.Html : string.Empty);
+                _fazit.Filled = _fazit.Editor.HasText;
             }
+
+            BuildAnalysisTabs(texts);
 
             _loadedProjectId = project.Id;
             BuildPhotoTabs(project.Id);
             UpdateTabColors();
-            InfoText.Text = texts.Count == 1
+
+            var filled = _sections.Count(draft => draft.Filled) + (_fazit is { Filled: true } ? 1 : 0);
+            var total = _sections.Count + 1;
+            InfoText.Text = filled == 1
                 ? "1 Analysepunkt erfasst."
-                : $"{texts.Count} von {_sections.Count} Analysepunkten erfasst.";
+                : $"{filled} von {total} Analysepunkten erfasst.";
         }
         catch (LiftUpException exception)
         {
@@ -428,6 +813,12 @@ public partial class AnalysisView : UserControl, ITabFillSource
             draft.Filled = false;
         }
 
+        if (_fazit is not null)
+        {
+            _fazit.Editor.SetHtml(string.Empty);
+            _fazit.Filled = false;
+        }
+
         UpdateTabColors();
     }
 
@@ -579,16 +970,21 @@ public partial class AnalysisView : UserControl, ITabFillSource
 
         try
         {
-            var inputs = new List<ProjectAnalysisTextInput>(_sections.Count);
+            var inputs = new List<ProjectAnalysisTextInput>(_sections.Count + 1);
             foreach (var draft in _sections)
             {
-                inputs.Add(new ProjectAnalysisTextInput(draft.Section.Key, await draft.Editor.GetHtmlAsync()));
+                inputs.Add(new ProjectAnalysisTextInput(draft.Key, draft.Title, await draft.Editor.GetHtmlAsync()));
+            }
+
+            if (_fazit is not null)
+            {
+                inputs.Add(new ProjectAnalysisTextInput(_fazit.Key, string.Empty, await _fazit.Editor.GetHtmlAsync()));
             }
 
             var saved = _services.Analysis.Save(project.Id, inputs);
             InfoText.Text = saved.Count == 1
                 ? "Analyse gespeichert: 1 Analysepunkt."
-                : $"Analyse gespeichert: {saved.Count} von {_sections.Count} Analysepunkten.";
+                : $"Analyse gespeichert: {saved.Count} Analysepunkte.";
         }
         catch (LiftUpException exception)
         {

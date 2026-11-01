@@ -36,8 +36,10 @@ public sealed class ProjectAnalysisService
     }
 
     /// <summary>
-    /// Ersetzt die Texte des Projekts. Unbekannte Unterpunkte und leere Texte fallen weg;
-    /// ein leerer Text löscht den bisherigen Inhalt.
+    /// Ersetzt die Texte des Projekts. Die Analysepunkte stehen nicht fest: Jeder Eintrag
+    /// bringt Schlüssel, Untertitel und Text mit, die Reihenfolge der Liste ist die
+    /// Reihenfolge der Punkte. Punkte ohne Untertitel und ohne Text fallen weg; ein leerer
+    /// Text löscht den bisherigen Inhalt.
     /// </summary>
     public IReadOnlyList<ProjectAnalysisText> Save(Guid projectId, IReadOnlyList<ProjectAnalysisTextInput> texts)
     {
@@ -45,20 +47,27 @@ public sealed class ProjectAnalysisService
         ArgumentNullException.ThrowIfNull(texts);
 
         var prepared = new List<ProjectAnalysisTextInput>();
+        var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         foreach (var text in texts)
         {
-            var section = ProjectAnalysisCatalog.FindSection(text.SectionKey)
-                          ?? throw new ValidationException(
-                              $"Unbekannter Analysepunkt \"{text.SectionKey}\".");
+            var key = (text.SectionKey ?? string.Empty).Trim();
+            if (key.Length == 0 || key.Length > 64)
+            {
+                throw new ValidationException("Ein Analysepunkt hat keinen gültigen Schlüssel.");
+            }
 
             // Leerzeilen und leere Absätze am Ende gehören nicht in den Bericht.
             var html = ProjectAnalysisCatalog.TrimTrailing(text.Html);
-            if (html.Length == 0 || prepared.Any(item => item.SectionKey == section.Key))
+            var title = (text.Title ?? string.Empty).Trim();
+
+            // Ein Punkt ohne Untertitel und ohne Text ist keiner.
+            if ((html.Length == 0 && title.Length == 0) || !keys.Add(key))
             {
                 continue;
             }
 
-            prepared.Add(new ProjectAnalysisTextInput(section.Key, html));
+            prepared.Add(new ProjectAnalysisTextInput(key, title, html));
         }
 
         using var connection = _database.Open();

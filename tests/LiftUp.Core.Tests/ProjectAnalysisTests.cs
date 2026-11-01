@@ -23,7 +23,8 @@ public sealed class ProjectAnalysisTests
         CreateFolderIfMissing = true,
     };
 
-    private static ProjectAnalysisTextInput Text(string sectionKey, string html) => new(sectionKey, html);
+    private static ProjectAnalysisTextInput Text(string sectionKey, string title, string html) =>
+        new(sectionKey, title, html);
 
     [Fact]
     public void Analyse_wird_je_projekt_gespeichert_und_gelesen()
@@ -38,12 +39,12 @@ public sealed class ProjectAnalysisTests
 
         var saved = analysis.Save(first.Id,
         [
-            Text("Aggregat", "<p>Aggregat in Ordnung.</p>"),
-            Text("Tragmittel", "<p>Seile leicht verschlissen.</p>"),
-            Text("Steuerung", "   "),
+            Text("Aggregat", "Aggregat", "<p>Aggregat in Ordnung.</p>"),
+            Text("Tragmittel", "Hubzylinder / Tragmittel", "<p>Seile leicht verschlissen.</p>"),
+            Text("Steuerung", string.Empty, "   "),
         ]);
 
-        // Leere Texte werden nicht gespeichert.
+        // Leere Texte ohne Untertitel werden nicht gespeichert.
         Assert.Equal(2, saved.Count);
         Assert.Empty(analysis.Get(second.Id));
 
@@ -52,22 +53,40 @@ public sealed class ProjectAnalysisTests
         Assert.Equal(
             "<p>Seile leicht verschlissen.</p>",
             loaded.Single(text => text.SectionKey == "Tragmittel").Html);
+        Assert.Equal("Hubzylinder / Tragmittel", loaded.Single(text => text.SectionKey == "Tragmittel").Title);
 
         // Erneutes Speichern ersetzt den bisherigen Stand.
-        analysis.Save(first.Id, [Text("Aggregat", "<p>Ersetzt.</p>")]);
+        analysis.Save(first.Id, [Text("Aggregat", "Aggregat", "<p>Ersetzt.</p>")]);
         Assert.Equal("Aggregat", Assert.Single(analysis.Get(first.Id)).SectionKey);
     }
 
     [Fact]
-    public void Unbekannter_analysepunkt_wird_abgelehnt()
+    public void Neue_analysepunkte_kommen_hinzu_und_behalten_ihre_reihenfolge()
     {
         using var fixture = new TestDatabase();
         var session = fixture.LoginAsAdmin();
         var projects = new ProjectService(fixture.Database, session);
         var analysis = new ProjectAnalysisService(fixture.Database, session);
+
         var project = projects.Create(Input(Path.Combine(fixture.Root, "p1")));
 
-        Assert.Throws<ValidationException>(() => analysis.Save(project.Id, [Text("Dach", "<p>…</p>")]));
+        var saved = analysis.Save(project.Id,
+        [
+            Text("Aggregat", "Aggregat", "<p>Aggregat.</p>"),
+            Text("P7", "Dach", "<p>Dach geprüft.</p>"),
+        ]);
+
+        // Auch ein Punkt, den die Vorlage nicht kennt, wird gespeichert.
+        Assert.Equal(2, saved.Count);
+        Assert.Equal(
+            ["2.1 Aggregat", "2.2 Dach"],
+            ProjectAnalysisCatalog.SectionsFor(analysis.Get(project.Id)).Select(section => section.Heading));
+
+        // Ein Untertitel ohne Text bleibt als Punkt erhalten.
+        analysis.Save(project.Id, [Text("P8", "Nur Untertitel", string.Empty)]);
+        var single = Assert.Single(analysis.Get(project.Id));
+        Assert.Equal("Nur Untertitel", single.Title);
+        Assert.Equal(string.Empty, single.Html);
     }
 
     [Fact]
@@ -89,8 +108,8 @@ public sealed class ProjectAnalysisTests
 
         analysis.Save(project.Id,
         [
-            Text("Aggregat", "<p>Aggregat läuft ruhig.</p>"),
-            Text("Kabine", "<p>Kabine ohne Mängel.</p>"),
+            Text("Aggregat", "Aggregat", "<p>Aggregat läuft ruhig.</p>"),
+            Text("Kabine", "Kabine / Triebmechanik", "<p>Kabine ohne Mängel.</p>"),
         ]);
 
         var html = documents.RenderHtml(project.Id, template.Id);
@@ -98,9 +117,9 @@ public sealed class ProjectAnalysisTests
         Assert.Contains("2. Analyse", html);
         Assert.Contains("2.1 Aggregat", html);
         Assert.Contains("Aggregat läuft ruhig.", html);
-        Assert.Contains("2.6 Kabine / Triebmechanik", html);
-        // Nicht erfasste Unterpunkte stehen nicht im Dokument.
-        Assert.DoesNotContain("2.3 Steuerung / Regler", html);
+        Assert.Contains("2.2 Kabine / Triebmechanik", html);
+        // Nicht erfasste Punkte gibt es nicht.
+        Assert.DoesNotContain("2.3", html);
     }
 
     [Fact]
@@ -114,8 +133,8 @@ public sealed class ProjectAnalysisTests
         var project = projects.Create(Input(Path.Combine(fixture.Root, "p1")));
         analysis.Save(project.Id,
         [
-            Text("Aggregat", "test\n\n\n"),
-            Text("Tragmittel", "<p>Hubzylinder dicht.</p><p><br></p><p>&nbsp;</p>"),
+            Text("Aggregat", "Aggregat", "test\n\n\n"),
+            Text("Tragmittel", "Hubzylinder / Tragmittel", "<p>Hubzylinder dicht.</p><p><br></p><p>&nbsp;</p>"),
         ]);
 
         var texts = analysis.Get(project.Id).ToDictionary(text => text.SectionKey, text => text.Html);
@@ -128,7 +147,12 @@ public sealed class ProjectAnalysisTests
     {
         var html = ProjectAnalysisCatalog.Render(
         [
-            new ProjectAnalysisText { SectionKey = "Aggregat", Html = "<p style=\"margin:1em 0;\">Aggregat.</p>" },
+            new ProjectAnalysisText
+            {
+                SectionKey = "Aggregat",
+                Title = "Aggregat",
+                Html = "<p style=\"margin:1em 0;\">Aggregat.</p>",
+            },
             new ProjectAnalysisText { SectionKey = "Fazit", Html = "<p>Ersatz empfohlen.</p>" },
         ]);
 
@@ -157,8 +181,8 @@ public sealed class ProjectAnalysisTests
 
         analysis.Save(project.Id,
         [
-            Text("Aggregat", "<p>Aggregat.</p>"),
-            Text("Tragmittel", "<p>Hubzylinder dicht.</p>"),
+            Text("Aggregat", "Aggregat", "<p>Aggregat.</p>"),
+            Text("Tragmittel", "Hubzylinder / Tragmittel", "<p>Hubzylinder dicht.</p>"),
         ]);
 
         var html = documents.RenderHtml(project.Id, template.Id);
@@ -174,9 +198,19 @@ public sealed class ProjectAnalysisTests
         var chapter = ProjectAnalysisCatalog.Analyse;
 
         Assert.Equal("2. Analyse", chapter.Heading);
-        Assert.Equal(7, chapter.Sections.Count);
-        Assert.Equal("2.1 Aggregat", chapter.Sections[0].Heading);
-        Assert.Equal("2.2 Hubzylinder / Tragmittel", chapter.Sections[1].Heading);
+        // Die Punkte stehen nicht fest – sie kommen aus den erfassten Texten.
+        Assert.Empty(chapter.Sections);
+
+        var texts = new List<ProjectAnalysisText>
+        {
+            new() { SectionKey = "Aggregat", Title = "Aggregat", SortOrder = 0, Html = "<p>Text.</p>" },
+            new() { SectionKey = "Tragmittel", Title = "Hubzylinder / Tragmittel", SortOrder = 1 },
+        };
+
+        var sections = ProjectAnalysisCatalog.SectionsFor(texts);
+        Assert.Equal(2, sections.Count);
+        Assert.Equal("2.1 Aggregat", sections[0].Heading);
+        Assert.Equal("2.2 Hubzylinder / Tragmittel", sections[1].Heading);
 
         // Der Reiter „2. Analyse“ der Vorlage wird erkannt, „3. Fazit“ nicht.
         Assert.True(ProjectAnalysisCatalog.IsChapterTitle("2. Analyse"));
@@ -184,15 +218,30 @@ public sealed class ProjectAnalysisTests
         Assert.False(ProjectAnalysisCatalog.IsChapterTitle("3. Fazit / Empfehlung"));
 
         // Im Reiter „2. Analyse“ steht der Haupttitel schon als Überschrift.
-        var withoutTitle = ProjectAnalysisCatalog.Render(
-            [new ProjectAnalysisText { SectionKey = "Aggregat", Html = "<p>Text.</p>" }],
-            includeChapterTitle: false);
+        var withoutTitle = ProjectAnalysisCatalog.Render(texts, includeChapterTitle: false);
         Assert.Contains("2.1 Aggregat", withoutTitle);
         Assert.DoesNotContain("2. Analyse", withoutTitle);
 
-        Assert.Equal("Tragmittel", ProjectAnalysisCatalog.FindSection("2.2")?.Key);
-        Assert.Equal("Steuerung", ProjectAnalysisCatalog.FindSection("Steuerung / Regler")?.Key);
-        Assert.Null(ProjectAnalysisCatalog.FindSection("9.9"));
+        Assert.Equal("Tragmittel", ProjectAnalysisCatalog.FindSection(texts, "2.2")?.Key);
+        Assert.Equal("Tragmittel", ProjectAnalysisCatalog.FindSection(texts, "Hubzylinder / Tragmittel")?.Key);
+        Assert.Null(ProjectAnalysisCatalog.FindSection(texts, "9.9"));
+    }
+
+    [Fact]
+    public void Ohne_untertitel_steht_nur_die_nummer_im_reiter()
+    {
+        var texts = new List<ProjectAnalysisText>
+        {
+            new() { SectionKey = "P1", Html = "<p>Text.</p>" },
+        };
+
+        var section = Assert.Single(ProjectAnalysisCatalog.SectionsFor(texts));
+        Assert.Equal("2.1", section.Heading);
+
+        // Ohne Untertitel steht keine Zwischenüberschrift im Bericht.
+        var html = ProjectAnalysisCatalog.Render(texts);
+        Assert.DoesNotContain("2.1", html);
+        Assert.Contains("Text.", html);
     }
 
     [Fact]
@@ -207,7 +256,7 @@ public sealed class ProjectAnalysisTests
         Assert.Empty(ProjectAnalysisCatalog.Anlagedaten.Sections);
 
         Assert.Equal("3.1 Fazit und Empfehlung", Assert.Single(ProjectAnalysisCatalog.Fazit.Sections).Heading);
-        Assert.Equal("Fazit", ProjectAnalysisCatalog.FindSection("3.1")?.Key);
+        Assert.Equal("Fazit", ProjectAnalysisCatalog.FindSection([], "3.1")?.Key);
     }
 
     [Fact]
@@ -219,7 +268,7 @@ public sealed class ProjectAnalysisTests
         var analysis = new ProjectAnalysisService(fixture.Database, session);
 
         var project = projects.Create(Input(Path.Combine(fixture.Root, "p1")));
-        analysis.Save(project.Id, [Text("Fazit", "<p>Modernisierung empfohlen.</p>")]);
+        analysis.Save(project.Id, [Text("Fazit", string.Empty, "<p>Modernisierung empfohlen.</p>")]);
 
         var html = ProjectAnalysisCatalog.Render(analysis.Get(project.Id));
 

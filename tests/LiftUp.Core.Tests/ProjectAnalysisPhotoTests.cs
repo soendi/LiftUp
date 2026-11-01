@@ -329,8 +329,8 @@ public sealed class ProjectAnalysisPhotoTests
 
         analysis.Save(project.Id,
         [
-            new ProjectAnalysisTextInput("Aggregat", "<p>Aggregat geprüft.</p>"),
-            new ProjectAnalysisTextInput("Fazit", "<p>Ersatz empfohlen.</p>"),
+            new ProjectAnalysisTextInput("Aggregat", "Aggregat", "<p>Aggregat geprüft.</p>"),
+            new ProjectAnalysisTextInput("Fazit", string.Empty, "<p>Ersatz empfohlen.</p>"),
         ]);
 
         analysis.SavePhotos(project.Id, "8609861",
@@ -383,7 +383,7 @@ public sealed class ProjectAnalysisPhotoTests
             Html = "<h1>{{project.name}}</h1>",
         });
 
-        analysis.Save(project.Id, [new ProjectAnalysisTextInput("Fazit", "<p>Ersatz empfohlen.</p>")]);
+        analysis.Save(project.Id, [new ProjectAnalysisTextInput("Fazit", string.Empty, "<p>Ersatz empfohlen.</p>")]);
 
         await documents.CreatePdfAsync(project.Id, template.Id);
 

@@ -12,7 +12,7 @@ namespace LiftUp.Core.Data;
 /// </summary>
 public sealed class Database
 {
-    public const int CurrentSchemaVersion = 24;
+    public const int CurrentSchemaVersion = 25;
 
     private readonly string _connectionString;
 
@@ -193,6 +193,9 @@ public sealed class Database
 
         // Version 24 stellt das Projekt mit Anschrift zwischen die beiden Adressblöcke des Deckblatts.
         UpgradeReportCoverFacts(connection);
+
+        // Version 25 macht die Analysepunkte dynamisch: Untertitel und Reihenfolge je Punkt.
+        MigrateProjectAnalysisSections(connection);
 
         using var command = Db.Command(connection, "UPDATE SchemaInfo SET Version = $version;");
         command.With("$version", CurrentSchemaVersion);
@@ -569,6 +572,68 @@ public sealed class Database
                 ON ProjectAnalysisTexts (ProjectId, SectionKey);
             """);
         create.ExecuteNonQuery();
+    }
+
+    /// <summary>
+    /// Version 25: Die Analysepunkte unter „2. Analyse“ stehen nicht mehr fest – jeder Punkt
+    /// hat einen eigenen Untertitel und eine Reihenfolge. Bisherige Punkte behalten ihren Text
+    /// und bekommen die gewohnte Überschrift und Nummer.
+    /// </summary>
+    private static void MigrateProjectAnalysisSections(SqliteConnection connection)
+    {
+        var existing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using (var info = Db.Command(connection, "PRAGMA table_info(ProjectAnalysisTexts);"))
+        using (var reader = info.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                existing.Add(reader.GetString(1));
+            }
+        }
+
+        if (!existing.Contains("Title"))
+        {
+            using var alter = Db.Command(connection,
+                "ALTER TABLE ProjectAnalysisTexts ADD COLUMN Title TEXT NOT NULL DEFAULT '';");
+            alter.ExecuteNonQuery();
+        }
+
+        if (!existing.Contains("SortOrder"))
+        {
+            using var alter = Db.Command(connection,
+                "ALTER TABLE ProjectAnalysisTexts ADD COLUMN SortOrder INTEGER NOT NULL DEFAULT 0;");
+            alter.ExecuteNonQuery();
+        }
+
+        // Früher standen die Punkte in der Reihenfolge der Vorlage; die behalten sie.
+        (string Key, string Title)[] previous =
+        [
+            ("Aggregat", "Aggregat"),
+            ("Tragmittel", "Hubzylinder / Tragmittel"),
+            ("Steuerung", "Steuerung / Regler"),
+            ("Regulator", "Regulator (Geschwindigkeitsbegrenzer)"),
+            ("Fangvorrichtung", "Fangvorrichtung"),
+            ("Kabine", "Kabine / Triebmechanik"),
+            ("Zugänglichkeit", "Zugänglichkeit"),
+        ];
+
+        for (var index = 0; index < previous.Length; index++)
+        {
+            using var update = Db.Command(connection, """
+                UPDATE ProjectAnalysisTexts SET Title = $title, SortOrder = $sort
+                WHERE SectionKey = $key AND trim(Title) = '';
+                """);
+            update.With("$key", previous[index].Key)
+                .With("$title", previous[index].Title)
+                .With("$sort", index);
+            update.ExecuteNonQuery();
+        }
+
+        // Das Fazit steht hinter den Analysepunkten.
+        using var order = Db.Command(connection, """
+            UPDATE ProjectAnalysisTexts SET SortOrder = 1000 WHERE SectionKey = 'Fazit';
+            """);
+        order.ExecuteNonQuery();
     }
 
     /// <summary>
@@ -1386,7 +1451,9 @@ public sealed class Database
             Id         TEXT PRIMARY KEY NOT NULL,
             ProjectId  TEXT NOT NULL REFERENCES Projects(Id),
             SectionKey TEXT NOT NULL,
+            Title      TEXT NOT NULL DEFAULT '',
             Html       TEXT NOT NULL,
+            SortOrder  INTEGER NOT NULL DEFAULT 0,
             CreatedUtc TEXT NOT NULL,
             CreatedBy  TEXT NULL,
             UpdatedUtc TEXT NOT NULL,

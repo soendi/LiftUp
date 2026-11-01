@@ -6,7 +6,8 @@ namespace LiftUp.Core.Repositories;
 
 /// <summary>
 /// Erfasste Texte der Analyse je Projekt und Unterpunkt. Gespeichert wird nur, was
-/// wirklich Text enthält; geänderte Unterpunkte ersetzen den bisherigen Stand.
+/// wirklich Text oder einen Untertitel enthält; geänderte Unterpunkte ersetzen den
+/// bisherigen Stand.
 /// </summary>
 public sealed class ProjectAnalysisRepository
 {
@@ -16,10 +17,10 @@ public sealed class ProjectAnalysisRepository
         Guid projectId)
     {
         using var command = Db.Command(connection, """
-            SELECT Id, ProjectId, SectionKey, Html, UpdatedUtc, UpdatedBy, RowVersion
+            SELECT Id, ProjectId, SectionKey, Title, Html, UpdatedUtc, UpdatedBy, RowVersion, SortOrder
             FROM ProjectAnalysisTexts
             WHERE ProjectId = $projectId AND IsDeleted = 0
-            ORDER BY SectionKey;
+            ORDER BY SortOrder, SectionKey;
             """, transaction);
         command.With("$projectId", projectId.ToString("D"));
 
@@ -32,10 +33,12 @@ public sealed class ProjectAnalysisRepository
                 Id = reader.Guid(0),
                 ProjectId = reader.Guid(1),
                 SectionKey = reader.Text(2),
-                Html = reader.Text(3),
-                UpdatedUtc = reader.Date(4),
-                UpdatedBy = reader.TextOrNull(5),
-                RowVersion = reader.Int64(6),
+                Title = reader.Text(3),
+                Html = reader.Text(4),
+                UpdatedUtc = reader.Date(5),
+                UpdatedBy = reader.TextOrNull(6),
+                RowVersion = reader.Int64(7),
+                SortOrder = reader.Int32(8),
             });
         }
 
@@ -43,8 +46,9 @@ public sealed class ProjectAnalysisRepository
     }
 
     /// <summary>
-    /// Schreibt die Texte neu. Bisherige Einträge werden weich gelöscht, damit ein späterer
-    /// Abgleich die Änderung nachvollziehen kann.
+    /// Schreibt die Texte neu; die Reihenfolge der Liste ist die Reihenfolge im Reiter.
+    /// Bisherige Einträge werden weich gelöscht, damit ein späterer Abgleich die Änderung
+    /// nachvollziehen kann.
     /// </summary>
     public List<ProjectAnalysisText> Replace(
         SqliteConnection connection,
@@ -66,28 +70,33 @@ public sealed class ProjectAnalysisRepository
         var now = DateTime.UtcNow;
         var saved = new List<ProjectAnalysisText>(texts.Count);
 
-        foreach (var input in texts)
+        for (var index = 0; index < texts.Count; index++)
         {
+            var input = texts[index];
             var text = new ProjectAnalysisText
             {
                 ProjectId = projectId,
                 SectionKey = input.SectionKey,
+                Title = input.Title,
                 Html = input.Html,
+                SortOrder = index,
                 UpdatedUtc = now,
                 UpdatedBy = changedBy,
             };
 
             using var insert = Db.Command(connection, """
                 INSERT INTO ProjectAnalysisTexts
-                    (Id, ProjectId, SectionKey, Html, CreatedUtc, CreatedBy, UpdatedUtc, UpdatedBy,
-                     RowVersion, IsDeleted)
-                VALUES ($id, $projectId, $sectionKey, $html, $createdUtc, $createdBy, $updatedUtc,
-                        $updatedBy, 1, 0);
+                    (Id, ProjectId, SectionKey, Title, Html, SortOrder, CreatedUtc, CreatedBy,
+                     UpdatedUtc, UpdatedBy, RowVersion, IsDeleted)
+                VALUES ($id, $projectId, $sectionKey, $title, $html, $sortOrder, $createdUtc, $createdBy,
+                        $updatedUtc, $updatedBy, 1, 0);
                 """, transaction);
             insert.With("$id", text.Id.ToString("D"))
                 .With("$projectId", projectId.ToString("D"))
                 .With("$sectionKey", text.SectionKey)
+                .With("$title", text.Title)
                 .With("$html", text.Html)
+                .With("$sortOrder", text.SortOrder)
                 .With("$createdUtc", now.ToDb())
                 .With("$createdBy", changedBy)
                 .With("$updatedUtc", now.ToDb())
