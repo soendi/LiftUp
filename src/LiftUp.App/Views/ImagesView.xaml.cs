@@ -54,6 +54,14 @@ public partial class ImagesView : UserControl
         // Ein Projektwechsel in einem anderen Reiter zieht die Bilder sofort mit.
         _selection.Changed += (_, _) => ShowSelectedProject();
         ShowSelectedProject();
+
+        // Ein neu angelegtes Projekt steht sofort in der Auswahl, auch wenn der Reiter zu ist.
+        _selection.ProjectsChanged += (_, _) =>
+        {
+            LoadProjects();
+            LoadImages();
+            ShowSelectedProject();
+        };
     }
 
     private void LoadProjects()

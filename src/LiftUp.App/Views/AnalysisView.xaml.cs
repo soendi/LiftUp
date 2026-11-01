@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using LiftUp.App.Controls;
 using LiftUp.App.Documents;
 using LiftUp.Core.Domain;
@@ -135,6 +136,9 @@ public partial class AnalysisView : UserControl, ITabFillSource
         // Ein Projektwechsel in einem anderen Reiter zieht die Analyse sofort mit.
         _selection.Changed += (_, _) => ShowSelectedProject();
         ShowSelectedProject();
+
+        // Ein neu angelegtes Projekt steht sofort in der Auswahl, auch wenn der Reiter zu ist.
+        _selection.ProjectsChanged += (_, _) => LoadProjects();
 
         // Neu angelegte Projekte stehen sofort zur Auswahl, sobald der Reiter geöffnet wird.
         IsVisibleChanged += (_, args) =>
@@ -546,7 +550,28 @@ public partial class AnalysisView : UserControl, ITabFillSource
             _analysisTabs.SelectedIndex = _analysisTabs.Items.Count - 1;
         }
 
-        _sections[^1].TitleBox?.Focus();
+        FocusSectionTitle(_sections[^1]);
+    }
+
+    /// <summary>
+    /// Setzt den Fokus in das Untertitel-Feld eines Punkts. Der Reiterinhalt entsteht erst
+    /// beim nächsten Layoutlauf – ein sofortiges Fokussieren ginge deshalb ins Leere.
+    /// </summary>
+    private void FocusSectionTitle(SectionDraft draft)
+    {
+        if (draft.TitleBox is not { } titleBox)
+        {
+            return;
+        }
+
+        Dispatcher.BeginInvoke(
+            DispatcherPriority.Input,
+            new Action(() =>
+            {
+                titleBox.Focus();
+                Keyboard.Focus(titleBox);
+                titleBox.CaretIndex = titleBox.Text.Length;
+            }));
     }
 
     /// <summary>Entfernt den gewählten Punkt; ohne Punkte bleibt „2.1“ stehen.</summary>

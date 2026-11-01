@@ -20,6 +20,9 @@ public partial class ProjectEditWindow : Window
         public string Responsibility { get; set; } = string.Empty;
     }
 
+    /// <summary>Projekt, das zuletzt gespeichert wurde – die Reiter stellen ihre Auswahl darauf ein.</summary>
+    public Guid? SavedProjectId { get; private set; }
+
     private readonly AppServices _services;
     private readonly Guid? _projectId;
     private readonly ObservableCollection<ContactRow> _contacts = [];
@@ -396,11 +399,12 @@ public partial class ProjectEditWindow : Window
         {
             if (_projectId is null)
             {
-                _services.Projects.Create(input);
+                SavedProjectId = _services.Projects.Create(input).Id;
             }
             else
             {
                 _services.Projects.Update(_projectId.Value, input);
+                SavedProjectId = _projectId.Value;
             }
 
             DialogResult = true;

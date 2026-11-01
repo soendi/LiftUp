@@ -13,6 +13,15 @@ public sealed class ProjectSelection
     public event EventHandler? Changed;
 
     /// <summary>
+    /// Meldet, dass sich die Projektliste geändert hat (neues oder geändertes Projekt).
+    /// Die Reiter lesen ihre Auswahl danach neu ein; die gemeinsame Auswahl bleibt bestehen.
+    /// </summary>
+    public event EventHandler? ProjectsChanged;
+
+    /// <summary>Lässt alle Reiter ihre Projektliste neu einlesen.</summary>
+    public void NotifyProjectsChanged() => ProjectsChanged?.Invoke(this, EventArgs.Empty);
+
+    /// <summary>
     /// Setzt die Auswahl und meldet sie den anderen Reitern. Liefert <c>false</c>, wenn sie
     /// schon gilt – dann braucht kein Steuerelement nachzuziehen.
     /// </summary>

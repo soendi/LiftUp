@@ -91,6 +91,13 @@ public partial class ProjectTableView : UserControl, ITabFillSource
         _selection.Changed += (_, _) => ShowSelectedProject();
         ShowSelectedProject();
 
+        // Ein neu angelegtes Projekt steht sofort in der Auswahl, auch wenn der Reiter zu ist.
+        _selection.ProjectsChanged += (_, _) =>
+        {
+            LoadProjects();
+            ShowSelectedProject();
+        };
+
         RowsGrid.ItemsSource = _rows;
         RowsGrid.PreparingCellForEdit += OnPreparingCellForEdit;
         RowsGrid.CellEditEnding += OnCellEditEnding;
@@ -275,8 +282,19 @@ public partial class ProjectTableView : UserControl, ITabFillSource
                 .Select(item => new ProjectOption(item.Id, $"{item.Number} · {item.Name}"))
                 .ToArray();
 
+            // Das gemeinsame Projekt bleibt gewählt; ohne Auswahl gilt das erste Projekt.
+            var index = 0;
+            if (_selection.ProjectId is { } selected)
+            {
+                var found = Array.FindIndex(projects, item => item.Id == selected);
+                if (found >= 0)
+                {
+                    index = found;
+                }
+            }
+
             ProjectBox.ItemsSource = projects;
-            ProjectBox.SelectedIndex = projects.Length > 0 ? 0 : -1;
+            ProjectBox.SelectedIndex = projects.Length > 0 ? index : -1;
 
             if (projects.Length == 0)
             {

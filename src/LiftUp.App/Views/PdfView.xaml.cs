@@ -54,6 +54,13 @@ public partial class PdfView : UserControl
         _selection.Changed += (_, _) => ShowSelectedProject();
         ShowSelectedProject();
 
+        // Ein neu angelegtes Projekt steht sofort in der Auswahl, auch wenn der Reiter zu ist.
+        _selection.ProjectsChanged += (_, _) =>
+        {
+            LoadProjects(keepSelection: true);
+            ShowSelectedProject();
+        };
+
         // Neu angelegte Projekte stehen sofort zur Auswahl, sobald der Reiter geöffnet wird.
         IsVisibleChanged += (_, args) =>
         {

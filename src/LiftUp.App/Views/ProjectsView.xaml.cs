@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Globalization;
 using System.IO;
 using System.Windows;
@@ -35,6 +36,7 @@ public partial class ProjectsView : UserControl
     ];
 
     private readonly AppServices _services;
+    private readonly ProjectSelection _selection;
     private readonly ObservableCollection<MilestoneRow> _milestones = [];
     private Guid? _milestoneProjectId;
     private bool _milestonesLoading;
@@ -42,9 +44,10 @@ public partial class ProjectsView : UserControl
     private DataGridRow? _previewRow;
     private string _previewPath = string.Empty;
 
-    public ProjectsView(AppServices services)
+    public ProjectsView(AppServices services, ProjectSelection selection)
     {
         _services = services;
+        _selection = selection;
         InitializeComponent();
 
         StatusFilterBox.ItemsSource = StatusOptions;
@@ -255,17 +258,19 @@ public partial class ProjectsView : UserControl
         {
             foreach (var milestone in _services.Projects.GetProject(project.Id).Milestones)
             {
-                _milestones.Add(ToRow(milestone));
+                AddMilestoneRow(ToRow(milestone));
             }
 
             // Die Begehung ist fester Bestandteil jedes Projekts.
             if (!_milestones.Any(row => row.IsFixed))
             {
-                _milestones.Insert(0, new MilestoneRow
-                {
-                    Title = ProjectMilestoneCatalog.Inspection,
-                    IsFixed = true,
-                });
+                AddMilestoneRow(
+                    new MilestoneRow
+                    {
+                        Title = ProjectMilestoneCatalog.Inspection,
+                        IsFixed = true,
+                    },
+                    index: 0);
             }
 
             MilestoneInfoText.Text = _milestones.Count == 1
@@ -306,7 +311,7 @@ public partial class ProjectsView : UserControl
         }
 
         var row = new MilestoneRow();
-        _milestones.Add(row);
+        AddMilestoneRow(row);
         MilestonesGrid.SelectedItem = row;
         MilestonesGrid.ScrollIntoView(row);
         MilestonesGrid.CurrentCell = new DataGridCellInfo(row, MilestonesGrid.Columns[0]);
@@ -342,6 +347,35 @@ public partial class ProjectsView : UserControl
             MilestoneInfoText.Text =
                 $"Der Meilenstein „{ProjectMilestoneCatalog.Inspection}“ ist fest vorgegeben";
         }
+    }
+
+    /// <summary>
+    /// Hängt eine Zeile ein und horcht auf den erledigt-Haken. Ein Klick auf das Kästchen
+    /// beendet die Zeilenbearbeitung nicht – gespeichert wird deshalb schon bei der Änderung.
+    /// </summary>
+    private void AddMilestoneRow(MilestoneRow row, int index = -1)
+    {
+        row.PropertyChanged += OnMilestoneRowChanged;
+
+        if (index < 0)
+        {
+            _milestones.Add(row);
+        }
+        else
+        {
+            _milestones.Insert(index, row);
+        }
+    }
+
+    /// <summary>Speichert den erledigt-Haken sofort; Texte weiterhin beim Verlassen der Zeile.</summary>
+    private void OnMilestoneRowChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (_milestonesLoading || _milestonesSaving || e.PropertyName != nameof(MilestoneRow.IsDone))
+        {
+            return;
+        }
+
+        SaveMilestones();
     }
 
     private void OnMilestoneRowEditEnding(object? sender, DataGridRowEditEndingEventArgs e)
@@ -513,6 +547,21 @@ public partial class ProjectsView : UserControl
         if (dialog.ShowDialog() == true)
         {
             LoadProjects();
+            ShowInOtherTabs(dialog.SavedProjectId);
+        }
+    }
+
+    /// <summary>
+    /// Meldet den neuen Stand an die Reiter mit eigener Projektauswahl: zuerst die Liste,
+    /// damit das Projekt überall vorhanden ist, danach die Auswahl darauf.
+    /// </summary>
+    private void ShowInOtherTabs(Guid? projectId)
+    {
+        _selection.NotifyProjectsChanged();
+
+        if (projectId is { } id)
+        {
+            _selection.Select(id);
         }
     }
 
@@ -529,6 +578,8 @@ public partial class ProjectsView : UserControl
         if (dialog.ShowDialog() == true)
         {
             LoadProjects();
+            // Name und Nummer können sich geändert haben; die Reiter lesen die Liste neu ein.
+            _selection.NotifyProjectsChanged();
         }
     }
 

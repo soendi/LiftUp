@@ -39,7 +39,7 @@ public partial class MainWindow : Window
         var overview = new List<TabItem>();
         if (session.Can(Permission.ViewProjects))
         {
-            overview.Add(CreateTab("Projekte", new ProjectsView(_services)));
+            overview.Add(CreateTab("Projekte", new ProjectsView(_services, selection)));
         }
 
         if (session.Can(Permission.ViewProjects))
