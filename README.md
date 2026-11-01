@@ -76,7 +76,7 @@ Benutzer verwalten, Rollen und Rechte verwalten. Die Prüfung passiert in der Co
 - Löschen entfernt den Datensatz; auf Wunsch wird der Projektordner zusätzlich in den Papierkorb
   verschoben (Rückfrage im Dialog, standardmäßig „Nein“).
 - Die Liste zeigt zusätzlich, ob der Ordner aktuell vorhanden ist.
-- Zwei Adressen je Projekt, im Dialog unten als Register **Kunde** und **Auftraggeber** gepflegt:
+- Zwei Adressen je Projekt, im Dialog unten als Register **Projekt** und **Auftraggeber** gepflegt:
   Name, Straße und Hausnummer, eine zusätzliche Zeile (Gebäude, Abteilung, Postfach) sowie PLZ und Ort.
   Beide Register führen eigene Ansprechpersonen (Name, E-Mail, Telefon, Zuständigkeit).
 - **Projektbild** für das Deckblatt, direkt unter dem Projektordner über „Bild wählen …“ ausgewählt:
@@ -302,7 +302,8 @@ Dokuments neu zu tippen. Der Reiter folgt dem Bericht:
 - **2. Analyse** – je Analysepunkt ein Unter-Reiter: 2.1 Aggregat, 2.2 Hubzylinder / Tragmittel,
   2.3 Steuerung / Regler, 2.4 Regulator (Geschwindigkeitsbegrenzer), 2.5 Fangvorrichtung,
   2.6 Kabine / Triebmechanik und 2.7 Zugänglichkeit.
-- **3. Fazit / Empfehlung** – 3.1 Fazit und Empfehlung als abschließender Text.
+- **3. Fazit / Empfehlung** – der abschließende Text; ein Unter-Reiter entfällt, weil der
+  Haupttitel nur einen Punkt hat.
 - **4. Fotos** – Fotos je Aufzug (siehe unten).
 
 Die Reiter zeigen auf einen Blick, wo noch etwas fehlt: Sie sind **hellrot**, solange nichts
@@ -320,13 +321,15 @@ Vorschlag nennt in der zweiten Zeile Spalte und Herkunft („Jahr · Investition
 Zeile wird als Text eingefügt. Gesucht wird ausschließlich im aktuell gewählten Projekt. Sind mehrere Standorte erfasst, steht der Standort dabei – in der Vorschlagsliste
 und im eingefügten Text: „Aufzugsanlage 938702809 (Messligfeldstrasse 1)“.
 
-Außerhalb der Analyse gilt dasselbe im Dokument-Editor und in den Tabellenzellen der
-Zustandsanalyse (dort `//` und `/` als reiner Text, ohne Bilder). Beim Erstellen eines Dokuments belegt der
+Außerhalb der Analyse gilt dasselbe im Dokument-Editor und in den Tabellenzellen der Tabellen
+(dort `//` und `/` als reiner Text, ohne Bilder; `//` durchsucht die Werte des gewählten
+Projekts). Beim Erstellen eines Dokuments belegt der
 Abschnitt „2. Analyse“ der Vorlage den Reiter mit diesen Texten vor; alternativ setzt `{{analyse}}`
 sie ein, `{{analyse:2.1}}` einen einzelnen Punkt.
 
-**Reiter „4. Fotos“:** Unter dem Haupttitel folgt je Zeile der Zustandsanalyse ein Unter-Reiter,
-benannt nach Anlagebezeichnung und Standort (4.1 „8609861, Messligfeldstrasse 1“, 4.2 …). Dort lassen sich Fotos hinzufügen – sie werden in den
+**Reiter „4. Fotos“:** Unter dem Haupttitel folgt je Aufzug der Zustandsanalyse ein Unter-Reiter –
+aber erst, wenn Anlagebezeichnung und Standort erfasst sind; sonst bleibt der Haupttitel ohne
+Unter-Reiter. Die Reiter heissen nach dem Muster „4.1 8609861 Messligfeldstrasse 1“, „4.2 …“. Dort lassen sich Fotos hinzufügen – sie werden in den
 Bilderordner des Projekts kopiert – und mit Bildunterschrift versehen. Der kleine Bild-Editor
 legt Kreise und Pfeile über das Foto, um den Kunden auf eine Stelle hinzuweisen; gespeichert
 werden Bildpixel, damit die Markierung im PDF exakt sitzt. Die Fotos erscheinen als eigene

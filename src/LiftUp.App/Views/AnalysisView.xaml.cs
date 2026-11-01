@@ -90,25 +90,23 @@ public partial class AnalysisView : UserControl
                 continue;
             }
 
+            // Ein Haupttitel mit nur einem Punkt bekommt keinen Unter-Reiter: Der Editor steht
+            // direkt darunter („3. Fazit / Empfehlung“ ohne „3.1 …“).
+            if (chapter.Sections.Count == 1)
+            {
+                var single = CreateDraft(chapter.Sections[0]);
+                AddChapterTab(chapter.Heading, single.Editor, () => single.Filled);
+                continue;
+            }
+
             var sections = new TabControl();
             var sectionTabs = new List<TabStatus>();
             foreach (var section in chapter.Sections)
             {
-                var editor = new HtmlEditor();
-                editor.EnableSnippetAutocomplete(_search.SearchSnippets);
-                editor.EnableImageAutocomplete(_search.SearchImages);
-                editor.EnableTableAutocomplete(_search.SearchTableValues);
+                var draft = CreateDraft(section);
 
-                var draft = new SectionDraft(section, editor);
-                _sections.Add(draft);
-
-                var tab = new TabItem { Content = editor };
+                var tab = new TabItem { Content = draft.Editor };
                 var status = new TabStatus(tab, section.Heading, () => draft.Filled);
-                editor.ContentChanged += (_, _) =>
-                {
-                    draft.Filled = editor.HasText;
-                    UpdateTabColors();
-                };
 
                 sectionTabs.Add(status);
                 _tabStatuses.Add(status);
@@ -137,6 +135,26 @@ public partial class AnalysisView : UserControl
         var tab = new TabItem { Content = content };
         _tabStatuses.Add(new TabStatus(tab, header, isFilled));
         ChapterTabs.Items.Add(tab);
+    }
+
+    /// <summary>Editor eines Analysepunkts samt „/“-, „//“- und „&amp;“-Suche und Farbsignal.</summary>
+    private SectionDraft CreateDraft(ProjectAnalysisSection section)
+    {
+        var editor = new HtmlEditor();
+        editor.EnableSnippetAutocomplete(_search.SearchSnippets);
+        editor.EnableImageAutocomplete(_search.SearchImages);
+        editor.EnableTableAutocomplete(_search.SearchTableValues);
+
+        var draft = new SectionDraft(section, editor);
+        _sections.Add(draft);
+
+        editor.ContentChanged += (_, _) =>
+        {
+            draft.Filled = editor.HasText;
+            UpdateTabColors();
+        };
+
+        return draft;
     }
 
     private void LoadProjects(bool keepSelection = false)
@@ -209,8 +227,9 @@ public partial class AnalysisView : UserControl
     }
 
     /// <summary>
-    /// Legt die Foto-Reiter an: ein Unterpunkt je Aufzug aus der Zustandsanalyse. Ohne
-    /// erfasste Aufzüge bleibt ein Reiter „4.1 Aufzug“, damit Fotos nicht blockiert sind.
+    /// Legt die Foto-Reiter an: ein Unterpunkt je Aufzug aus der Zustandsanalyse, sobald
+    /// Anlagebezeichnung und Standort erfasst sind. Ohne solche Zeilen bleibt der Haupttitel
+    /// ohne Unter-Reiter.
     /// </summary>
     private void BuildPhotoTabs(Guid projectId)
     {
@@ -227,11 +246,6 @@ public partial class AnalysisView : UserControl
         {
             InfoText.Text = exception.Message;
             return;
-        }
-
-        if (lifts.Count == 0)
-        {
-            lifts = [new ProjectAnalysisLift(string.Empty, string.Empty)];
         }
 
         for (var index = 0; index < lifts.Count; index++)

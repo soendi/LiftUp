@@ -88,12 +88,12 @@ public static class ProjectAnalysisPhotoCatalog
 
     /// <summary>
     /// Überschrift eines Aufzugs: Nummer, Anlagebezeichnung und Standort aus der
-    /// Zustandsanalyse, etwa <c>4.1 8609861, Messligfeldstrasse 1</c>.
+    /// Zustandsanalyse, etwa <c>4.1 8609861 Messligfeldstrasse 1</c>.
     /// </summary>
     public static string LiftHeading(int index, string? name, string? location = null)
     {
         var number = $"{PhotosNumber}.{index + 1}";
-        var text = string.Join(", ", new[] { name?.Trim(), location?.Trim() }
+        var text = string.Join(" ", new[] { name?.Trim(), location?.Trim() }
             .Where(part => !string.IsNullOrEmpty(part)));
 
         return text.Length == 0 ? $"{number} Aufzug" : $"{number} {text}";

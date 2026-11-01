@@ -189,7 +189,13 @@ public sealed class ProjectAnalysisTests
         var html = ProjectAnalysisCatalog.Render(analysis.Get(project.Id));
 
         Assert.Contains("3. Fazit / Empfehlung", html);
-        Assert.Contains("3.1 Fazit und Empfehlung", html);
         Assert.Contains("Modernisierung empfohlen.", html);
+
+        // Der einzige Punkt des Haupttitels steht ohne eigene Zwischenüberschrift darunter.
+        Assert.DoesNotContain("3.1", html);
+
+        var single = ProjectAnalysisCatalog.Render(analysis.Get(project.Id), "3.1");
+        Assert.DoesNotContain("3.1", single);
+        Assert.Contains("Modernisierung empfohlen.", single);
     }
 }

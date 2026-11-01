@@ -75,7 +75,11 @@ public sealed class ProjectAnalysisService
         return saved;
     }
 
-    /// <summary>Aufzüge aus der Zustandsanalyse – je Zeile ein Reiter unter „4. Fotos“.</summary>
+    /// <summary>
+    /// Aufzüge aus der Zustandsanalyse – je Aufzug ein Reiter unter „4. Fotos“. Ein Reiter
+    /// entsteht erst, wenn Anlagebezeichnung und Standort erfasst sind; gleiche Bezeichnungen
+    /// ergeben einen Reiter.
+    /// </summary>
     public IReadOnlyList<ProjectAnalysisLift> GetLifts(Guid projectId)
     {
         _actor.Require(Permission.ViewProjects);
@@ -91,8 +95,9 @@ public sealed class ProjectAnalysisService
             var name = row.Values.TryGetValue("AssetName", out var assetName) ? assetName.Trim() : string.Empty;
             var location = row.Values.TryGetValue("Location", out var place) ? place.Trim() : string.Empty;
 
-            // Ohne Anlagebezeichnung gibt es keinen Schlüssel für die Fotos.
-            if (name.Length == 0 || !seen.Add(name))
+            // Ohne Anlagebezeichnung gibt es keinen Schlüssel für die Fotos, ohne Standort
+            // keine eindeutige Überschrift – solche Zeilen bekommen keinen Reiter.
+            if (name.Length == 0 || location.Length == 0 || !seen.Add(name))
             {
                 continue;
             }

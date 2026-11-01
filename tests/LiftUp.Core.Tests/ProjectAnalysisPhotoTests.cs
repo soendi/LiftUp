@@ -111,6 +111,7 @@ public sealed class ProjectAnalysisPhotoTests
                 ["Location"] = "Messligfeldstrasse 3",
             }),
             new ProjectTableRowInput(new Dictionary<string, string> { ["Location"] = "Ohne Nummer" }),
+            new ProjectTableRowInput(new Dictionary<string, string> { ["AssetName"] = "8609863" }),
         ]);
 
         var lifts = analysis.GetLifts(project.Id);
@@ -122,7 +123,7 @@ public sealed class ProjectAnalysisPhotoTests
     [Fact]
     public void Jede_zeile_der_zustandsanalyse_bekommt_einen_foto_reiter()
     {
-        Assert.Equal("4.1 8609861, Messligfeldstrasse 1",
+        Assert.Equal("4.1 8609861 Messligfeldstrasse 1",
             ProjectAnalysisPhotoCatalog.LiftHeading(0, "8609861", "Messligfeldstrasse 1"));
         Assert.Equal("4.2 8609862", ProjectAnalysisPhotoCatalog.LiftHeading(1, "8609862", "  "));
         Assert.Equal("4.3 Lift Turnhalle", ProjectAnalysisPhotoCatalog.LiftHeading(2, "  Lift Turnhalle  "));
@@ -155,7 +156,7 @@ public sealed class ProjectAnalysisPhotoTests
             liftLocations: new Dictionary<string, string> { ["8609861"] = "Messligfeldstrasse 1" });
 
         Assert.Contains("4. Fotos", html);
-        Assert.Contains("4.1 8609861, Messligfeldstrasse 1", html);
+        Assert.Contains("4.1 8609861 Messligfeldstrasse 1", html);
         Assert.Contains("grid-template-columns:1fr 1fr", html);
         Assert.Contains("Verschlissene Seile", html);
         Assert.Contains("data:image/png;base64,", html);

@@ -25,12 +25,15 @@ public partial class ProjectTableView : UserControl
         public string DisplayText => string.IsNullOrWhiteSpace(Category) ? Name : $"{Name} · {Category}";
     }
 
+    /// <summary>Ein Vorschlag in einer Tabellenzelle: Textbaustein oder Wert aus einer Tabelle.</summary>
+    private sealed record CellSuggestion(string DisplayText, string Detail, string Text, Guid? SnippetId);
+
     private readonly AppServices _services;
     private readonly ProjectTableDefinition _definition;
     private readonly ProjectSelection _selection;
     private readonly ObservableCollection<ProjectTableRowModel> _rows = [];
     private readonly List<SnippetOption> _snippets = [];
-    private readonly List<SnippetOption> _matches = [];
+    private readonly List<CellSuggestion> _matches = [];
     private readonly Func<Guid, IReadOnlyList<ProjectTableRowInput>>? _draftRows;
 
     private TextBox? _editingBox;
@@ -337,13 +340,27 @@ public partial class ProjectTableView : UserControl
     /// </summary>
     private void OnCellTextChanged(object sender, TextChangedEventArgs e)
     {
-        if (sender is not TextBox box || _snippets.Count == 0)
+        if (sender is not TextBox box)
         {
             return;
         }
 
         var caret = Math.Min(box.CaretIndex, box.Text.Length);
         var before = box.Text[..caret];
+
+        // „//Feld“ sucht in den Werten der Tabellen, „/Text“ in den Textbausteinen.
+        if (FindTableToken(before) is { } table)
+        {
+            ShowTableValues(box, table.Start, table.Token);
+            return;
+        }
+
+        if (_snippets.Count == 0)
+        {
+            HideSnippets();
+            return;
+        }
+
         var slash = before.LastIndexOf('/');
 
         if (slash < 0 || (slash > 0 && !char.IsWhiteSpace(before[slash - 1])))
@@ -353,13 +370,28 @@ public partial class ProjectTableView : UserControl
         }
 
         var token = before[(slash + 1)..];
-        if (token.Contains(' ') || token.Length > 40)
+        if (token.Contains(' ') || token.Contains('/') || token.Length > 40)
         {
             HideSnippets();
             return;
         }
 
         ShowSnippets(box, slash, token);
+    }
+
+    /// <summary>„//Feld“ vor dem Cursor, sofern es am Wortanfang steht.</summary>
+    private static (int Start, string Token)? FindTableToken(string before)
+    {
+        var start = before.LastIndexOf("//", StringComparison.Ordinal);
+        if (start < 0 || (start > 0 && !char.IsWhiteSpace(before[start - 1])))
+        {
+            return null;
+        }
+
+        var token = before[(start + 2)..];
+        return token.Contains(' ') || token.Contains('/') || token.Length > 40
+            ? null
+            : (start, token);
     }
 
     private void OnCellPreviewKeyDown(object sender, KeyEventArgs e)
@@ -395,12 +427,56 @@ public partial class ProjectTableView : UserControl
     private void ShowSnippets(TextBox box, int slashIndex, string token)
     {
         _matches.Clear();
-        _matches.AddRange(_snippets.Where(snippet =>
-            token.Length == 0
-            || snippet.Name.Contains(token, StringComparison.OrdinalIgnoreCase)
-            || snippet.Category.Contains(token, StringComparison.OrdinalIgnoreCase)));
+        _matches.AddRange(_snippets
+            .Where(snippet =>
+                token.Length == 0
+                || snippet.Name.Contains(token, StringComparison.OrdinalIgnoreCase)
+                || snippet.Category.Contains(token, StringComparison.OrdinalIgnoreCase))
+            .Select(snippet => new CellSuggestion(snippet.DisplayText, string.Empty, string.Empty, snippet.Id)));
 
         _slashIndex = slashIndex;
+        _selectedMatch = 0;
+
+        if (_matches.Count == 0)
+        {
+            HideSnippets();
+            return;
+        }
+
+        BuildSnippetList();
+        PositionPopup(box);
+        SnippetPopup.IsOpen = true;
+    }
+
+    /// <summary>
+    /// Zeigt die gefüllten Werte der Tabellen („//“) – nur aus dem gewählten Projekt, mit
+    /// Herkunft in der Liste. Übernommen wird der reine Text, weil eine Zelle keine
+    /// Formatierung kennt.
+    /// </summary>
+    private void ShowTableValues(TextBox box, int start, string token)
+    {
+        if (ProjectBox.SelectedItem is not ProjectOption project)
+        {
+            HideSnippets();
+            return;
+        }
+
+        _matches.Clear();
+        try
+        {
+            var tables = ProjectTableCatalog.Known
+                .Select(definition => (definition, _services.ProjectTables.Get(project.Id, definition.Key)))
+                .ToArray();
+
+            _matches.AddRange(ProjectTableValues.Search(tables, token, projectId: project.Id)
+                .Select(value => new CellSuggestion(value.Text, value.Detail, value.Text, null)));
+        }
+        catch (LiftUpException exception)
+        {
+            InfoText.Text = exception.Message;
+        }
+
+        _slashIndex = start;
         _selectedMatch = 0;
 
         if (_matches.Count == 0)
@@ -434,7 +510,9 @@ public partial class ProjectTableView : UserControl
                 Background = index == _selectedMatch
                     ? new SolidColorBrush(Color.FromRgb(0xE3, 0xEE, 0xFA))
                     : Brushes.Transparent,
-                ToolTip = match.DisplayText,
+                ToolTip = string.IsNullOrWhiteSpace(match.Detail)
+                    ? match.DisplayText
+                    : $"{match.DisplayText} · {match.Detail}",
             };
 
             var choice = match;
@@ -459,7 +537,7 @@ public partial class ProjectTableView : UserControl
     /// Setzt den Textbaustein an die Stelle des „/“-Suchtextes. In einer Tabellenzelle gibt
     /// es keine Formatierung, deshalb wird der HTML-Inhalt als reiner Text übernommen.
     /// </summary>
-    private void PickSnippet(SnippetOption option)
+    private void PickSnippet(CellSuggestion suggestion)
     {
         var box = _editingBox;
         if (box is null || _slashIndex < 0)
@@ -468,19 +546,25 @@ public partial class ProjectTableView : UserControl
             return;
         }
 
-        string html;
-        try
+        string text;
+        if (suggestion.SnippetId is { } id)
         {
-            html = _services.Snippets.Get(option.Id).Html;
+            try
+            {
+                text = ToPlainText(_services.Snippets.Get(id).Html);
+            }
+            catch (LiftUpException exception)
+            {
+                InfoText.Text = exception.Message;
+                HideSnippets();
+                return;
+            }
         }
-        catch (LiftUpException exception)
+        else
         {
-            InfoText.Text = exception.Message;
-            HideSnippets();
-            return;
+            text = suggestion.Text;
         }
 
-        var text = ToPlainText(html);
         var caret = Math.Min(box.CaretIndex, box.Text.Length);
         var start = Math.Min(_slashIndex, box.Text.Length);
 

@@ -222,6 +222,10 @@ public sealed class LiftPhotosPanel : Grid
 
         row.Photo.Annotations = [.. dialog.Annotations];
         row.Notify(nameof(PhotoRow.DisplayText));
+
+        // Die Anzeige lädt das Bild neu; sonst bliebe das Foto ohne Markierung stehen.
+        OnSelectionChanged();
+
         _info.Text = dialog.Annotations.Count == 0
             ? "Markierungen entfernt – bitte speichern."
             : $"{dialog.Annotations.Count} Markierung(en) übernommen – bitte speichern.";
@@ -288,6 +292,9 @@ public sealed class LiftPhotosPanel : Grid
 /// <summary>Ein Foto in der Liste; die Unterschrift wird direkt am Foto gepflegt.</summary>
 public sealed class PhotoRow : INotifyPropertyChanged
 {
+    /// <summary>Farbe der Markierungen – dieselbe wie im Bild-Editor.</summary>
+    private static readonly Color MarkColor = Color.FromRgb(0xE1, 0x1D, 0x48);
+
     public PhotoRow(ProjectAnalysisPhoto photo)
     {
         Photo = photo;
@@ -334,13 +341,77 @@ public sealed class PhotoRow : INotifyPropertyChanged
                 image.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
                 image.EndInit();
                 image.Freeze();
-                return image;
+
+                // Markierungen gehören in die Vorschau: sonst zeigt das Hauptfenster nur das
+                // unveränderte Bild, obwohl das PDF die Markierung enthält.
+                return Photo.Annotations.Count == 0 ? image : WithAnnotations(image);
             }
             catch (Exception exception) when (exception is IOException or NotSupportedException or ArgumentException)
             {
                 return null;
             }
         }
+    }
+
+    /// <summary>
+    /// Zeichnet Kreise und Pfeile über das Bild. Die Werte sind Bildpixel, deshalb sitzt die
+    /// Markierung in der Vorschau an derselben Stelle wie im PDF.
+    /// </summary>
+    private ImageSource WithAnnotations(BitmapImage image)
+    {
+        var width = image.PixelWidth;
+        var height = image.PixelHeight;
+        if (width <= 0 || height <= 0)
+        {
+            return image;
+        }
+
+        var thickness = ProjectAnalysisPhotoCatalog.StrokeWidth(width, height);
+        var pen = new Pen(new SolidColorBrush(MarkColor), thickness);
+        pen.Freeze();
+        var fill = new SolidColorBrush(MarkColor);
+        fill.Freeze();
+
+        var visual = new DrawingVisual();
+        using (var context = visual.RenderOpen())
+        {
+            context.DrawImage(image, new Rect(0, 0, width, height));
+
+            foreach (var annotation in Photo.Annotations)
+            {
+                if (annotation.Kind == PhotoAnnotationKind.Circle)
+                {
+                    if (annotation.Radius > 0)
+                    {
+                        context.DrawEllipse(null, pen, new Point(annotation.X1, annotation.Y1),
+                            annotation.Radius, annotation.Radius);
+                    }
+
+                    continue;
+                }
+
+                context.DrawLine(pen,
+                    new Point(annotation.X1, annotation.Y1),
+                    new Point(annotation.X2, annotation.Y2));
+
+                var head = ProjectAnalysisPhotoCatalog.ArrowHead(annotation, thickness * 5);
+                var arrow = new StreamGeometry();
+                using (var geometry = arrow.Open())
+                {
+                    geometry.BeginFigure(new Point(head[0].X, head[0].Y), isFilled: true, isClosed: true);
+                    geometry.LineTo(new Point(head[1].X, head[1].Y), isStroked: false, isSmoothJoin: false);
+                    geometry.LineTo(new Point(head[2].X, head[2].Y), isStroked: false, isSmoothJoin: false);
+                }
+
+                arrow.Freeze();
+                context.DrawGeometry(fill, null, arrow);
+            }
+        }
+
+        var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+        bitmap.Render(visual);
+        bitmap.Freeze();
+        return bitmap;
     }
 
     public void Notify(string propertyName) =>

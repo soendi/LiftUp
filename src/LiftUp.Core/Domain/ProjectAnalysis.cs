@@ -153,7 +153,7 @@ public static class ProjectAnalysisCatalog
         {
             var single = FindSection(section);
             return single is not null && filled.TryGetValue(single.Key, out var html)
-                ? SectionHtml(single, html)
+                ? SectionHtml(single, html, HasOwnHeading(single))
                 : string.Empty;
         }
 
@@ -177,19 +177,32 @@ public static class ProjectAnalysisCatalog
 
             foreach (var item in written)
             {
-                builder.Append(SectionHtml(item, filled[item.Key]));
+                // Ein Haupttitel mit nur einem Punkt braucht keine Zwischenüberschrift –
+                // „3. Fazit / Empfehlung“ sagt bereits, was folgt.
+                builder.Append(SectionHtml(item, filled[item.Key], HasOwnHeading(item)));
             }
         }
 
         return builder.ToString();
     }
 
-    private static string SectionHtml(ProjectAnalysisSection section, string html) =>
-        "<h3 style=\"font-size:12pt;margin:4mm 0 1.5mm 0;break-after:avoid;page-break-after:avoid;\">"
-        + Encode(section.Heading)
-        + "</h3><div class=\"liftup-analysis\">"
+    private static string SectionHtml(ProjectAnalysisSection section, string html, bool withHeading = true) =>
+        (withHeading
+            ? "<h3 style=\"font-size:12pt;margin:4mm 0 1.5mm 0;break-after:avoid;page-break-after:avoid;\">"
+              + Encode(section.Heading)
+              + "</h3>"
+            : string.Empty)
+        + "<div class=\"liftup-analysis\">"
         + html
         + "</div>";
+
+    /// <summary>
+    /// Ob ein Unterpunkt eine eigene Zwischenüberschrift trägt. Ein einzelner Punkt füllt
+    /// seinen Haupttitel und steht im Dokument ohne „3.1 …“ – etwa „3. Fazit / Empfehlung“.
+    /// </summary>
+    private static bool HasOwnHeading(ProjectAnalysisSection section) =>
+        !All.Any(chapter => chapter.Sections.Count == 1
+            && chapter.Sections[0].Key.Equals(section.Key, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>Entfernt eine führende Nummer samt Punkt, etwa „2. “ aus „2. Analyse“.</summary>
     private static string StripNumber(string? title)

@@ -90,7 +90,7 @@
 
                 <!-- Zwei Anschriften nebeneinander: Kunde und Auftraggeber. -->
                 <TabControl Grid.Row="10" Grid.ColumnSpan="2" Margin="0,0,0,4">
-                    <TabItem Header="Kunde">
+                    <TabItem Header="Projekt">
                         <Grid Margin="12,10,12,6">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="150" />
