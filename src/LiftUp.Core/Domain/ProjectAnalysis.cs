@@ -162,11 +162,31 @@ public static class ProjectAnalysisCatalog
         {
             var single = FindSection(section);
             return single is not null && filled.TryGetValue(single.Key, out var html)
-                ? SectionHtml(single, html, HasOwnHeading(single))
+                ? SectionHtml(single, html, HasOwnHeading(single)) + SpacingStyle
                 : string.Empty;
         }
 
-        var builder = new StringBuilder();
+        return string.Concat(RenderChapters(texts, includeChapterTitle));
+    }
+
+    /// <summary>
+    /// Die erfassten Kapitel einzeln, in der Reihenfolge des Berichts – damit jedes Kapitel
+    /// auf eine eigene Seite kommt. Leere Kapitel fehlen.
+    /// </summary>
+    public static IReadOnlyList<string> RenderChapters(
+        IReadOnlyList<ProjectAnalysisText>? texts,
+        bool includeChapterTitle = true)
+    {
+        var filled = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var text in texts ?? [])
+        {
+            if (!string.IsNullOrWhiteSpace(text.Html))
+            {
+                filled[text.SectionKey] = text.Html;
+            }
+        }
+
+        var chapters = new List<string>();
         foreach (var chapter in All)
         {
             var written = chapter.Sections
@@ -177,6 +197,7 @@ public static class ProjectAnalysisCatalog
                 continue;
             }
 
+            var builder = new StringBuilder();
             if (includeChapterTitle)
             {
                 builder.Append("<h2 style=\"font-size:15pt;margin:0 0 4mm 0;\">")
@@ -190,9 +211,59 @@ public static class ProjectAnalysisCatalog
                 // „3. Fazit / Empfehlung“ sagt bereits, was folgt.
                 builder.Append(SectionHtml(item, filled[item.Key], HasOwnHeading(item)));
             }
+
+            chapters.Add(builder.ToString());
         }
 
-        return builder.ToString();
+        // Der Abstand zwischen Untertitel und Text ist überall gleich; die Regel steht einmal
+        // im Dokument, auch wenn mehrere Kapitel folgen. Sie steht am Ende, damit die Kapitel
+        // mit ihrer Überschrift beginnen.
+        if (chapters.Count > 0)
+        {
+            chapters[^1] += SpacingStyle;
+        }
+
+        return chapters;
+    }
+
+    /// <summary>
+    /// Der Abstand zwischen Untertitel und Text kommt allein vom Untertitel: Der obere Rand des
+    /// ersten Blocks im Text entfällt. So sieht er bei jedem Text gleich aus.
+    /// </summary>
+    private const string SpacingStyle =
+        "<style>.liftup-analysis>:first-child{margin-top:0 !important;}</style>";
+
+    private static readonly System.Text.RegularExpressions.Regex TrailingBreaks = new(
+        @"(?:<br\s*/?>)+$",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+    private static readonly System.Text.RegularExpressions.Regex TrailingEmptyBlock = new(
+        @"<(?<tag>p|div)(?:\s[^>]*)?>(?:\s|&nbsp;|&#160;|<br\s*/?>)*</\k<tag>>$",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+    /// <summary>
+    /// Entfernt Zeilenumbrüche und leere Absätze am Ende eines Textes: Aus „test“ mit ein paar
+    /// Leerzeilen darunter wird „test“, aus „test“ mit einem leeren Absatz nur „test“.
+    /// </summary>
+    public static string TrimTrailing(string? html)
+    {
+        var value = (html ?? string.Empty).Trim();
+
+        while (value.Length > 0)
+        {
+            var shorter = TrailingEmptyBlock
+                .Replace(TrailingBreaks.Replace(value, string.Empty).TrimEnd(), string.Empty)
+                .TrimEnd();
+
+            if (shorter == value)
+            {
+                break;
+            }
+
+            value = shorter;
+        }
+
+        return value;
     }
 
     private static string SectionHtml(ProjectAnalysisSection section, string html, bool withHeading = true) =>

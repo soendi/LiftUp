@@ -93,11 +93,25 @@ public static class ProjectAnalysisPhotoCatalog
     public static string LiftHeading(int index, string? name, string? location = null)
     {
         var number = $"{PhotosNumber}.{index + 1}";
-        var text = string.Join(" ", new[] { name?.Trim(), location?.Trim() }
-            .Where(part => !string.IsNullOrEmpty(part)));
+        var text = LiftText(name, location);
 
         return text.Length == 0 ? $"{number} Aufzug" : $"{number} {text}";
     }
+
+    /// <summary>
+    /// Überschrift ohne Nummer – für einen Foto-Reiter, der noch keine Fotos hat. Er erscheint
+    /// nicht als Fotoseite im PDF und zählt deshalb bei der Nummerierung nicht mit.
+    /// </summary>
+    public static string LiftHeading(string? name, string? location = null)
+    {
+        var text = LiftText(name, location);
+        return text.Length == 0 ? "Aufzug" : text;
+    }
+
+    /// <summary>Anlagebezeichnung und Standort als Text, ohne doppelte Leerzeichen.</summary>
+    private static string LiftText(string? name, string? location) =>
+        string.Join(" ", new[] { name?.Trim(), location?.Trim() }
+            .Where(part => !string.IsNullOrEmpty(part)));
 
     /// <summary>
     /// Die drei Punkte der Pfeilspitze: Spitze und die beiden Flanken. Der Winkel

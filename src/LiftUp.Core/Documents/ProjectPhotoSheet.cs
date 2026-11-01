@@ -31,8 +31,8 @@ public static class ProjectPhotoSheet
             return string.Empty;
         }
 
-        // Die Nummer folgt der Reihenfolge der Reiter: Ein Aufzug ohne Fotos wird übersprungen,
-        // der nächste behält aber seine Nummer („4.2“ statt „4.1“).
+        // Die Nummer folgt den Fotoseiten: Aufzüge ohne Fotos zählen nicht mit, damit nach einem
+        // gelöschten Aufzug keine Lücke bleibt („4.1“ statt „4.2“).
         var groups = lifts is null
             ? photos
                 .GroupBy(photo => photo.LiftKey, StringComparer.OrdinalIgnoreCase)
@@ -43,14 +43,17 @@ public static class ProjectPhotoSheet
                     Photos: (IReadOnlyList<ProjectAnalysisPhoto>)group.ToArray()))
                 .ToArray()
             : lifts
-                .Select((lift, number) => (
-                    Number: number,
-                    Name: lift.Name,
-                    Location: lift.Location,
+                .Select(lift => (
+                    Lift: lift,
                     Photos: (IReadOnlyList<ProjectAnalysisPhoto>)photos
                         .Where(photo => string.Equals(photo.LiftKey, lift.Key, StringComparison.OrdinalIgnoreCase))
                         .ToArray()))
-                .Where(group => group.Photos.Count > 0)
+                .Where(entry => entry.Photos.Count > 0)
+                .Select((entry, number) => (
+                    Number: number,
+                    Name: entry.Lift.Name,
+                    Location: entry.Lift.Location,
+                    Photos: entry.Photos))
                 .ToArray();
 
         if (groups.Length == 0)

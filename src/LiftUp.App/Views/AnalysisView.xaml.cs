@@ -41,6 +41,9 @@ public partial class AnalysisView : UserControl, ITabFillSource
     /// <summary>Die Foto-Reiter je Aufzug; „4. Fotos“ ist grün, sobald einer etwas hat.</summary>
     private readonly List<TabStatus> _photoTabStatuses = [];
 
+    /// <summary>Die Foto-Reiter samt Aufzug und Fotozahl – Grundlage der Nummerierung.</summary>
+    private readonly List<(TabStatus Status, Func<int> PhotoCount, ProjectAnalysisLift Lift)> _photoInfos = [];
+
     /// <summary>Aufzüge, für die gerade ein Foto-Reiter steht.</summary>
     private IReadOnlyList<string> _photoLiftKeys = [];
 
@@ -118,6 +121,9 @@ public partial class AnalysisView : UserControl, ITabFillSource
                 // die Zeilen aus der Zustandsanalyse. Das Projekt wählt die Auswahl oben.
                 _stateTable = new ProjectTableView(_services, ProjectTableCatalog.Anlagedaten,
                     _selection, showProjectSelector: false, draftRows: CreateAnlagedatenRows);
+                // Die Tabelle meldet jede Änderung – auch nach dem Speichern. Ohne das bliebe die
+                // Farbe beim alten Stand, bis ein anderer Haupttitel gewählt wird.
+                _stateTable.FillChanged += (_, _) => UpdateTabColors();
                 AddChapterTab(chapter.Heading, _stateTable, () => _stateTable?.Fill ?? TabFill.None);
                 continue;
             }
@@ -311,6 +317,7 @@ public partial class AnalysisView : UserControl, ITabFillSource
         _photoTabs.Items.Clear();
         _tabStatuses.RemoveAll(status => status.IsPhoto);
         _photoTabStatuses.Clear();
+        _photoInfos.Clear();
 
         IReadOnlyList<ProjectAnalysisLift> lifts;
         try
@@ -326,26 +333,50 @@ public partial class AnalysisView : UserControl, ITabFillSource
 
         _photoLiftKeys = lifts.Select(lift => lift.Key).ToArray();
 
-        for (var index = 0; index < lifts.Count; index++)
+        foreach (var lift in lifts)
         {
-            var panel = new LiftPhotosPanel(_services, projectId, lifts[index].Key);
+            var panel = new LiftPhotosPanel(_services, projectId, lift.Key);
             panel.Load();
-            panel.PhotosChanged += (_, _) => UpdateTabColors();
 
             var tab = new TabItem { Content = panel };
             var status = new TabStatus(
                 tab,
-                ProjectAnalysisPhotoCatalog.LiftHeading(index, lifts[index].Name, lifts[index].Location),
+                string.Empty,
                 () => panel.PhotoCount > 0 ? TabFill.Full : TabFill.None,
                 isPhoto: true);
+
+            // Die Nummer wird erst nach dem Laden verteilt: Nur Aufzüge mit Fotos zählen mit.
+            _photoInfos.Add((status, () => panel.PhotoCount, lift));
+            panel.PhotosChanged += (_, _) =>
+            {
+                RenumberPhotoTabs();
+                UpdateTabColors();
+            };
 
             _photoTabStatuses.Add(status);
             _tabStatuses.Add(status);
             _photoTabs.Items.Add(tab);
         }
 
+        RenumberPhotoTabs();
         _photoTabs.SelectedIndex = 0;
         UpdateTabColors();
+    }
+
+    /// <summary>
+    /// Nummeriert die Foto-Reiter nach den Aufzügen mit Fotos: „4.1“, „4.2“ … ohne Lücke.
+    /// Ein Aufzug ohne Fotos steht ohne Nummer da; kommt ein Foto dazu oder fällt ein Aufzug
+    /// weg, rücken die Nummern nach.
+    /// </summary>
+    private void RenumberPhotoTabs()
+    {
+        var number = 0;
+        foreach (var (status, photoCount, lift) in _photoInfos)
+        {
+            status.SetHeader(photoCount() > 0
+                ? ProjectAnalysisPhotoCatalog.LiftHeading(number++, lift.Name, lift.Location)
+                : ProjectAnalysisPhotoCatalog.LiftHeading(lift.Name, lift.Location));
+        }
     }
 
     /// <summary>
@@ -416,7 +447,19 @@ public partial class AnalysisView : UserControl, ITabFillSource
 
         public TabItem Tab { get; }
 
-        public string Header { get; }
+        public string Header { get; private set; }
+
+        /// <summary>Neue Beschriftung, etwa nach dem Umbennennen der Foto-Reiter.</summary>
+        public void SetHeader(string header)
+        {
+            if (string.Equals(Header, header, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            Header = header;
+            _painted = false;
+        }
 
         public bool IsPhoto { get; }
 

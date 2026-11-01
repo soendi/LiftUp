@@ -98,7 +98,9 @@ Zwei projektbezogene Tabellen, die direkt hinter dem Reiter "Projekte" liegen:
   **Ersatzteilverfügbarkeit** – durchwegs mit den Bewertungen der Vorlage.
 - **Investitionsplanung** – „Investitionsplanung (Empfehlung)“ wie in `Investition.xlsx`, je Aufzug
   eine Zeile: Jahr und Anlagendaten, danach **Variante 1 – Modernisierung** und
-  **Variante 2 – Ersatzanlage** mit Massnahme, Kosten und Erläuterung.
+  **Variante 2 – Ersatzanlage** mit Massnahme, Kosten und Erläuterung. Massnahme und Erläuterung
+  sind mehrzeilig: **Enter** und **Shift+Enter** setzen einen Umbruch, fertig ist die Zelle mit
+  **Tab** oder einem Klick daneben. Im PDF erscheinen die Umbrüche als Zeilenumbrüche.
 
 Alle projektbezogenen Tabellen führen dieselben Aufzüge: **Speichern der Zustandsanalyse legt je
 Zeile die passende Zeile der Investitionsplanung und der Anlagedaten („1. Anlagedaten“ der
@@ -251,8 +253,10 @@ Vorschau mit Beispieldaten und eine Platzhalterliste, aus der per Doppelklick ei
 **Startvorlage:** LiftUp legt den **Zustandsbericht Aufzugsanlagen** an. Im Reiter „PDF“ wählst du
 Projekt, Vorlage, Format und Ausrichtung, prüfst den Bericht mit „Vorschau“ und legst ihn mit
 „PDF erzeugen“ im Projektordner ab. Die Titelseite kommt aus der Vorlage; dahinter folgen die
-Tabellenblätter der Zustandsanalyse und der Investitionsplanung, danach die komplette Analyse mit
-„1. Anlagedaten“, „2. Analyse“ und „3. Fazit / Empfehlung“ und zuletzt die Fotoseiten. Setzt die
+Tabellenblätter der Zustandsanalyse und der Investitionsplanung, danach die komplette Analyse und
+zuletzt die Fotoseiten. „1. Anlagedaten“, „2. Analyse“ und „3. Fazit / Empfehlung“ beginnen je auf
+einer eigenen Seite; die Anlagedaten stehen als Wertetabelle da – links die Bezeichnungen, rechts
+die Werte von bis zu zwei Aufzügen nebeneinander, die Anlagebezeichnung als erste Zeile. Setzt die
 Vorlage die Analyse selbst ein (`{{analyse}}` oder `{{analyse:2.1}}`), bleibt der automatische
 Analyse-Abschnitt weg, damit nichts doppelt erscheint.
 
@@ -316,6 +320,11 @@ Dokuments neu zu tippen. Der Reiter folgt dem Bericht:
   Haupttitel nur einen Punkt hat.
 - **4. Fotos** – Fotos je Aufzug (siehe unten).
 
+Beim Speichern fallen Zeilenumbrüche und leere Absätze am Ende eines Textes weg: Aus „test“ mit
+zwei Leerzeilen darunter wird „test“, aus einem Text mit einem leeren Absatz am Schluss nur der
+Text. Im Bericht haben Untertitel und Text überall denselben Abstand – der obere Rand des ersten
+Blocks entfällt, den Abstand bestimmt der Untertitel.
+
 Die Reiter zeigen auf einen Blick, wo noch etwas fehlt: **hellrot**, solange nichts erfasst ist,
 **hellgelb**, solange nicht alles erfasst ist, und **hellgrün**, sobald alles da ist. Ein Haupttitel
 zählt dafür seine Unter-Reiter: rot bei keinem, gelb bei einigen, grün bei allen erfassten; bei
@@ -351,8 +360,10 @@ legt Kreise und Pfeile über das Foto, um den Kunden auf eine Stelle hinzuweisen
 werden Bildpixel, damit die Markierung im PDF exakt sitzt. Die Fotos erscheinen als eigene
 Seiten hinter den Tabellen: zwei Bilder pro Zeile in einem Raster, je Aufzug eine Überschrift.
 Gezeigt werden nur Fotos zu Aufzügen, die in der Zustandsanalyse noch stehen – Fotos eines
-gelöschten oder umbenannten Aufzugs bleiben weg, und die Nummerierung folgt den Reitern
-(auch ein Aufzug ohne Fotos zählt mit).
+gelöschten oder umbenannten Aufzugs bleiben weg. Die Nummerierung folgt den Fotoseiten: Es
+zählen nur Aufzüge mit Fotos, damit nach einem gelöschten Aufzug keine Lücke bleibt („4.1“,
+„4.2“ …). Der Reiter eines Aufzugs ohne Fotos steht ohne Nummer da und rückt nach, sobald
+ein Foto dazukommt.
 
 **Versionierung:** Jedes Speichern erzeugt eine neue, unveränderliche Vorlagenversion. Erzeugte
 PDFs merken sich die verwendete Version; wird die Vorlage später geändert, bleiben alte PDFs

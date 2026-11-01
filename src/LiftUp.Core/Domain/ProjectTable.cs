@@ -19,6 +19,9 @@ public sealed record ProjectTableColumn(string Key, string Label, ProjectTableCo
 
     /// <summary>Gruppenkopf im PDF (etwa „Anlagendaten“); leer heißt ohne Gruppe.</summary>
     public string Group { get; init; } = string.Empty;
+
+    /// <summary>Mehrzeiliges Feld: Enter setzt einen Umbruch, im PDF erscheint er als Zeilenumbruch.</summary>
+    public bool Multiline { get; init; }
 }
 
 /// <summary>
@@ -133,13 +136,17 @@ public static class ProjectTableCatalog
             Column("Location", "Standort", ProjectTableColumnKind.Text, 150, Anlagendaten),
             Column("Type", "Art des Aufzugs", ProjectTableColumnKind.Text, 100, Anlagendaten, Aufzugsarten),
 
-            Column("ModernMeasure", "Massnahme", ProjectTableColumnKind.Text, 160, VarianteModernisierung),
+            Column("ModernMeasure", "Massnahme", ProjectTableColumnKind.Text, 160, VarianteModernisierung)
+                with { Multiline = true },
             Column("ModernCost", "Kosten", ProjectTableColumnKind.Number, 90, VarianteModernisierung),
-            Column("ModernNote", "Erläuterung", ProjectTableColumnKind.Text, 260, VarianteModernisierung),
+            Column("ModernNote", "Erläuterung", ProjectTableColumnKind.Text, 260, VarianteModernisierung)
+                with { Multiline = true },
 
-            Column("ReplaceMeasure", "Massnahme", ProjectTableColumnKind.Text, 160, VarianteErsatz),
+            Column("ReplaceMeasure", "Massnahme", ProjectTableColumnKind.Text, 160, VarianteErsatz)
+                with { Multiline = true },
             Column("ReplaceCost", "Kosten", ProjectTableColumnKind.Number, 90, VarianteErsatz),
-            Column("ReplaceNote", "Erläuterung", ProjectTableColumnKind.Text, 260, VarianteErsatz),
+            Column("ReplaceNote", "Erläuterung", ProjectTableColumnKind.Text, 260, VarianteErsatz)
+                with { Multiline = true },
         ])
     {
         Note = "Investitionsplanung (Empfehlung). Bei den aufgeführten Massnahmen handelt es sich um "

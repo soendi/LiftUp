@@ -51,7 +51,8 @@ public sealed class ProjectAnalysisService
                           ?? throw new ValidationException(
                               $"Unbekannter Analysepunkt \"{text.SectionKey}\".");
 
-            var html = (text.Html ?? string.Empty).Trim();
+            // Leerzeilen und leere Absätze am Ende gehören nicht in den Bericht.
+            var html = ProjectAnalysisCatalog.TrimTrailing(text.Html);
             if (html.Length == 0 || prepared.Any(item => item.SectionKey == section.Key))
             {
                 continue;

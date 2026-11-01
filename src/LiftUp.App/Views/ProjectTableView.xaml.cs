@@ -133,6 +133,20 @@ public partial class ProjectTableView : UserControl, ITabFillSource
                 continue;
             }
 
+            // Mehrzeilige Felder („Massnahme“, „Erläuterung“) bekommen ein Textfeld, das
+            // Umbrüche aufnimmt.
+            if (column.Multiline)
+            {
+                RowsGrid.Columns.Add(new DataGridTemplateColumn
+                {
+                    Header = header,
+                    CellTemplate = MultilineCell(binding, editing: false),
+                    CellEditingTemplate = MultilineCell(binding, editing: true),
+                    Width = width,
+                });
+                continue;
+            }
+
             RowsGrid.Columns.Add(new DataGridTextColumn
             {
                 Header = header,
@@ -140,6 +154,33 @@ public partial class ProjectTableView : UserControl, ITabFillSource
                 Width = width,
             });
         }
+    }
+
+    /// <summary>
+    /// Zelle für ein mehrzeiliges Feld: Enter und Shift+Enter setzen einen Umbruch, der Text
+    /// bricht in der Breite um. Fertig ist die Zelle mit Tab oder einem Klick daneben.
+    /// </summary>
+    private static DataTemplate MultilineCell(Binding binding, bool editing)
+    {
+        var factory = new FrameworkElementFactory(editing ? typeof(TextBox) : typeof(TextBlock));
+
+        if (editing)
+        {
+            factory.SetBinding(TextBox.TextProperty, binding);
+            factory.SetValue(TextBox.AcceptsReturnProperty, true);
+            factory.SetValue(TextBox.TextWrappingProperty, TextWrapping.Wrap);
+            factory.SetValue(TextBox.VerticalScrollBarVisibilityProperty, ScrollBarVisibility.Auto);
+            factory.SetValue(TextBox.MinHeightProperty, 60.0);
+            factory.SetValue(TextBox.PaddingProperty, new Thickness(4, 2, 4, 2));
+        }
+        else
+        {
+            factory.SetBinding(TextBlock.TextProperty, binding);
+            factory.SetValue(TextBlock.TextWrappingProperty, TextWrapping.Wrap);
+            factory.SetValue(TextBlock.PaddingProperty, new Thickness(4, 2, 4, 2));
+        }
+
+        return new DataTemplate { VisualTree = factory };
     }
 
     /// <summary>Ob die Tabelle Zeilen hat – die Analyse färbt damit den Reiter „1. Anlagedaten“.</summary>

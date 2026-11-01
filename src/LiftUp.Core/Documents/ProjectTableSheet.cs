@@ -59,7 +59,7 @@ public static class ProjectTableSheet
                 var align = column.Kind == ProjectTableColumnKind.Number ? "right" : "left";
                 var style = $"border:1px solid #9aa3ac;padding:2pt;text-align:{align};vertical-align:top;overflow-wrap:anywhere;";
 
-                builder.Append($"<td style=\"{style}\">").Append(Encode(value)).Append("</td>");
+                builder.Append($"<td style=\"{style}\">").Append(EncodeCell(value)).Append("</td>");
             }
 
             builder.Append("</tr>");
@@ -70,10 +70,10 @@ public static class ProjectTableSheet
     }
 
     /// <summary>
-    /// Die erfassten Angaben als Wertetabelle für den Bericht – links die Beschriftung,
-    /// rechts der Wert, wie die Tabelle unter „1. Anlagedaten“. Leere Angaben bleiben als
-    /// Zeile stehen, damit der Bericht immer gleich aufgebaut ist. Mehrere Aufzüge bekommen
-    /// je eine Tabelle mit ihrer Anlagebezeichnung als Überschrift.
+    /// Die erfassten Angaben als Wertetabelle für den Bericht: links die Beschriftung, rechts
+    /// die Werte – bis zu zwei Aufzüge nebeneinander. Die Anlagebezeichnung steht als erste
+    /// Zeile in der Tabelle, eine Überschrift darüber entfällt. Leere Angaben bleiben als
+    /// Zeile stehen, damit der Bericht immer gleich aufgebaut ist.
     /// </summary>
     public static string RenderDetails(ProjectTableDefinition definition, IReadOnlyList<ProjectTableRow> rows)
     {
@@ -85,53 +85,52 @@ public static class ProjectTableSheet
             return string.Empty;
         }
 
+        // Bis zu zwei Aufzüge je Tabelle: Beschriftung, dann die Werte der Aufzüge nebeneinander.
+        const int perTable = 2;
         var builder = new StringBuilder();
-        for (var index = 0; index < rows.Count; index++)
-        {
-            var row = rows[index];
 
-            if (rows.Count > 1)
+        for (var start = 0; start < rows.Count; start += perTable)
+        {
+            var lifts = rows.Skip(start).Take(perTable).ToArray();
+
+            builder.Append("<table style=\"width:100%;border-collapse:collapse;font-size:10.5pt;table-layout:fixed;\">")
+                .Append("<colgroup><col style=\"width:46mm;\" />");
+            foreach (var _ in lifts)
             {
-                builder.Append("<p style=\"font-weight:600;margin:0 0 2mm 0;\">")
-                    .Append(Encode(DetailTitle(row, index)))
-                    .Append("</p>");
+                builder.Append("<col />");
             }
 
-            builder.Append("<table style=\"width:100%;border-collapse:collapse;font-size:10.5pt;\">");
+            builder.Append("</colgroup>");
+
             foreach (var column in definition.Columns)
             {
-                var value = row.Values.TryGetValue(column.Key, out var found) ? (found ?? string.Empty).Trim() : string.Empty;
-
-                builder.Append("<tr><td style=\"width:55mm;padding:1.8mm 2mm;border-bottom:1px solid #cbd2d9;color:#52606d;\">")
+                builder.Append("<tr><td style=\"padding:1.8mm 2mm;border-bottom:1px solid #cbd2d9;color:#52606d;vertical-align:top;\">")
                     .Append(Encode(column.Label))
-                    .Append(":</td><td style=\"padding:1.8mm 2mm;border-bottom:1px solid #cbd2d9;\">")
-                    .Append(value.Length == 0 ? "&#160;" : Encode(value))
-                    .Append("</td></tr>");
+                    .Append(":</td>");
+
+                foreach (var lift in lifts)
+                {
+                    var value = lift.Values.TryGetValue(column.Key, out var found)
+                        ? (found ?? string.Empty).Trim()
+                        : string.Empty;
+
+                    builder.Append("<td style=\"padding:1.8mm 2mm;border-bottom:1px solid #cbd2d9;vertical-align:top;overflow-wrap:anywhere;\">")
+                        .Append(value.Length == 0 ? "&#160;" : EncodeCell(value))
+                        .Append("</td>");
+                }
+
+                builder.Append("</tr>");
             }
 
             builder.Append("</table>");
 
-            if (index < rows.Count - 1)
+            if (start + perTable < rows.Count)
             {
                 builder.Append("<div style=\"height:6mm;\"></div>");
             }
         }
 
         return builder.ToString();
-    }
-
-    /// <summary>Überschrift einer Anlage: Anlagebezeichnung und Standort, sonst die Position.</summary>
-    private static string DetailTitle(ProjectTableRow row, int index)
-    {
-        var name = row.Values.TryGetValue("AssetName", out var asset) ? (asset ?? string.Empty).Trim() : string.Empty;
-        var location = row.Values.TryGetValue("Location", out var place) ? (place ?? string.Empty).Trim() : string.Empty;
-
-        if (name.Length == 0)
-        {
-            return $"Anlage {index + 1}";
-        }
-
-        return location.Length == 0 ? name : $"{name} · {location}";
     }
 
     /// <summary>
@@ -296,6 +295,11 @@ public static class ProjectTableSheet
     /// Wie in den übrigen Dokumenten nur die HTML-Zeichen ersetzen: Umlaute bleiben lesbar
     /// und im PDF weiter durchsuchbar.
     /// </summary>
+    /// <summary>Zellinhalt: HTML-sicher, mit Zeilenumbrüchen als &lt;br /&gt;.</summary>
+    private static string EncodeCell(string? value) => Encode(value)
+        .Replace("\r\n", "\n", StringComparison.Ordinal)
+        .Replace("\n", "<br />", StringComparison.Ordinal);
+
     private static string Encode(string? value)
     {
         if (string.IsNullOrEmpty(value))

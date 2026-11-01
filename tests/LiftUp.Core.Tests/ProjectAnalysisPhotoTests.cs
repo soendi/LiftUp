@@ -210,7 +210,7 @@ public sealed class ProjectAnalysisPhotoTests
     }
 
     [Fact]
-    public void Aufzug_ohne_fotos_zaehlt_in_der_nummerierung_mit()
+    public void Aufzug_ohne_fotos_rueckt_den_naechsten_auf_4_1()
     {
         ProjectAnalysisPhoto photo = new()
         {
@@ -227,9 +227,27 @@ public sealed class ProjectAnalysisPhotoTests
                 new ProjectAnalysisLift("8609862", "Messligfeldstrasse 3"),
             ]);
 
-        // Der erste Aufzug hat keine Fotos, der zweite behält seine Nummer 4.2.
-        Assert.Contains("4.2 8609862 Messligfeldstrasse 3", html);
-        Assert.DoesNotContain("4.1", html);
+        // Der erste Aufzug hat keine Fotos und zählt nicht mit: der zweite wird zu 4.1.
+        Assert.Contains("4.1 8609862 Messligfeldstrasse 3", html);
+        Assert.DoesNotContain("4.2", html);
+    }
+
+    [Fact]
+    public void Nach_dem_loeschen_bekommt_der_naechste_aufzug_die_nummer_4_1()
+    {
+        ProjectAnalysisPhoto[] photos =
+        [
+            new() { LiftKey = "8609862", FilePath = "C:\\bilder\\foto.png" },
+        ];
+
+        // Der erste Aufzug wurde gelöscht; der zweite ist jetzt der erste.
+        var html = ProjectPhotoSheet.Render(
+            photos,
+            pageBreak: false,
+            lifts: [new ProjectAnalysisLift("8609862", "Messligfeldstrasse 3")]);
+
+        Assert.Contains("4.1 8609862 Messligfeldstrasse 3", html);
+        Assert.DoesNotContain("4.2", html);
     }
 
     [Fact]
@@ -337,6 +355,14 @@ public sealed class ProjectAnalysisPhotoTests
             html.IndexOf("3. Fazit / Empfehlung", StringComparison.Ordinal)
             < html.IndexOf("4. Fotos", StringComparison.Ordinal),
             "Anlagedaten, Analyse und Fazit müssen vor den Fotos stehen.");
+
+        // Anlagedaten, Analyse und Fazit beginnen je auf einer eigenen Seite.
+        Assert.Contains(
+            "<div style=\"page-break-before: always;\"><h2 style=\"font-size:15pt;margin:0 0 4mm 0;\">2. Analyse</h2>",
+            html);
+        Assert.Contains(
+            "<div style=\"page-break-before: always;\"><h2 style=\"font-size:15pt;margin:0 0 4mm 0;\">3. Fazit / Empfehlung</h2>",
+            html);
     }
 
     [Fact]

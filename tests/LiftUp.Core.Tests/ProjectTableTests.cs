@@ -199,6 +199,23 @@ public sealed class ProjectTableTests
     }
 
     [Fact]
+    public void Mehrzeilige_zellen_stehen_im_blatt_mit_umbruch()
+    {
+        var row = new ProjectTableRow
+        {
+            Values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["AssetName"] = "8609861",
+                ["ModernNote"] = "Zeile eins\r\nZeile zwei\nZeile drei",
+            },
+        };
+
+        var html = ProjectTableSheet.Render(ProjectTableCatalog.Investitionsplanung, [row]);
+
+        Assert.Contains("Zeile eins<br />Zeile zwei<br />Zeile drei", html);
+    }
+
+    [Fact]
     public async Task Tabellenblaetter_stehen_im_querformat_im_pdf()
     {
         using var fixture = new TestDatabase();

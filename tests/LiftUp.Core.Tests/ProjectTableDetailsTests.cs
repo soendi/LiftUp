@@ -28,6 +28,8 @@ public sealed class ProjectTableDetailsTests
         Assert.Contains("1987", html);
         Assert.Contains("Antrieb:", html);
         Assert.Contains("Hydraulik", html);
+        // Eine Spalte für die Beschriftung, eine für den einen Aufzug.
+        Assert.Equal(2, html.Split("<col ").Length - 1);
     }
 
     [Fact]
@@ -41,19 +43,39 @@ public sealed class ProjectTableDetailsTests
     }
 
     [Fact]
-    public void Mehrere_aufzuege_bekommen_eine_ueberschrift()
+    public void Zwei_aufzuege_stehen_nebeneinander_in_einer_tabelle()
     {
         var html = ProjectTableSheet.RenderDetails(
             ProjectTableCatalog.Anlagedaten,
             [
-                Row(("AssetName", "8609861"), ("Location", "Messligfeldstrasse 1")),
-                Row(("AssetName", "8609862"), ("Location", "Bahnhofstrasse 4")),
+                Row(("AssetName", "8609861"), ("Year", "1987")),
+                Row(("AssetName", "8609862"), ("Year", "1994")),
             ]);
 
-        Assert.Contains("8609861 · Messligfeldstrasse 1", html);
-        Assert.Contains("8609862 · Bahnhofstrasse 4", html);
+        // Eine Tabelle mit drei Spalten: Beschriftung, erster und zweiter Aufzug.
+        Assert.Equal(1, html.Split("<table").Length - 1);
+        Assert.Equal(3, html.Split("<col ").Length - 1);
+        Assert.Contains("8609861", html);
+        Assert.Contains("8609862", html);
+        Assert.Contains("1987", html);
+        Assert.Contains("1994", html);
 
-        // Je Aufzug eine eigene Tabelle.
+        // Keine Zwischenüberschrift: die Anlagebezeichnung steht in der Tabelle.
+        Assert.DoesNotContain("<p style", html);
+    }
+
+    [Fact]
+    public void Drei_aufzuege_ergeben_zwei_tabellen()
+    {
+        var html = ProjectTableSheet.RenderDetails(
+            ProjectTableCatalog.Anlagedaten,
+            [
+                Row(("AssetName", "8609861")),
+                Row(("AssetName", "8609862")),
+                Row(("AssetName", "8609863")),
+            ]);
+
+        // Zwei Aufzüge je Tabelle, der dritte beginnt eine neue.
         Assert.Equal(2, html.Split("<table").Length - 1);
     }
 

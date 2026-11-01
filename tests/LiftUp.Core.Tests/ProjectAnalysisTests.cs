@@ -104,6 +104,41 @@ public sealed class ProjectAnalysisTests
     }
 
     [Fact]
+    public void Leerzeilen_und_leere_absaetze_am_ende_fallen_beim_speichern_weg()
+    {
+        using var fixture = new TestDatabase();
+        var session = fixture.LoginAsAdmin();
+        var projects = new ProjectService(fixture.Database, session);
+        var analysis = new ProjectAnalysisService(fixture.Database, session);
+
+        var project = projects.Create(Input(Path.Combine(fixture.Root, "p1")));
+        analysis.Save(project.Id,
+        [
+            Text("Aggregat", "test\n\n\n"),
+            Text("Tragmittel", "<p>Hubzylinder dicht.</p><p><br></p><p>&nbsp;</p>"),
+        ]);
+
+        var texts = analysis.Get(project.Id).ToDictionary(text => text.SectionKey, text => text.Html);
+        Assert.Equal("test", texts["Aggregat"]);
+        Assert.Equal("<p>Hubzylinder dicht.</p>", texts["Tragmittel"]);
+    }
+
+    [Fact]
+    public void Untertitel_und_text_haben_ueberall_denselben_abstand()
+    {
+        var html = ProjectAnalysisCatalog.Render(
+        [
+            new ProjectAnalysisText { SectionKey = "Aggregat", Html = "<p style=\"margin:1em 0;\">Aggregat.</p>" },
+            new ProjectAnalysisText { SectionKey = "Fazit", Html = "<p>Ersatz empfohlen.</p>" },
+        ]);
+
+        // Der obere Rand des ersten Blocks entfällt – den Abstand bestimmt der Untertitel.
+        Assert.Contains(".liftup-analysis>:first-child{margin-top:0 !important;}", html);
+        // Die Regel steht einmal im Dokument, obwohl zwei Kapitel folgen.
+        Assert.Equal(1, html.Split("<style>").Length - 1);
+    }
+
+    [Fact]
     public void Einzelner_unterpunkt_laesst_sich_einsetzen()
     {
         using var fixture = new TestDatabase();

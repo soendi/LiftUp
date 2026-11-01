@@ -360,26 +360,44 @@ public sealed class DocumentService
             _tables.GetRows(connection, transaction, projectId, ProjectTableCatalog.AnlagedatenKey));
         // Steht die Analyse schon als Platzhalter in der Vorlage, bleibt sie dort – sonst käme
         // sie zweimal ins Dokument.
-        var analysis = includeAnalysis
-            ? ProjectAnalysisCatalog.Render(_analysis.Get(connection, transaction, projectId))
-            : string.Empty;
+        // Jeder Abschnitt beginnt auf einer neuen Seite: „1. Anlagedaten“, „2. Analyse“ und
+        // „3. Fazit / Empfehlung“. Steht die Analyse schon als Platzhalter in der Vorlage,
+        // bleibt sie dort – sonst käme sie zweimal ins Dokument.
+        var pages = new List<string>();
+        if (details.Length > 0)
+        {
+            pages.Add("<h2 style=\"font-size:15pt;margin:0 0 4mm 0;\">"
+                + ProjectAnalysisCatalog.Anlagedaten.Heading
+                + "</h2>"
+                + details);
+        }
 
-        if (details.Length == 0 && analysis.Length == 0)
+        if (includeAnalysis)
+        {
+            pages.AddRange(ProjectAnalysisCatalog.RenderChapters(
+                _analysis.Get(connection, transaction, projectId)));
+        }
+
+        if (pages.Count == 0)
         {
             return string.Empty;
         }
 
         var body = new System.Text.StringBuilder();
-        if (details.Length > 0)
+        for (var index = 0; index < pages.Count; index++)
         {
-            body.Append("<h2 style=\"font-size:15pt;margin:0 0 4mm 0;\">")
-                .Append(ProjectAnalysisCatalog.Anlagedaten.Heading)
-                .Append("</h2>")
-                .Append(details);
-        }
+            if (index > 0)
+            {
+                body.Append("<div style=\"page-break-before: always;\">");
+            }
 
-        // „2. Analyse“ und „3. Fazit / Empfehlung“ kommen mit ihren Überschriften.
-        body.Append(analysis);
+            body.Append(pages[index]);
+
+            if (index > 0)
+            {
+                body.Append("</div>");
+            }
+        }
 
         return body.ToString();
     }
