@@ -72,7 +72,7 @@ public sealed class DefaultTemplateTests
 
         Assert.Contains("facts facts-three", html);
         Assert.Contains("<div class=\"label\">Projekt</div>", html);
-        Assert.Contains("{{project.address}}", html);
+        Assert.Contains("{{project.addressblock}}", html);
 
         // Drei Spalten: Auftraggeber, Projekt, Projektverfasser.
         Assert.Equal(3, html.Split("<td>", StringSplitOptions.None).Length - 1);
@@ -121,7 +121,55 @@ public sealed class DefaultTemplateTests
 
         var html = CurrentTemplateHtml(fixture);
         Assert.Contains("facts facts-three", html);
-        Assert.Contains("{{project.address}}", html);
+        Assert.Contains("{{project.addressblock}}", html);
+    }
+
+    [Fact]
+    public void Deckblatt_zeigt_die_adressen_zeilenweise_ohne_komma()
+    {
+        using var fixture = new TestDatabase();
+        var html = CurrentTemplateHtml(fixture);
+
+        // Auftraggeber und Projekt mit zeilenweiser Anschrift, die eigene Firma ebenso.
+        Assert.Contains("<strong>{{project.client}}</strong><br />{{project.clientaddressblock}}", html);
+        Assert.Contains("<strong>{{project.name}}</strong><br />{{project.addressblock}}", html);
+        Assert.Contains("<strong>{{company.name}}</strong><br />{{company.addressblock}}", html);
+        Assert.DoesNotContain("{{project.clientaddress}}", html);
+        Assert.DoesNotContain("{{project.address}}", html);
+        Assert.DoesNotContain("{{company.address}}", html);
+    }
+
+    [Fact]
+    public void Bestehendes_deckblatt_bekommt_die_zeilenweisen_adressen()
+    {
+        using var fixture = new TestDatabase();
+
+        // Bisheriges Deckblatt der Version 26: Anschriften in einer Zeile mit Komma.
+        using (var connection = fixture.Database.Open())
+        using (var command = connection.CreateCommand())
+        {
+            command.CommandText = """
+                UPDATE TemplateVersions
+                SET Html = replace(replace(replace(Html,
+                        '{{project.clientaddressblock}}', '{{project.clientaddress}}'),
+                        '{{project.addressblock}}', '{{project.address}}'),
+                        '{{company.addressblock}}', '{{company.address}}')
+                WHERE TemplateId IN (SELECT Id FROM Templates WHERE Name = 'Zustandsbericht Aufzugsanlagen')
+                  AND Version = 1;
+                UPDATE SchemaInfo SET Version = 26;
+                """;
+            command.ExecuteNonQuery();
+        }
+
+        fixture.Database.EnsureCreated();
+
+        var html = CurrentTemplateHtml(fixture);
+        Assert.Contains("{{project.clientaddressblock}}", html);
+        Assert.Contains("{{project.addressblock}}", html);
+        Assert.Contains("{{company.addressblock}}", html);
+        Assert.DoesNotContain("{{project.clientaddress}}", html);
+        Assert.DoesNotContain("{{project.address}}", html);
+        Assert.DoesNotContain("{{company.address}}", html);
     }
 
     [Fact]

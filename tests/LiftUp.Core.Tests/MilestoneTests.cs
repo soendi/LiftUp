@@ -169,7 +169,8 @@ public sealed class MilestoneTests
         };
 
         var html = PlaceholderRenderer.Render(
-            "{{project.client}}|{{project.clientaddress}}|{{company.name}}|{{company.address}}|"
+            "{{project.client}}|{{project.clientaddress}}|{{project.clientaddressblock}}|"
+            + "{{company.name}}|{{company.address}}|{{company.addressblock}}|"
             + "{{company.contact}}|{{company.phone}}|{{company.email}}|{{project.inspectiondate}}|"
             + "{{company.city}}|{{project.milestones}}",
             new PlaceholderContext
@@ -181,9 +182,10 @@ public sealed class MilestoneTests
             });
 
         Assert.Equal(
-            "Rinmobas Anlagestiftung|Lagerstrasse 4, 9200 Gossau|Lifteratung UP GmbH|"
-            + "Rietstrasse 56, 9443 Widnau|Fabian Benz|076 298 38 51|"
-            + "fabian.benz@lifteratungup.ch|30.07.2026|Widnau|Begehung: erledigt am 30.07.2026",
+            "Rinmobas Anlagestiftung|Lagerstrasse 4, 9200 Gossau|Lagerstrasse 4<br />9200 Gossau|"
+            + "Lifteratung UP GmbH|Rietstrasse 56, 9443 Widnau|Rietstrasse 56<br />9443 Widnau|"
+            + "Fabian Benz|076 298 38 51|fabian.benz@lifteratungup.ch|30.07.2026|Widnau|"
+            + "Begehung: erledigt am 30.07.2026",
             html);
     }
 

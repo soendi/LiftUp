@@ -18,17 +18,21 @@ public sealed class CompanyProfile
     public string Email { get; set; } = string.Empty;
     public string Phone { get; set; } = string.Empty;
 
+    /// <summary>„PLZ Ort“ in einer Zeile; Leeres entfällt.</summary>
+    private string CityLine =>
+        string.Join(" ", new[] { Zip, City }.Where(part => !string.IsNullOrWhiteSpace(part)));
+
     /// <summary>Anschrift in einer Zeile, z. B. „Rietstrasse 56, 9443 Widnau“.</summary>
-    public string Address
-    {
-        get
-        {
-            var cityLine = string.Join(" ", new[] { Zip, City }
-                .Where(part => !string.IsNullOrWhiteSpace(part)));
-            return string.Join(", ", new[] { Street, cityLine }
-                .Where(part => !string.IsNullOrWhiteSpace(part)));
-        }
-    }
+    public string Address =>
+        string.Join(", ", new[] { Street, CityLine }
+            .Where(part => !string.IsNullOrWhiteSpace(part)));
+
+    /// <summary>Anschrift in Zeilen: Straße und „PLZ Ort“ untereinander.</summary>
+    public IReadOnlyList<string> AddressLines =>
+        new[] { Street, CityLine }
+            .Where(part => !string.IsNullOrWhiteSpace(part))
+            .Select(part => part!)
+            .ToArray();
 
     public bool IsEmpty =>
         string.IsNullOrWhiteSpace(Name) &&

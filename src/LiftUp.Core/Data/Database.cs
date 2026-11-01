@@ -12,7 +12,7 @@ namespace LiftUp.Core.Data;
 /// </summary>
 public sealed class Database
 {
-    public const int CurrentSchemaVersion = 26;
+    public const int CurrentSchemaVersion = 27;
 
     private readonly string _connectionString;
 
@@ -199,6 +199,9 @@ public sealed class Database
 
         // Version 26 setzt das Datum der Begehung auf dem Deckblatt in normale Schrift.
         UpgradeReportCoverInspectionDate(connection);
+
+        // Version 27 stellt die drei Adressen des Deckblatts zeilenweise ohne Komma dar.
+        UpgradeReportCoverAddressBlocks(connection);
 
         using var command = Db.Command(connection, "UPDATE SchemaInfo SET Version = $version;");
         command.With("$version", CurrentSchemaVersion);
@@ -835,6 +838,57 @@ public sealed class Database
     }
 
     /// <summary>
+    /// Version 27: Die Adressen von Auftraggeber, Projekt und Projektverfasser stehen auf dem
+    /// Deckblatt zeilenweise ohne Komma, „PLZ Ort“ gemeinsam in einer Zeile. Ersetzt werden nur
+    /// die Platzhalter; eigene Formulierungen der Vorlage bleiben unverändert.
+    /// </summary>
+    private static void UpgradeReportCoverAddressBlocks(SqliteConnection connection)
+    {
+        var templateId = FindTemplateId(connection, ReportTemplateName, onlyFirstVersion: false);
+        if (templateId is not { } id)
+        {
+            return;
+        }
+
+        int currentVersion;
+        string html;
+        using (var read = Db.Command(connection, """
+            SELECT t.CurrentVersion, v.Html
+            FROM Templates t
+            JOIN TemplateVersions v ON v.TemplateId = t.Id AND v.Version = t.CurrentVersion
+            WHERE t.Id = $id;
+            """))
+        {
+            read.With("$id", id.ToString("D"));
+            using var reader = read.ExecuteReader();
+            if (!reader.Read())
+            {
+                return;
+            }
+
+            currentVersion = reader.Int32(0);
+            html = reader.Text(1);
+        }
+
+        // Erkannt werden die bisherigen einzeiligen Anschriften des Deckblatts.
+        if (!html.Contains("{{project.clientaddress}}", StringComparison.Ordinal)
+            || !html.Contains("{{project.address}}", StringComparison.Ordinal)
+            || !html.Contains("{{company.address}}", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var updated = html
+            .Replace("{{project.clientaddress}}", "{{project.clientaddressblock}}", StringComparison.Ordinal)
+            .Replace("{{project.address}}", "{{project.addressblock}}", StringComparison.Ordinal)
+            .Replace("{{company.address}}", "{{company.addressblock}}", StringComparison.Ordinal);
+
+        var version = currentVersion + 1;
+        InsertTemplateVersion(connection, id, version, updated);
+        SetTemplateVersion(connection, id, version);
+    }
+
+    /// <summary>
     /// Version 12: Bilder lassen sich mit Schlagworten versehen. Sie ergänzen Name und
     /// Kategorie in der Bildsuche, ohne dass bestehende Bilder etwas verlieren.
     /// </summary>
@@ -1036,15 +1090,15 @@ public sealed class Database
             <tr>
               <td>
                 <div class="label">Auftraggeber</div>
-                <div class="block"><strong>{{project.client}}</strong><br />{{project.clientaddress}}</div>
+                <div class="block"><strong>{{project.client}}</strong><br />{{project.clientaddressblock}}</div>
               </td>
               <td>
                 <div class="label">Projekt</div>
-                <div class="block"><strong>{{project.name}}</strong><br />{{project.address}}</div>
+                <div class="block"><strong>{{project.name}}</strong><br />{{project.addressblock}}</div>
               </td>
               <td>
                 <div class="label">Projektverfasser</div>
-                <div class="block"><strong>{{company.name}}</strong><br />{{company.address}}</div>
+                <div class="block"><strong>{{company.name}}</strong><br />{{company.addressblock}}</div>
               </td>
             </tr>
           </table>

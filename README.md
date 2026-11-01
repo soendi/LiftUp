@@ -264,10 +264,11 @@ Analyse-Abschnitt weg, damit nichts doppelt erscheint.
 **Deckblatt:** Die erste Seite ist als Deckblatt gestaltet: „Zustandsbericht / Aufzugsanlagen“,
 Projektnummer und -name, Projektbild mit Abstand zur Adresszeile, Auftraggeber mit Anschrift, das
 Projekt selbst mit Anschrift, Projektverfasser (Firma, Anschrift und Logo aus dem Benutzerprofil),
-Verfasser mit Telefon und E-Mail, der Auftrag, das Datum der
-Begehung aus dem gleichnamigen Meilenstein sowie Erstellungsdatum und Ort des Benutzers. Eine
-unberührte Startvorlage erhält das neue Deckblatt als neue Version; selbst bearbeitete Vorlagen
-bleiben unangetastet.
+Verfasser mit Telefon und E-Mail, der Auftrag, das Datum der Begehung aus dem gleichnamigen
+Meilenstein sowie Erstellungsdatum und Ort des Benutzers. Die drei Anschriften stehen zeilenweise
+ohne Komma da: Straße, optional die zweite Zeile und „PLZ Ort“ gemeinsam, etwa
+„Lagerstrasse 4 / 9200 Gossau“. Eine unberührte Startvorlage erhält das neue Deckblatt als neue
+Version; selbst bearbeitete Vorlagen bleiben unangetastet.
 
 | Platzhalter | Inhalt |
 | --- | --- |
@@ -275,9 +276,11 @@ bleiben unangetastet.
 | `{{project.name}}` | Projektname |
 | `{{project.customer}}` | Kunde |
 | `{{project.address}}` | Anschrift des Kunden (Straße, PLZ Ort) |
+| `{{project.addressblock}}` | Anschrift des Kunden zeilenweise, ohne Komma |
 | `{{project.street}}` | Straße und Hausnummer |
 | `{{project.client}}` | Auftraggeber |
 | `{{project.clientaddress}}` | Anschrift des Auftraggebers |
+| `{{project.clientaddressblock}}` | Anschrift des Auftraggebers zeilenweise, ohne Komma |
 | `{{project.zip}}` | Postleitzahl |
 | `{{project.city}}` | Ort |
 | `{{project.contact}}` | Erste Ansprechperson |
@@ -290,6 +293,7 @@ bleiben unangetastet.
 | `{{project.milestones}}` | Meilensteine untereinander mit Stand |
 | `{{company.name}}` | Eigene Firma (Benutzerprofil) |
 | `{{company.address}}` | Anschrift der eigenen Firma |
+| `{{company.addressblock}}` | Anschrift der eigenen Firma zeilenweise, ohne Komma |
 | `{{company.city}}` | Ort der eigenen Firma |
 | `{{company.contact}}` | Anzeigename des Benutzers |
 | `{{company.phone}}` | Telefon des Benutzers |

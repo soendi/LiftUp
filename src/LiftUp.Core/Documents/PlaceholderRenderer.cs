@@ -44,9 +44,11 @@ public static class PlaceholderRenderer
         ("{{project.name}}", "Projektname"),
         ("{{project.customer}}", "Kunde"),
         ("{{project.address}}", "Anschrift (Straße, PLZ Ort)"),
+        ("{{project.addressblock}}", "Anschrift zeilenweise, ohne Komma"),
         ("{{project.street}}", "Straße und Hausnummer"),
         ("{{project.client}}", "Auftraggeber"),
         ("{{project.clientaddress}}", "Anschrift des Auftraggebers"),
+        ("{{project.clientaddressblock}}", "Anschrift des Auftraggebers zeilenweise, ohne Komma"),
         ("{{project.zip}}", "Postleitzahl"),
         ("{{project.city}}", "Ort"),
         ("{{project.contact}}", "Erste Ansprechperson"),
@@ -62,6 +64,7 @@ public static class PlaceholderRenderer
         ("{{company.street}}", "Straße und Hausnummer der eigenen Firma"),
         ("{{company.city}}", "Ort der eigenen Firma"),
         ("{{company.address}}", "Anschrift der eigenen Firma"),
+        ("{{company.addressblock}}", "Anschrift der eigenen Firma zeilenweise, ohne Komma"),
         ("{{company.logo}}", "Firmenlogo (aus dem Benutzerprofil)"),
         ("{{project.image}}", "Projektbild für das Deckblatt"),
         ("{{project.inspectiondate}}", "Datum der Begehung (Meilenstein „Begehung“)"),
@@ -200,8 +203,12 @@ public static class PlaceholderRenderer
             "project.zip" or "project.customerzip" or "projekt.plz" => Encode(project.CustomerZip),
             "project.city" or "project.customercity" or "projekt.ort" => Encode(project.CustomerCity),
             "project.address" or "project.customeraddress" or "projekt.adresse" => Encode(project.CustomerAddress),
+            "project.addressblock" or "project.customeraddressblock" or "projekt.adressblock" =>
+                RenderAddressLines(project.CustomerAddressLines),
             "project.client" or "projekt.auftraggeber" => Encode(project.Client),
             "project.clientaddress" or "projekt.auftraggeberadresse" => Encode(project.ClientAddress),
+            "project.clientaddressblock" or "projekt.auftraggeberadressblock" =>
+                RenderAddressLines(project.ClientAddressLines),
             "project.contact" or "projekt.ansprechpartner" =>
                 Encode(project.Contact ?? project.Contacts.FirstOrDefault()?.Summary),
             "project.contacts" or "projekt.ansprechpersonen" => RenderContacts(project.Contacts),
@@ -217,6 +224,8 @@ public static class PlaceholderRenderer
             "company.zip" or "firma.plz" => Encode(context.Company?.Zip),
             "company.city" or "firma.ort" => Encode(context.Company?.City),
             "company.address" or "firma.adresse" or "firma.anschrift" => Encode(context.Company?.Address),
+            "company.addressblock" or "firma.adressblock" or "firma.anschriftblock" =>
+                RenderAddressLines(context.Company?.AddressLines ?? []),
             "company.logo" or "firma.logo" => RenderCompanyLogo(context.Company),
             "project.image" or "project.bild" or "projekt.bild" => RenderProjectImage(project),
             "project.inspectiondate" or "projekt.begehungsdatum" => Encode(InspectionDate(project)),
@@ -283,6 +292,10 @@ public static class PlaceholderRenderer
         return string.Join("<br />", milestones.Select(milestone =>
             $"{Encode(milestone.Title)}: {Encode(milestone.StatusText)}"));
     }
+
+    /// <summary>Anschrift zeilenweise untereinander, ohne Komma; jede Zeile ist HTML-kodiert.</summary>
+    private static string RenderAddressLines(IReadOnlyList<string> lines) =>
+        string.Join("<br />", lines.Select(Encode));
 
     /// <summary>Ansprechpersonen untereinander; jede Zeile ist HTML-kodiert.</summary>
     private static string RenderContacts(IReadOnlyList<ProjectContact> contacts)

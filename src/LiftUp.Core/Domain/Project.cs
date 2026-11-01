@@ -101,13 +101,27 @@ public sealed class Project
     /// <summary>Anschrift des Auftraggebers in einer Zeile.</summary>
     public string ClientAddress => ComposeAddress(ClientStreet, ClientLine2, ClientZip, ClientCity);
 
+    /// <summary>Anschrift in Zeilen: Straße, Zusatz und „PLZ Ort“ untereinander.</summary>
+    public IReadOnlyList<string> CustomerAddressLines =>
+        ComposeAddressLines(CustomerStreet, CustomerLine2, CustomerZip, CustomerCity);
+
+    /// <summary>Anschrift des Auftraggebers in Zeilen.</summary>
+    public IReadOnlyList<string> ClientAddressLines =>
+        ComposeAddressLines(ClientStreet, ClientLine2, ClientZip, ClientCity);
+
     /// <summary>Straße, zweite Zeile und „PLZ Ort“ durch Komma verbunden; Leeres entfällt.</summary>
-    private static string ComposeAddress(string? street, string? line2, string? zip, string? city)
+    private static string ComposeAddress(string? street, string? line2, string? zip, string? city) =>
+        string.Join(", ", ComposeAddressLines(street, line2, zip, city));
+
+    /// <summary>Straße, zweite Zeile und „PLZ Ort“ als eigene Zeilen; Leeres entfällt.</summary>
+    private static IReadOnlyList<string> ComposeAddressLines(string? street, string? line2, string? zip, string? city)
     {
         var cityLine = string.Join(" ", new[] { zip, city }
             .Where(part => !string.IsNullOrWhiteSpace(part)));
-        return string.Join(", ", new[] { street, line2, cityLine }
-            .Where(part => !string.IsNullOrWhiteSpace(part)));
+        return new[] { street, line2, cityLine }
+            .Where(part => !string.IsNullOrWhiteSpace(part))
+            .Select(part => part!)
+            .ToArray();
     }
 
     public string? Description { get; set; }
