@@ -150,9 +150,14 @@ public sealed class DocumentService
 
         EnsurePlaceholdersPresent(FindMissingPlaceholders(connection, transaction, project.Id, version.Html));
 
-        // Die Tabellenblätter werden getrennt im Querformat gedruckt und danach angehängt.
+        // Die Tabellenblätter werden getrennt im Querformat gedruckt; die komplette Analyse folgt
+        // nach ihnen und vor den Fotos.
         var html = RenderTitlePage(connection, transaction, project, version, includeSheets: false);
-        var bytes = await ComposePdfAsync(connection, transaction, project.Id, html, settings, cancellationToken)
+        var report = BuildReport(
+            connection, transaction, project.Id,
+            includeAnalysis: !HasAnalysisPlaceholder(version.Html));
+        var bytes = await ComposePdfAsync(
+                connection, transaction, project.Id, html, report, settings, cancellationToken)
             .ConfigureAwait(false);
 
         return await SavePdfAsync(connection, transaction, project, template, version, bytes, null, cancellationToken)
@@ -188,7 +193,8 @@ public sealed class DocumentService
 
         var titlePage = RenderTitlePage(connection, transaction, project, version, includeSheets: false);
         var html = DocumentComposition.Build(titlePage, sections);
-        var bytes = await ComposePdfAsync(connection, transaction, project.Id, html, settings, cancellationToken)
+        var bytes = await ComposePdfAsync(
+                connection, transaction, project.Id, html, string.Empty, settings, cancellationToken)
             .ConfigureAwait(false);
 
         return await SavePdfAsync(
@@ -267,7 +273,13 @@ public sealed class DocumentService
 
         // In der Vorschau hängen Zustandsanalyse und Investitionsplanung als eigene Blätter an;
         // im PDF werden sie getrennt im Querformat gedruckt und danach zusammengeführt.
-        return includeSheets ? AppendProjectSheets(connection, transaction, project.Id, html) : html;
+        return includeSheets
+            ? AppendProjectSheets(
+                connection, transaction, project.Id, html,
+                BuildReport(
+                    connection, transaction, project.Id,
+                    includeAnalysis: !HasAnalysisPlaceholder(version.Html)))
+            : html;
     }
 
     /// <summary>
@@ -278,12 +290,21 @@ public sealed class DocumentService
         Microsoft.Data.Sqlite.SqliteConnection connection,
         Microsoft.Data.Sqlite.SqliteTransaction? transaction,
         Guid projectId,
-        string html)
+        string html,
+        string report)
     {
         var builder = new System.Text.StringBuilder(html);
         foreach (var (definition, rows) in CollectSheets(connection, transaction, projectId))
         {
             builder.Append(ProjectTableSheet.Render(definition, rows));
+        }
+
+        // „1. Anlagedaten“, „2. Analyse“ und „3. Fazit / Empfehlung“ folgen nach den Blättern.
+        if (report.Length > 0)
+        {
+            builder.Append("<div style=\"page-break-before: always;\">")
+                .Append(report)
+                .Append("</div>");
         }
 
         // Die Fotos der Analyse folgen als eigene Seiten nach den Tabellen.
@@ -324,6 +345,64 @@ public sealed class DocumentService
         return lifts;
     }
 
+    /// <summary>
+    /// Die Berichtsseite mit „1. Anlagedaten“, „2. Analyse“ und „3. Fazit / Empfehlung“ – ohne
+    /// Seitenumbruch, damit sie als eigenes Blatt gedruckt werden kann. Leer, wenn nichts erfasst ist.
+    /// </summary>
+    private string BuildReport(
+        Microsoft.Data.Sqlite.SqliteConnection connection,
+        Microsoft.Data.Sqlite.SqliteTransaction? transaction,
+        Guid projectId,
+        bool includeAnalysis)
+    {
+        var details = ProjectTableSheet.RenderDetails(
+            ProjectTableCatalog.Anlagedaten,
+            _tables.GetRows(connection, transaction, projectId, ProjectTableCatalog.AnlagedatenKey));
+        // Steht die Analyse schon als Platzhalter in der Vorlage, bleibt sie dort – sonst käme
+        // sie zweimal ins Dokument.
+        var analysis = includeAnalysis
+            ? ProjectAnalysisCatalog.Render(_analysis.Get(connection, transaction, projectId))
+            : string.Empty;
+
+        if (details.Length == 0 && analysis.Length == 0)
+        {
+            return string.Empty;
+        }
+
+        var body = new System.Text.StringBuilder();
+        if (details.Length > 0)
+        {
+            body.Append("<h2 style=\"font-size:15pt;margin:0 0 4mm 0;\">")
+                .Append(ProjectAnalysisCatalog.Anlagedaten.Heading)
+                .Append("</h2>")
+                .Append(details);
+        }
+
+        // „2. Analyse“ und „3. Fazit / Empfehlung“ kommen mit ihren Überschriften.
+        body.Append(analysis);
+
+        return body.ToString();
+    }
+
+    /// <summary>Die Berichtsseite als eigenes Dokument im Format des Berichts (hochkant).</summary>
+    private static string ReportDocument(string body, PdfPageSettings settings)
+    {
+        var margin = (settings.MarginMm is { } value ? Math.Max(value, 0) : 15)
+            .ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+        var format = string.Equals(settings.Format, "A3", StringComparison.OrdinalIgnoreCase) ? "A3" : "A4";
+
+        return "<!DOCTYPE html>\n<html lang=\"de\">\n<head>\n  <meta charset=\"utf-8\" />\n  <style>\n"
+            + $"    @page {{ size: {format}; margin: {margin}mm; }}\n"
+            + "    body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 10pt; color: #1f2933; margin: 0; }\n"
+            + "  </style>\n</head>\n<body>"
+            + body
+            + "</body>\n</html>";
+    }
+
+    /// <summary>Ob die Vorlage die Analyse selbst einsetzt („{{analyse}}“ oder „{{analyse:2.1}}“).</summary>
+    private static bool HasAnalysisPlaceholder(string? templateHtml) =>
+        templateHtml is not null && templateHtml.Contains("{{analyse", StringComparison.OrdinalIgnoreCase);
+
     /// <summary>Tabellen mit Zeilen, in der Reihenfolge der Blätter im PDF.</summary>
     private List<(ProjectTableDefinition Definition, IReadOnlyList<ProjectTableRow> Rows)> CollectSheets(
         Microsoft.Data.Sqlite.SqliteConnection connection,
@@ -344,14 +423,15 @@ public sealed class DocumentService
     }
 
     /// <summary>
-    /// Druckt den Bericht und die Tabellenblätter. Die Blätter bekommen eine liegende Seite und
-    /// werden danach an das PDF des Berichts gehängt.
+    /// Druckt den Bericht, die Tabellenblätter und die komplette Analyse. Die Blätter bekommen
+    /// eine liegende Seite und werden mit der Analyse vor die Fotos an das PDF gehängt.
     /// </summary>
     private async Task<byte[]> ComposePdfAsync(
         Microsoft.Data.Sqlite.SqliteConnection connection,
         Microsoft.Data.Sqlite.SqliteTransaction? transaction,
         Guid projectId,
         string html,
+        string report,
         PdfPageSettings settings,
         CancellationToken cancellationToken)
     {
@@ -359,7 +439,7 @@ public sealed class DocumentService
         var photos = _photos.Get(connection, transaction, projectId);
         var main = await _renderer.RenderAsync(html, settings, cancellationToken).ConfigureAwait(false);
 
-        if (sheets.Count == 0 && photos.Count == 0)
+        if (sheets.Count == 0 && photos.Count == 0 && report.Length == 0)
         {
             return main;
         }
@@ -377,6 +457,14 @@ public sealed class DocumentService
             parts.Add(await _renderer.RenderAsync(sheetHtml, landscape, cancellationToken).ConfigureAwait(false));
         }
 
+        // Nach den Tabellenblättern folgt die komplette Analyse als eigene Seite.
+        if (report.Length > 0)
+        {
+            parts.Add(await _renderer
+                .RenderAsync(ReportDocument(report, settings), settings, cancellationToken)
+                .ConfigureAwait(false));
+        }
+
         // Die Fotoseiten im Format des Berichts; sie beginnen auf einer neuen Seite.
         var photoHtml = ProjectPhotoSheet.RenderDocument(
             photos, settings, CollectLifts(connection, transaction, projectId));
@@ -391,8 +479,9 @@ public sealed class DocumentService
             return merged;
         }
 
-        // Lassen sich die Teile nicht zusammenführen, bleiben die Tabellen im Dokument.
-        var combined = AppendProjectSheets(connection, transaction, projectId, html);
+        // Lassen sich die Teile nicht zusammenführen, bleibt alles in einem Dokument – in derselben
+        // Reihenfolge: Bericht, Tabellenblätter, komplette Analyse, Fotos.
+        var combined = AppendProjectSheets(connection, transaction, projectId, html, report);
         return await _renderer.RenderAsync(combined, settings, cancellationToken).ConfigureAwait(false);
     }
 

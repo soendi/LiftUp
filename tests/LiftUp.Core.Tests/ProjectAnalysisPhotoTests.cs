@@ -15,8 +15,14 @@ public sealed class ProjectAnalysisPhotoTests
 
     private sealed class FakeRenderer : IHtmlToPdfRenderer
     {
-        public Task<byte[]> RenderAsync(string html, PdfPageSettings settings, CancellationToken cancellationToken = default) =>
-            Task.FromResult(Encoding.UTF8.GetBytes("%PDF-1.4 " + html.Length));
+        /// <summary>Alle HTML-Stände, die gedruckt werden sollten – für Prüfungen am Inhalt.</summary>
+        public List<string> Calls { get; } = [];
+
+        public Task<byte[]> RenderAsync(string html, PdfPageSettings settings, CancellationToken cancellationToken = default)
+        {
+            Calls.Add(html);
+            return Task.FromResult(Encoding.UTF8.GetBytes("%PDF-1.4 " + html.Length));
+        }
     }
 
     private static ProjectInput Input(string folder) => new()
@@ -264,6 +270,100 @@ public sealed class ProjectAnalysisPhotoTests
         var html = documents.RenderHtml(project.Id, template.Id);
         Assert.DoesNotContain("4. Fotos", html);
         Assert.DoesNotContain("Altes Foto", html);
+    }
+
+    [Fact]
+    public void Bericht_enthaelt_anlagedaten_analyse_und_fazit_vor_den_fotos()
+    {
+        using var fixture = new TestDatabase();
+        var session = fixture.LoginAsAdmin();
+        var projects = new ProjectService(fixture.Database, session);
+        var templates = new TemplateService(fixture.Database, session);
+        var tables = new ProjectTableService(fixture.Database, session);
+        var analysis = new ProjectAnalysisService(fixture.Database, session);
+        var documents = new DocumentService(fixture.Database, session, new FakeRenderer());
+
+        var project = projects.Create(Input(Path.Combine(fixture.Root, "p1")));
+        var photo = WritePhoto(project);
+        var template = templates.Create(new TemplateInput
+        {
+            Name = "Gutachten",
+            Html = "<h1>{{project.name}}</h1>",
+        });
+
+        tables.Save(project.Id, ProjectTableCatalog.ZustandsanalyseKey,
+        [
+            new ProjectTableRowInput(new Dictionary<string, string>
+            {
+                ["AssetName"] = "8609861",
+                ["Location"] = "Messligfeldstrasse 1",
+            }),
+        ]);
+
+        tables.Save(project.Id, ProjectTableCatalog.AnlagedatenKey,
+        [
+            new ProjectTableRowInput(new Dictionary<string, string>
+            {
+                ["AssetName"] = "8609861",
+                ["Make"] = "Schindler",
+            }),
+        ]);
+
+        analysis.Save(project.Id,
+        [
+            new ProjectAnalysisTextInput("Aggregat", "<p>Aggregat geprüft.</p>"),
+            new ProjectAnalysisTextInput("Fazit", "<p>Ersatz empfohlen.</p>"),
+        ]);
+
+        analysis.SavePhotos(project.Id, "8609861",
+            [new ProjectAnalysisPhotoInput(photo, "Türe", [], 400, 300)]);
+
+        var html = documents.RenderHtml(project.Id, template.Id);
+
+        // Die drei erfassten Punkte stehen im Dokument.
+        Assert.Contains("1. Anlagedaten", html);
+        Assert.Contains("Schindler", html);
+        Assert.Contains("2. Analyse", html);
+        Assert.Contains("Aggregat geprüft.", html);
+        Assert.Contains("3. Fazit / Empfehlung", html);
+        Assert.Contains("Ersatz empfohlen.", html);
+
+        // Und zwar nach den Tabellenblättern, aber vor den Fotos.
+        Assert.True(
+            html.IndexOf("Datenaufnahme der Aufzüge", StringComparison.Ordinal)
+            < html.IndexOf("1. Anlagedaten", StringComparison.Ordinal),
+            "Die komplette Analyse muss nach den Tabellenblättern stehen.");
+        Assert.True(
+            html.IndexOf("3. Fazit / Empfehlung", StringComparison.Ordinal)
+            < html.IndexOf("4. Fotos", StringComparison.Ordinal),
+            "Anlagedaten, Analyse und Fazit müssen vor den Fotos stehen.");
+    }
+
+    [Fact]
+    public async Task Fazit_steht_auch_im_erzeugten_pdf()
+    {
+        using var fixture = new TestDatabase();
+        var session = fixture.LoginAsAdmin();
+        var projects = new ProjectService(fixture.Database, session);
+        var templates = new TemplateService(fixture.Database, session);
+        var analysis = new ProjectAnalysisService(fixture.Database, session);
+        var renderer = new FakeRenderer();
+        var documents = new DocumentService(fixture.Database, session, renderer);
+
+        var project = projects.Create(Input(Path.Combine(fixture.Root, "p1")));
+        var template = templates.Create(new TemplateInput
+        {
+            Name = "Gutachten",
+            Html = "<h1>{{project.name}}</h1>",
+        });
+
+        analysis.Save(project.Id, [new ProjectAnalysisTextInput("Fazit", "<p>Ersatz empfohlen.</p>")]);
+
+        await documents.CreatePdfAsync(project.Id, template.Id);
+
+        // Der Weg über „PDF erzeugen“ druckt das Fazit mit.
+        Assert.Contains(renderer.Calls, html => html.Contains("3. Fazit / Empfehlung", StringComparison.Ordinal));
+        Assert.Contains(renderer.Calls, html => html.Contains("Ersatz empfohlen.", StringComparison.Ordinal));
     }
 
     [Fact]

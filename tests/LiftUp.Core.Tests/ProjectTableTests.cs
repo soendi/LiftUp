@@ -221,18 +221,20 @@ public sealed class ProjectTableTests
 
         var created = await documents.CreatePdfAsync(project.Id, template.Id, new PdfPageSettings());
 
-        // Der Bericht bleibt im Hochformat, beide Tabellenblätter werden quer gedruckt.
-        Assert.Equal(3, renderer.Calls.Count);
+        // Der Bericht und die Analyse bleiben im Hochformat, beide Tabellenblätter werden quer gedruckt.
+        Assert.Equal(4, renderer.Calls.Count);
         Assert.False(renderer.Calls[0].Landscape);
         Assert.True(renderer.Calls[1].Landscape);
         Assert.True(renderer.Calls[2].Landscape);
+        Assert.False(renderer.Calls[3].Landscape);
 
-        // Im PDF stehen die Seiten hintereinander: Bericht, Datenaufnahme, Investitionsplanung.
+        // Im PDF stehen die Seiten hintereinander: Bericht, Datenaufnahme, Investitionsplanung, Analyse.
         using var merged = PdfReader.Open(created.FilePath, PdfDocumentOpenMode.Import);
-        Assert.Equal(3, merged.PageCount);
+        Assert.Equal(4, merged.PageCount);
         Assert.True(merged.Pages[0].Height > merged.Pages[0].Width);
         Assert.True(merged.Pages[1].Width > merged.Pages[1].Height);
         Assert.True(merged.Pages[2].Width > merged.Pages[2].Height);
+        Assert.True(merged.Pages[3].Height > merged.Pages[3].Width);
     }
 
     [Fact]

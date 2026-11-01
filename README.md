@@ -248,15 +248,13 @@ Projektleiter dürfen zusätzlich archivieren, löschen und Dokumente erzeugen. 
 Vorlagen bestehen aus HTML und CSS (Register "Vorlagen"). Der Editor bietet HTML-Eingabe,
 Vorschau mit Beispieldaten und eine Platzhalterliste, aus der per Doppelklick eingefügt wird.
 
-**Startvorlage:** LiftUp legt den **Zustandsbericht Aufzugsanlagen** an. Beim Erstellen eines
-Dokuments erscheinen seine Abschnitte als Tabs: „1. Anlagedaten“, „2. Analyse“ und
-„3. Fazit / Empfehlung“ (nur Titel). Der Abschnitt „1. Anlagedaten“ bringt die Anlagedaten-Tabelle
-mit – Aufzugstyp, Jahrgang, Antrieb, Steuerung/Regler, Fabrikat, Nutzlast, Geschwindigkeit,
-Haltestellen, Zugänge, Förderhöhe, Maschinenraum, Kabinenabschluss, Schachttüren, Schachtausführung,
-Auffahrsockel – und ist mit den im Reiter „Analyse“ gespeicherten Anlagedaten des Projekts bereits
-ausgefüllt; bei mehreren Aufzügen steht je Aufzug eine Tabelle mit Anlagebezeichnung und Standort
-als Überschrift. Ohne gespeicherte Zeilen bleibt die leere Tabelle der Vorlage stehen. Ein
-Startinhalt bleibt erhalten, wenn die Titel der Abschnitte angepasst werden.
+**Startvorlage:** LiftUp legt den **Zustandsbericht Aufzugsanlagen** an. Im Reiter „PDF“ wählst du
+Projekt, Vorlage, Format und Ausrichtung, prüfst den Bericht mit „Vorschau“ und legst ihn mit
+„PDF erzeugen“ im Projektordner ab. Die Titelseite kommt aus der Vorlage; dahinter folgen die
+Tabellenblätter der Zustandsanalyse und der Investitionsplanung, danach die komplette Analyse mit
+„1. Anlagedaten“, „2. Analyse“ und „3. Fazit / Empfehlung“ und zuletzt die Fotoseiten. Setzt die
+Vorlage die Analyse selbst ein (`{{analyse}}` oder `{{analyse:2.1}}`), bleibt der automatische
+Analyse-Abschnitt weg, damit nichts doppelt erscheint.
 
 **Deckblatt:** Die erste Seite ist als Deckblatt gestaltet: „Zustandsbericht / Aufzugsanlagen“,
 Projektnummer und -name, Projektbild mit Abstand zur Adresszeile, Auftraggeber mit Anschrift, das
