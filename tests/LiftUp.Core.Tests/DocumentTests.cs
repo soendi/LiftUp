@@ -128,6 +128,29 @@ public sealed class DocumentTests
     }
 
     [Fact]
+    public async Task Vorschau_erzeugt_das_pdf_ohne_datei_im_projektordner()
+    {
+        using var fixture = new TestDatabase();
+        var services = Services(fixture);
+        var project = services.Projects.Create(Input(Path.Combine(fixture.Root, "p1")));
+        var template = services.Templates.Create(new TemplateInput
+        {
+            Name = "Angebot",
+            Html = "<h1>{{project.name}}</h1>",
+        });
+
+        var bytes = await services.Documents.RenderPdfAsync(project.Id, template.Id);
+
+        Assert.NotEmpty(bytes);
+        Assert.Contains("Neubau Musterweg", services.Renderer.LastHtml);
+
+        // Die Vorschau legt weder einen Eintrag noch eine Datei im Projektordner an.
+        Assert.Empty(services.Documents.GetDocuments(project.Id));
+        var pdfFolder = Path.Combine(project.FolderPath, "03_PDF");
+        Assert.Empty(Directory.Exists(pdfFolder) ? Directory.GetFiles(pdfFolder, "*.pdf") : []);
+    }
+
+    [Fact]
     public async Task Alte_pdfs_verweisen_weiter_auf_ihre_vorlagenversion()
     {
         using var fixture = new TestDatabase();

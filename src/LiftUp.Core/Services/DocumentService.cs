@@ -129,6 +129,37 @@ public sealed class DocumentService
             "Bitte in der Bilder- bzw. Textbausteinansicht ergänzen oder die Platzhalter aus der Vorlage entfernen.");
     }
 
+    /// <summary>
+    /// Erzeugt dasselbe PDF wie <see cref="CreatePdfAsync"/> – aber nur im Arbeitsspeicher.
+    /// Für die Vorschau entsteht weder eine Datei im Projektordner noch ein Eintrag in der
+    /// Dokumentenliste.
+    /// </summary>
+    public async Task<byte[]> RenderPdfAsync(
+        Guid projectId,
+        Guid templateId,
+        PdfPageSettings? settings = null,
+        CancellationToken cancellationToken = default)
+    {
+        _actor.Require(Permission.CreateDocuments);
+        settings ??= new PdfPageSettings();
+
+        using var connection = _database.Open();
+
+        var project = _projects.GetById(connection, null, projectId)
+                      ?? throw new ValidationException("Das Projekt wurde nicht gefunden.");
+        var version = _templates.GetLatestVersion(connection, null, templateId)
+                      ?? throw new ValidationException("Für diese Vorlage gibt es noch keine Version.");
+
+        var html = RenderTitlePage(connection, null, project, version, includeSheets: false);
+        var report = BuildReport(
+            connection, null, project.Id,
+            includeAnalysis: !HasAnalysisPlaceholder(version.Html));
+
+        return await ComposePdfAsync(
+                connection, null, project.Id, html, report, settings, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     public async Task<ProjectDocument> CreatePdfAsync(
         Guid projectId,
         Guid templateId,
@@ -246,6 +277,10 @@ public sealed class DocumentService
         TemplateVersion version,
         bool includeSheets = true)
     {
+        // Das Deckblatt braucht die Meilensteine – „Datum der Begehung“ kommt aus dem
+        // gleichnamigen Meilenstein; GetById liest sie nicht mit.
+        project.Milestones = _projects.GetMilestones(connection, transaction, project.Id);
+
         var snippets = _snippets.GetActiveByName(connection, transaction);
         var images = BuildImageLookup(connection, transaction, project.Id);
         // Die Absenderdaten stehen direkt am angemeldeten Benutzer.

@@ -25,6 +25,9 @@ public partial class PdfView : UserControl
     private MissingPlaceholders _missing = MissingPlaceholders.Empty;
     private bool _previewShown;
 
+    /// <summary>Temporäre PDF-Datei der Vorschau; sie liegt nie im Projektordner.</summary>
+    private string? _previewPdfPath;
+
     public PdfView(AppServices services, ProjectSelection selection)
     {
         _services = services;
@@ -35,6 +38,12 @@ public partial class PdfView : UserControl
         FormatBox.SelectedIndex = 0;
         OrientationBox.ItemsSource = Orientations;
         OrientationBox.SelectedIndex = 0;
+
+        // Die Vorschau steht auf Weiss; die Seiten des PDFs bringt die Anzeige selbst mit.
+        PreviewBrowser.DefaultBackgroundColor = System.Drawing.Color.White;
+
+        // Die temporäre Datei verschwindet mit dem Reiter.
+        Unloaded += (_, _) => DeletePreview(_previewPdfPath);
 
         LoadTypes();
         LoadProjects();
@@ -282,9 +291,21 @@ public partial class PdfView : UserControl
 
         try
         {
-            var html = _services.Documents.RenderHtml(project.Id, template.Id);
+            InfoText.Text = "Vorschau wird erzeugt …";
+
+            // Das PDF entsteht im Arbeitsspeicher; im Projektordner wird nichts abgelegt.
+            // Die Anzeige braucht eine Datei und bekommt sie im Temp-Ordner.
+            var bytes = await _services.Documents.RenderPdfAsync(project.Id, template.Id, ReadSettings());
+            var path = Path.Combine(Path.GetTempPath(), $"liftup-vorschau-{Guid.NewGuid():N}.pdf");
+            await File.WriteAllBytesAsync(path, bytes);
+
             await PreviewBrowser.EnsureCoreWebView2Async();
-            PreviewBrowser.NavigateToString(html);
+
+            var previous = _previewPdfPath;
+            _previewPdfPath = path;
+            PreviewBrowser.CoreWebView2.Navigate(new Uri(path).AbsoluteUri);
+            DeletePreview(previous);
+
             _previewShown = true;
             InfoText.Text = _missing.Any
                 ? $"Vorschau: {template.Name} (Version {template.CurrentVersion}) – Angaben fehlen, siehe Hinweis."
@@ -295,6 +316,33 @@ public partial class PdfView : UserControl
         {
             InfoText.Text = "Vorschau fehlgeschlagen: " + exception.Message;
             return false;
+        }
+    }
+
+    /// <summary>Gewähltes Papierformat samt Rand – Vorschau und PDF nutzen dieselben Werte.</summary>
+    private PdfPageSettings ReadSettings() => new(
+        (FormatBox.SelectedItem as FormatOption)?.Value ?? "A4",
+        (OrientationBox.SelectedItem as OrientationOption)?.Landscape ?? false,
+        double.TryParse(MarginBox.Text, out var margin) ? margin : 15);
+
+    /// <summary>Löscht eine Vorschau-Datei; solange die Anzeige sie noch hält, bleibt sie liegen.</summary>
+    private static void DeletePreview(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return;
+        }
+
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // Temp-Dateien räumt Windows später auf.
         }
     }
 
@@ -394,17 +442,10 @@ public partial class PdfView : UserControl
             return;
         }
 
-        var format = (FormatBox.SelectedItem as FormatOption)?.Value ?? "A4";
-        var landscape = (OrientationBox.SelectedItem as OrientationOption)?.Landscape ?? false;
-        var margin = double.TryParse(MarginBox.Text, out var parsed) ? parsed : 15;
-
         try
         {
             InfoText.Text = "PDF wird erzeugt …";
-            var document = await _services.Documents.CreatePdfAsync(
-                project.Id,
-                template.Id,
-                new PdfPageSettings(format, landscape, margin));
+            var document = await _services.Documents.CreatePdfAsync(project.Id, template.Id, ReadSettings());
 
             LoadDocuments();
             InfoText.Text = $"Erstellt: {document.FileName} (Vorlage {template.Name}, Version {document.TemplateVersion})";

@@ -8,6 +8,12 @@ namespace LiftUp.Core.Tests;
 /// <summary>Meilensteine eines Projekts und die Angaben auf dem Deckblatt.</summary>
 public sealed class MilestoneTests
 {
+    private sealed class FakeRenderer : IHtmlToPdfRenderer
+    {
+        public Task<byte[]> RenderAsync(string html, PdfPageSettings settings, CancellationToken cancellationToken = default) =>
+            Task.FromResult(System.Text.Encoding.UTF8.GetBytes("%PDF-1.4 " + html.Length));
+    }
+
     private static ProjectInput Input(string folder, params ProjectMilestoneInput[] milestones) => new()
     {
         Name = "Messligfeld 1 und 3, Sennewald",
@@ -179,6 +185,29 @@ public sealed class MilestoneTests
             + "Rietstrasse 56, 9443 Widnau|Fabian Benz|076 298 38 51|"
             + "fabian.benz@lifteratungup.ch|30.07.2026|Widnau|Begehung: erledigt am 30.07.2026",
             html);
+    }
+
+    [Fact]
+    public void Begehungsdatum_steht_im_erzeugten_dokument()
+    {
+        using var fixture = new TestDatabase();
+        var session = fixture.LoginAsAdmin();
+        var projects = new ProjectService(fixture.Database, session);
+        var templates = new TemplateService(fixture.Database, session);
+        var documents = new DocumentService(fixture.Database, session, new FakeRenderer());
+
+        var project = projects.Create(Input(
+            Path.Combine(fixture.Root, "p1"),
+            new ProjectMilestoneInput { Title = "Begehung", IsDone = true, DoneDate = new DateTime(2026, 7, 30) }));
+        var template = templates.Create(new TemplateInput
+        {
+            Name = "Bericht",
+            Html = "<p>Begehung: {{project.inspectiondate}}</p>",
+        });
+
+        var html = documents.RenderHtml(project.Id, template.Id);
+
+        Assert.Contains("Begehung: 30.07.2026", html);
     }
 
     [Fact]
