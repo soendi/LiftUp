@@ -27,6 +27,7 @@ public partial class ImagesView : UserControl
     public IReadOnlyCollection<string> ActiveTags => _selectedTags;
 
     private readonly AppServices _services;
+    private readonly ProjectSelection _selection;
     private readonly DispatcherTimer _folderTimer;
     private IReadOnlyList<ImageListItem> _items = [];
     private FileSystemWatcher? _folderWatcher;
@@ -34,9 +35,10 @@ public partial class ImagesView : UserControl
     private CheckBox? _allTagsCheckBox;
     private string? _savedCategory;
 
-    public ImagesView(AppServices services)
+    public ImagesView(AppServices services, ProjectSelection selection)
     {
         _services = services;
+        _selection = selection;
         InitializeComponent();
 
         // Änderungen im Projektordner werden gebündelt und dann eingelesen.
@@ -48,6 +50,10 @@ public partial class ImagesView : UserControl
         RestoreFilters();
         LoadProjects();
         LoadImages();
+
+        // Ein Projektwechsel in einem anderen Reiter zieht die Bilder sofort mit.
+        _selection.Changed += (_, _) => ShowSelectedProject();
+        ShowSelectedProject();
     }
 
     private void LoadProjects()
@@ -65,7 +71,34 @@ public partial class ImagesView : UserControl
         }
 
         ProjectBox.ItemsSource = options;
-        ProjectBox.SelectedIndex = 0;
+
+        // Beim Öffnen gilt das gemeinsame Projekt; ohne Auswahl die globale Bibliothek.
+        var index = 0;
+        if (_selection.ProjectId is { } selected)
+        {
+            var found = options.FindIndex(option => option.Id == selected);
+            if (found >= 0)
+            {
+                index = found;
+            }
+        }
+
+        ProjectBox.SelectedIndex = index;
+    }
+
+    /// <summary>Übernimmt das gemeinsame Projekt; die globale Bibliothek bleibt unberührt.</summary>
+    private void ShowSelectedProject()
+    {
+        if (_selection.ProjectId is not { } projectId || ProjectBox.ItemsSource is not IEnumerable<ProjectOption> options)
+        {
+            return;
+        }
+
+        var target = options.FirstOrDefault(option => option.Id == projectId);
+        if (target is not null && !ReferenceEquals(ProjectBox.SelectedItem, target))
+        {
+            ProjectBox.SelectedItem = target;
+        }
     }
 
     private Guid? SelectedProjectId => (ProjectBox.SelectedItem as ProjectOption)?.Id;
@@ -472,6 +505,12 @@ public partial class ImagesView : UserControl
         }
 
         StartFolderWatcher();
+
+        // Ein gewähltes Projekt gilt für alle Reiter; „Globale Bibliothek“ bleibt hier lokal.
+        if (SelectedProjectId is { } projectId)
+        {
+            _selection.Select(projectId);
+        }
     }
 
     /// <summary>

@@ -69,7 +69,7 @@ public partial class MainWindow : Window
 
         if (session.Can(Permission.ManageImages) || session.Can(Permission.CreateDocuments))
         {
-            content.Add(CreateTab("Bilder", new ImagesView(_services)));
+            content.Add(CreateTab("Bilder", new ImagesView(_services, selection)));
         }
 
         groups.Add(content);
