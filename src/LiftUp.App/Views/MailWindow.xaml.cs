@@ -13,11 +13,22 @@ namespace LiftUp.App.Views;
 /// </summary>
 public partial class MailWindow : Window
 {
+    /// <summary>Ein Empfänger aus dem Projekt: Kunde oder Auftraggeber samt E-Mail.</summary>
+    private sealed record RecipientChoice(string Display, string Address);
+
     private readonly AppServices _services;
 
-    public MailWindow(AppServices services, string? attachmentPath = null, string? subject = null)
+    /// <summary>Projekt des Anhangs; daraus stammen die Empfänger zur Auswahl.</summary>
+    private readonly Guid? _projectId;
+
+    public MailWindow(
+        AppServices services,
+        string? attachmentPath = null,
+        string? subject = null,
+        Guid? projectId = null)
     {
         _services = services;
+        _projectId = projectId;
         InitializeComponent();
 
         ProviderBox.ItemsSource = MailProviders.All;
@@ -29,7 +40,97 @@ public partial class MailWindow : Window
         AttachmentBox.Text = attachmentPath ?? string.Empty;
         SubjectBox.Text = subject ?? string.Empty;
 
+        LoadRecipients();
         UpdateAccountState();
+    }
+
+    /// <summary>
+    /// Ansprechpersonen des Projekts mit E-Mail-Adresse – Kunde und Auftraggeber – als Auswahl
+    /// für „An“ oder „Cc“. Ohne Projekt oder ohne Adressen bleibt die Auswahl verborgen.
+    /// </summary>
+    private void LoadRecipients()
+    {
+        if (_projectId is not { } projectId)
+        {
+            RecipientPanel.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        try
+        {
+            var project = _services.Projects.GetProject(projectId);
+            var choices = new List<RecipientChoice>();
+
+            AddChoices(choices, project.Contacts, "Kunde");
+            AddChoices(choices, project.ClientContacts, "Auftraggeber");
+
+            ContactBox.ItemsSource = choices;
+            ContactBox.SelectedIndex = choices.Count > 0 ? 0 : -1;
+            RecipientPanel.Visibility = choices.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+            if (choices.Count == 0)
+            {
+                InfoText.Text = "Für dieses Projekt sind keine E-Mail-Adressen erfasst.";
+            }
+        }
+        catch (LiftUpException exception)
+        {
+            RecipientPanel.Visibility = Visibility.Collapsed;
+            InfoText.Text = exception.Message;
+        }
+    }
+
+    /// <summary>Übernimmt die Personen einer Liste, die eine E-Mail-Adresse haben.</summary>
+    private static void AddChoices(
+        List<RecipientChoice> choices,
+        IEnumerable<ProjectContact> contacts,
+        string kind)
+    {
+        foreach (var contact in contacts)
+        {
+            var email = contact.Email?.Trim() ?? string.Empty;
+            if (email.Length == 0)
+            {
+                continue;
+            }
+
+            var name = contact.Name?.Trim() ?? string.Empty;
+            var address = name.Length == 0 ? email : $"{name} <{email}>";
+
+            // Dieselbe Adresse nicht doppelt anbieten.
+            if (choices.Any(choice => string.Equals(choice.Address, address, StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
+
+            var display = name.Length == 0 ? $"{kind} · {email}" : $"{kind} · {name} ({email})";
+            choices.Add(new RecipientChoice(display, address));
+        }
+    }
+
+    private void OnAddToClick(object sender, RoutedEventArgs e) => AddRecipient(ToBox);
+
+    private void OnAddCcClick(object sender, RoutedEventArgs e) => AddRecipient(CcBox);
+
+    /// <summary>Hängt die gewählte Adresse an ein Feld; mehrere Adressen trennt ein Semikolon.</summary>
+    private void AddRecipient(TextBox box)
+    {
+        if (ContactBox.SelectedItem is not RecipientChoice choice)
+        {
+            InfoText.Text = "Bitte zuerst eine Person aus dem Projekt wählen.";
+            return;
+        }
+
+        var current = box.Text.Trim();
+        if (current.Contains(choice.Address, StringComparison.OrdinalIgnoreCase))
+        {
+            InfoText.Text = $"{choice.Address} steht bereits im Feld.";
+            return;
+        }
+
+        box.Text = current.Length == 0 ? choice.Address : $"{current}; {choice.Address}";
+        box.CaretIndex = box.Text.Length;
+        InfoText.Text = $"Empfänger übernommen: {choice.Address}";
     }
 
     private void UpdateAccountState()

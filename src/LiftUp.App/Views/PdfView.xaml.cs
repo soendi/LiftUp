@@ -198,7 +198,6 @@ public partial class PdfView : UserControl
         var selected = SelectedDocument;
         OpenButton.IsEnabled = selected is not null && selected.FileExists;
         FolderButton.IsEnabled = selected is not null;
-        EditDocumentButton.IsEnabled = selected is not null && selected.HasSections;
         SendMailButton.IsEnabled = selected is not null && selected.FileExists;
         DeleteDocumentButton.IsEnabled = selected is not null;
     }
@@ -245,34 +244,6 @@ public partial class PdfView : UserControl
         }
     }
 
-    /// <summary>Öffnet ein früheres Dokument erneut, um die Abschnitte zu ändern.</summary>
-    private void OnEditDocumentClick(object sender, RoutedEventArgs e)
-    {
-        var selected = SelectedDocument;
-        if (selected is null)
-        {
-            return;
-        }
-
-        if (!selected.HasSections)
-        {
-            InfoText.Text = "Dieses Dokument wurde ohne Abschnitte erzeugt und lässt sich nicht erneut bearbeiten.";
-            return;
-        }
-
-        var dialog = new DocumentComposerWindow(
-            _services,
-            selected.ProjectId,
-            selected.TemplateId,
-            DocumentSections.Deserialize(selected.SectionsJson))
-        {
-            Owner = Window.GetWindow(this),
-        };
-
-        dialog.ShowDialog();
-        LoadDocuments();
-    }
-
     /// <summary>Versendet ein erzeugtes PDF per E-Mail.</summary>
     private void OnSendMailClick(object sender, RoutedEventArgs e)
     {
@@ -283,27 +254,17 @@ public partial class PdfView : UserControl
             return;
         }
 
-        var dialog = new MailWindow(_services, selected.FilePath, $"{selected.TemplateName} {selected.FileName}")
+        // Das Projekt liefert die erfassten Ansprechpersonen mit E-Mail-Adresse als Auswahl.
+        var dialog = new MailWindow(
+            _services,
+            selected.FilePath,
+            $"{selected.TemplateName} {selected.FileName}",
+            selected.ProjectId)
         {
             Owner = Window.GetWindow(this),
         };
 
         dialog.ShowDialog();
-    }
-
-    /// <summary>Öffnet den Editor, in dem die Abschnitte der Vorlage ausgefüllt werden.</summary>
-    private void OnComposeClick(object sender, RoutedEventArgs e)
-    {
-        var project = ProjectBox.SelectedItem as ProjectOption;
-        var template = TemplateBox.SelectedItem as TemplateListItem;
-
-        var dialog = new DocumentComposerWindow(_services, project?.Id, template?.Id)
-        {
-            Owner = Window.GetWindow(this),
-        };
-
-        dialog.ShowDialog();
-        LoadDocuments();
     }
 
     private async void OnPreviewClick(object sender, RoutedEventArgs e) => await ShowPreviewAsync();

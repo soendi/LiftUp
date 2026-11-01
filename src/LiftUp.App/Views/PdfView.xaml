@@ -45,7 +45,6 @@
 
                 <StackPanel Grid.Column="2" Orientation="Horizontal">
                     <Button Content="Vorschau" Click="OnPreviewClick" />
-                    <Button Content="Dokument erstellen …" Click="OnComposeClick" />
                     <Button Content="PDF erzeugen" Style="{StaticResource LiftUpPrimaryButton}" Margin="0" Click="OnCreateClick" />
                 </StackPanel>
             </Grid>
@@ -105,7 +104,6 @@
                     <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
                         <Button x:Name="OpenButton" Content="Öffnen" Click="OnOpenClick" IsEnabled="False" />
                         <Button x:Name="FolderButton" Content="Im Ordner zeigen" Click="OnShowFolderClick" IsEnabled="False" />
-                        <Button x:Name="EditDocumentButton" Content="Bearbeiten …" Click="OnEditDocumentClick" IsEnabled="False" />
                         <Button x:Name="SendMailButton" Content="E-Mail senden …" Click="OnSendMailClick" IsEnabled="False" />
                         <Button x:Name="DeleteDocumentButton" Content="Löschen" Click="OnDeleteDocumentClick" IsEnabled="False" Margin="0" />
                     </StackPanel>

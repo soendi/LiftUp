@@ -58,7 +58,18 @@
                 </Grid.RowDefinitions>
 
                 <TextBlock Grid.Row="0" Grid.Column="0" Text="An *" Style="{StaticResource LiftUpFieldLabel}" VerticalAlignment="Center" />
-                <TextBox Grid.Row="0" Grid.Column="1" x:Name="ToBox" Margin="0,3,0,8" ToolTip="Mehrere Adressen mit Semikolon trennen" />
+                <StackPanel Grid.Row="0" Grid.Column="1" Margin="0,3,0,8">
+                    <TextBox x:Name="ToBox" ToolTip="Mehrere Adressen mit Semikolon trennen" />
+
+                    <!-- Ansprechpersonen des Projekts (Kunde und Auftraggeber) als Auswahl. -->
+                    <StackPanel x:Name="RecipientPanel" Orientation="Horizontal" Margin="0,6,0,0">
+                        <TextBlock Text="Aus Projekt" VerticalAlignment="Center" Margin="0,0,6,0"
+                                   Style="{StaticResource LiftUpFieldLabel}" />
+                        <ComboBox x:Name="ContactBox" Width="300" DisplayMemberPath="Display" />
+                        <Button Content="→ An" Click="OnAddToClick" Margin="8,0,4,0" />
+                        <Button Content="→ Cc" Click="OnAddCcClick" Margin="0" />
+                    </StackPanel>
+                </StackPanel>
 
                 <TextBlock Grid.Row="1" Grid.Column="0" Text="Cc" Style="{StaticResource LiftUpFieldLabel}" VerticalAlignment="Center" />
                 <TextBox Grid.Row="1" Grid.Column="1" x:Name="CcBox" Margin="0,3,0,8" ToolTip="Mehrere Adressen mit Semikolon trennen" />
