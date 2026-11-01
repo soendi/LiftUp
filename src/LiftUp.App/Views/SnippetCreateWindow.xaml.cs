@@ -19,6 +19,7 @@ public partial class SnippetCreateWindow : Window
 
         NameBox.Text = name;
         BodyEditor.SnippetServices = services;
+        BodyEditor.EnableImageInsert(services);
         BodyEditor.SetHtml("<p></p>");
     }
 

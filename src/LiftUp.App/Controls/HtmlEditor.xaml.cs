@@ -10,6 +10,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using LiftUp.Core.Documents;
 using LiftUp.Core.Domain;
+using Microsoft.Win32;
 using Microsoft.Web.WebView2.Core;
 
 namespace LiftUp.App.Controls;
@@ -924,6 +925,8 @@ public partial class HtmlEditor : UserControl
     private Func<string, bool, IReadOnlyList<ImageChoice>>? _imageSearch;
     private Func<string, IReadOnlyList<SnippetChoice>>? _tableSearch;
     private AppServices? _snippetServices;
+    private AppServices? _imageServices;
+    private Func<Guid?>? _imageProjectId;
 
     /// <summary>Meldet jede Änderung im Text – die Analyse färbt damit ihre Reiter.</summary>
     public event EventHandler? ContentChanged;
@@ -951,6 +954,20 @@ public partial class HtmlEditor : UserControl
         // Das Vorschlagenfenster ist ein eigenes Fenster über dem Editor und
         // verschwindet mit ihm.
         Unloaded += (_, _) => SnippetPopup.IsOpen = false;
+
+        // Ein Klick auf ein Bild im Text öffnet die Bild-Eigenschaften: Größe,
+        // Ausrichtung, Textfluss und Unterschrift. Jeder Editor bringt das Fenster mit;
+        // eine Ansicht kann es über die Eigenschaft durch etwas anderes ersetzen.
+        ImageFormatRequested = request =>
+        {
+            var dialog = new Views.ImageFormatWindow(request.Current);
+            if (Window.GetWindow(this) is { } owner)
+            {
+                dialog.Owner = owner;
+            }
+
+            return dialog.ShowDialog() == true ? dialog.Format : null;
+        };
     }
 
     /// <summary>Zeigt den übergebenen HTML-Inhalt im Editor an.</summary>
@@ -1569,6 +1586,144 @@ public partial class HtmlEditor : UserControl
         }
     }
 
+    /// <summary>
+    /// Schaltet „Bild einfügen …“ ein. Gewählte Bilder werden bei Bedarf in den
+    /// Projektordner kopiert und als Figur mit Größe, Ausrichtung und Textfluss
+    /// in den Text gesetzt. Ohne Projektquelle bleibt die Datei, wo sie ist.
+    /// </summary>
+    public void EnableImageInsert(AppServices services, Func<Guid?>? projectId = null)
+    {
+        _imageServices = services;
+        _imageProjectId = projectId;
+        InsertImageButton.IsEnabled = true;
+    }
+
+    /// <summary>
+    /// „Bild einfügen …“: Datei auswählen, in den Projektordner übernehmen und an der
+    /// Cursorstelle einsetzen. Die Eigenschaften lassen sich danach per Klick auf das
+    /// Bild ändern.
+    /// </summary>
+    private async void OnInsertImageClick(object sender, RoutedEventArgs e)
+    {
+        if (_imageServices is not { } services)
+        {
+            return;
+        }
+
+        var owner = Window.GetWindow(this);
+        var dialog = new OpenFileDialog
+        {
+            Title = "Bild auswählen",
+            Filter = "Bilder|*.png;*.jpg;*.jpeg;*.gif;*.webp;*.bmp;*.svg|Alle Dateien|*.*",
+        };
+
+        if (dialog.ShowDialog(owner) != true || string.IsNullOrEmpty(dialog.FileName))
+        {
+            return;
+        }
+
+        string path;
+        try
+        {
+            path = PlaceInProjectFolder(services, dialog.FileName);
+        }
+        catch (Exception exception) when (
+            exception is LiftUpException or IOException or UnauthorizedAccessException)
+        {
+            Show(owner, "Das Bild konnte nicht in den Projektordner übernommen werden.\n\n" + exception.Message,
+                MessageBoxImage.Warning, "Bild einfügen");
+            return;
+        }
+
+        var html = ImageEmbedding.ToImageTag(path, Path.GetFileNameWithoutExtension(path));
+        if (html is null)
+        {
+            Show(owner, "Diese Bilddatei kann nicht dargestellt werden. Möglich sind PNG, JPG, GIF, WebP, BMP und SVG.",
+                MessageBoxImage.Warning, "Bild einfügen");
+            return;
+        }
+
+        try
+        {
+            await InsertHtmlAsync(ImageFormat.Wrap(html));
+        }
+        catch (InvalidOperationException exception)
+        {
+            Show(owner, exception.Message, MessageBoxImage.Warning, "Bild einfügen");
+        }
+    }
+
+    /// <summary>
+    /// Liefert den Pfad des Bildes im Projektordner: Liegt die Datei schon dort, bleibt sie
+    /// unverändert. Sonst wird sie in den Unterordner <c>02_Bilder</c> kopiert, wobei eine
+    /// vorhandene Datei gleichen Namens nicht überschrieben wird. Ohne Projekt entfällt die Kopie.
+    /// </summary>
+    private string PlaceInProjectFolder(AppServices services, string sourcePath)
+    {
+        if (_imageProjectId?.Invoke() is not { } projectId)
+        {
+            return sourcePath;
+        }
+
+        var project = services.Projects.GetProject(projectId);
+        if (string.IsNullOrWhiteSpace(project.FolderPath))
+        {
+            return sourcePath;
+        }
+
+        var root = Path.GetFullPath(project.FolderPath);
+        var source = Path.GetFullPath(sourcePath);
+        if (source.StartsWith(
+                root.EndsWith(Path.DirectorySeparatorChar) ? root : root + Path.DirectorySeparatorChar,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return source;
+        }
+
+        var folder = Path.Combine(root, ProjectFolders.Images);
+        Directory.CreateDirectory(folder);
+
+        var target = Path.Combine(folder, Path.GetFileName(source));
+        var counter = 2;
+        while (File.Exists(target) && !HasSameContent(target, source))
+        {
+            target = Path.Combine(folder,
+                $"{Path.GetFileNameWithoutExtension(source)} ({counter}){Path.GetExtension(source)}");
+            counter++;
+        }
+
+        if (!File.Exists(target))
+        {
+            File.Copy(source, target, overwrite: false);
+        }
+
+        // Damit das Bild sofort in der Bildbibliothek steht, wird der Projektordner
+        // eingelesen; scheitert das, bleibt das Bild trotzdem im Text.
+        try
+        {
+            services.Images.SyncProjectFolder(projectId);
+        }
+        catch (Exception exception) when (exception is LiftUpException or IOException or UnauthorizedAccessException)
+        {
+            // Der Abgleich ist nur eine Bequemlichkeit.
+        }
+
+        return target;
+    }
+
+    /// <summary>Vergleicht zwei Dateien über ihren Inhalt.</summary>
+    private static bool HasSameContent(string left, string right)
+    {
+        var leftInfo = new FileInfo(left);
+        var rightInfo = new FileInfo(right);
+        if (leftInfo.Length != rightInfo.Length)
+        {
+            return false;
+        }
+
+        return File.ReadAllBytes(left).AsSpan().SequenceEqual(File.ReadAllBytes(right));
+    }
+
     /// <summary>Der markierte Teil des Ersatzfelds als HTML; Zeilenumbrüche bleiben erhalten.</summary>
     private string? FallbackSelectionHtml()
     {
@@ -1584,9 +1739,9 @@ public partial class HtmlEditor : UserControl
     }
 
     /// <summary>Meldung mit dem Fenster als Besitzer, sobald es eines gibt.</summary>
-    private static void Show(Window? owner, string message, MessageBoxImage icon)
+    private static void Show(Window? owner, string message, MessageBoxImage icon,
+        string title = "Als Textvorlage speichern")
     {
-        const string title = "Als Textvorlage speichern";
         if (owner is null)
         {
             MessageBox.Show(message, title, MessageBoxButton.OK, icon);

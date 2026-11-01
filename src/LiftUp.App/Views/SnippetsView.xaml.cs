@@ -17,6 +17,8 @@ public partial class SnippetsView : UserControl
 
         // Markierter Text lässt sich hier ebenso als Textvorlage ablegen.
         BodyEditor.SnippetServices = services;
+        // Textbausteine hängen an keinem Projekt; Bilder werden ohne Kopie eingesetzt.
+        BodyEditor.EnableImageInsert(services);
         LoadSnippets();
     }
 

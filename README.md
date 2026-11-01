@@ -359,6 +359,15 @@ Markierter Text lässt sich in jedem dieser Editoren über „Als Textvorlage sp
 Der Dialog fragt Name und Kategorie ab, danach steht der Text über `/` sofort zur Verfügung.
 Gespeichert wird nur die Markierung, ohne den Text davor und danach; Formatierung bleibt erhalten.
 
+Bilder kommen über „Bild einfügen …“ in den Text: Die Datei wird gewählt, und liegt sie nicht im
+Projektordner, kopiert LiftUp sie in den Unterordner `02_Bilder` – eine gleichnamige Datei wird
+nicht überschrieben, sondern mit „(2)“ ergänzt. Danach steht das Bild an der Cursorstelle und wird
+sofort in die Bildbibliothek des Projekts übernommen. Textbausteine und der Baustein-Dialog hängen
+an keinem Projekt; dort wird das Bild ohne Kopie eingesetzt. Ein Klick auf ein Bild im Text öffnet
+die Bild-Eigenschaften: Größe (klein, mittel, groß), Ausrichtung (links, zentriert, rechts, unter
+dem Text), Textfluss (im Text, quadratisch, eng, durchlaufend, oben und unten) und eine
+Bildunterschrift. Ziehen mit der Maus verschiebt das Bild an eine andere Stelle im Text.
+
 Außerhalb der Analyse gilt dasselbe im Dokument-Editor und in den Tabellenzellen der Tabellen
 (dort `//` und `/` als reiner Text, ohne Bilder; `//` durchsucht die Werte des gewählten
 Projekts). Beim Erstellen eines Dokuments belegt der

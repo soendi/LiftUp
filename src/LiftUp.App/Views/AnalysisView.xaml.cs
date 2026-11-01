@@ -229,6 +229,8 @@ public partial class AnalysisView : UserControl, ITabFillSource
     private HtmlEditor CreateEditor()
     {
         var editor = new HtmlEditor { SnippetServices = _services };
+        // Bilder lassen sich hier direkt einsetzen; ohne Projektordner bleibt die Datei, wo sie ist.
+        editor.EnableImageInsert(_services, () => SelectedProject?.Id);
         editor.EnableSnippetAutocomplete(_search.SearchSnippets);
         editor.EnableImageAutocomplete(_search.SearchImages);
         editor.EnableTableAutocomplete(_search.SearchTableValues);
