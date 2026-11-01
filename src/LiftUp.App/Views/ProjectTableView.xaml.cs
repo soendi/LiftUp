@@ -132,6 +132,9 @@ public partial class ProjectTableView : UserControl
     /// <summary>Ob die Tabelle Zeilen hat – die Analyse färbt damit den Reiter „1. Anlagedaten“.</summary>
     public bool HasRows => _rows.Count > 0;
 
+    /// <summary>Liest die Zeilen neu – etwa nachdem die Zustandsanalyse einen Aufzug erhielt.</summary>
+    public void Reload() => LoadRows();
+
     private void LoadSnippets()
     {
         try
@@ -497,13 +500,32 @@ public partial class ProjectTableView : UserControl
         for (var index = 0; index < _matches.Count; index++)
         {
             var match = _matches[index];
+
+            // Zwei Zeilen wie im Dokument-Editor: oben der Wert, darunter Spalte und Herkunft
+            // („Jahr · Investitionsplanung“); der Tooltip bleibt nur Zugabe.
+            var texts = new StackPanel { Orientation = Orientation.Vertical };
+            texts.Children.Add(new TextBlock
+            {
+                Text = match.DisplayText,
+                MaxWidth = 300,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+            });
+
+            if (!string.IsNullOrWhiteSpace(match.Detail))
+            {
+                texts.Children.Add(new TextBlock
+                {
+                    Text = match.Detail,
+                    FontSize = 12,
+                    MaxWidth = 300,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
+                    Foreground = new SolidColorBrush(Color.FromRgb(0x6B, 0x76, 0x86)),
+                });
+            }
+
             var row = new Button
             {
-                Content = new TextBlock
-                {
-                    Text = match.DisplayText,
-                    TextTrimming = TextTrimming.CharacterEllipsis,
-                },
+                Content = texts,
                 HorizontalContentAlignment = HorizontalAlignment.Left,
                 Padding = new Thickness(8, 4, 8, 4),
                 BorderThickness = new Thickness(0),

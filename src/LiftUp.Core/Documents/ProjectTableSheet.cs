@@ -70,6 +70,71 @@ public static class ProjectTableSheet
     }
 
     /// <summary>
+    /// Die erfassten Angaben als Wertetabelle für den Bericht – links die Beschriftung,
+    /// rechts der Wert, wie die Tabelle unter „1. Anlagedaten“. Leere Angaben bleiben als
+    /// Zeile stehen, damit der Bericht immer gleich aufgebaut ist. Mehrere Aufzüge bekommen
+    /// je eine Tabelle mit ihrer Anlagebezeichnung als Überschrift.
+    /// </summary>
+    public static string RenderDetails(ProjectTableDefinition definition, IReadOnlyList<ProjectTableRow> rows)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+        ArgumentNullException.ThrowIfNull(rows);
+
+        if (rows.Count == 0 || definition.Columns.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        var builder = new StringBuilder();
+        for (var index = 0; index < rows.Count; index++)
+        {
+            var row = rows[index];
+
+            if (rows.Count > 1)
+            {
+                builder.Append("<p style=\"font-weight:600;margin:0 0 2mm 0;\">")
+                    .Append(Encode(DetailTitle(row, index)))
+                    .Append("</p>");
+            }
+
+            builder.Append("<table style=\"width:100%;border-collapse:collapse;font-size:10.5pt;\">");
+            foreach (var column in definition.Columns)
+            {
+                var value = row.Values.TryGetValue(column.Key, out var found) ? (found ?? string.Empty).Trim() : string.Empty;
+
+                builder.Append("<tr><td style=\"width:55mm;padding:1.8mm 2mm;border-bottom:1px solid #cbd2d9;color:#52606d;\">")
+                    .Append(Encode(column.Label))
+                    .Append(":</td><td style=\"padding:1.8mm 2mm;border-bottom:1px solid #cbd2d9;\">")
+                    .Append(value.Length == 0 ? "&#160;" : Encode(value))
+                    .Append("</td></tr>");
+            }
+
+            builder.Append("</table>");
+
+            if (index < rows.Count - 1)
+            {
+                builder.Append("<div style=\"height:6mm;\"></div>");
+            }
+        }
+
+        return builder.ToString();
+    }
+
+    /// <summary>Überschrift einer Anlage: Anlagebezeichnung und Standort, sonst die Position.</summary>
+    private static string DetailTitle(ProjectTableRow row, int index)
+    {
+        var name = row.Values.TryGetValue("AssetName", out var asset) ? (asset ?? string.Empty).Trim() : string.Empty;
+        var location = row.Values.TryGetValue("Location", out var place) ? (place ?? string.Empty).Trim() : string.Empty;
+
+        if (name.Length == 0)
+        {
+            return $"Anlage {index + 1}";
+        }
+
+        return location.Length == 0 ? name : $"{name} · {location}";
+    }
+
+    /// <summary>
     /// Das Blatt als eigenes Dokument für eine liegende Seite. Es wird getrennt gedruckt und
     /// danach an das übrige PDF gehängt, damit die breiten Tabellen Platz haben.
     /// </summary>

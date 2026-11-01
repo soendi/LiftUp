@@ -123,10 +123,19 @@ public static class ProjectAnalysisCatalog
     /// Erkennt den Haupttitel in einem Vorlagenabschnitt – „2. Analyse“ ebenso wie „Analyse“.
     /// Damit kann der Editor den Reiter mit den erfassten Texten vorbelegen.
     /// </summary>
-    public static bool IsChapterTitle(string? title)
+    public static bool IsChapterTitle(string? title) => IsTitle(title, Analyse);
+
+    /// <summary>
+    /// Erkennt den Haupttitel „1. Anlagedaten“ in einem Vorlagenabschnitt – „1. Anlagedaten“
+    /// ebenso wie „Anlagedaten“. Beim Erzeugen des Dokuments stehen dort die erfassten
+    /// Anlagedaten anstelle der leeren Tabelle der Vorlage.
+    /// </summary>
+    public static bool IsAnlagedatenTitle(string? title) => IsTitle(title, Anlagedaten);
+
+    private static bool IsTitle(string? title, ProjectAnalysisChapter chapter)
     {
         var value = StripNumber(title);
-        return value.Length > 0 && value.Equals(Analyse.Title, StringComparison.OrdinalIgnoreCase);
+        return value.Length > 0 && value.Equals(chapter.Title, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

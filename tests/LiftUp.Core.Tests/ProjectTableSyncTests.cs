@@ -130,6 +130,101 @@ public sealed class ProjectTableSyncTests
     }
 
     [Fact]
+    public void Jede_zeile_der_zustandsanalyse_legt_eine_anlagedatenzeile_an()
+    {
+        using var fixture = new TestDatabase();
+        var session = fixture.LoginAsAdmin();
+        var projects = new ProjectService(fixture.Database, session);
+        var tables = new ProjectTableService(fixture.Database, session);
+        var project = projects.Create(Input(Path.Combine(fixture.Root, "p1")));
+
+        tables.Save(project.Id, ProjectTableCatalog.ZustandsanalyseKey,
+        [
+            Lift("8609861", "Messligfeldstrasse 1", "1994", "PA"),
+            Lift("8609862", "Messligfeldstrasse 3", "2001", "WA"),
+        ]);
+
+        var details = tables.Get(project.Id, ProjectTableCatalog.AnlagedatenKey);
+
+        Assert.Equal(2, details.Count);
+
+        // Zwei Standorte: Die Anlagebezeichnung trägt den Standort mit.
+        Assert.Equal("8609861 (Messligfeldstrasse 1)", details[0].Values["AssetName"]);
+        Assert.Equal("PA", details[0].Values["LiftType"]);
+        Assert.Equal("1994", details[0].Values["Year"]);
+        Assert.Equal("8609862 (Messligfeldstrasse 3)", details[1].Values["AssetName"]);
+
+        // Eigene Angaben der Anlagedaten starten leer.
+        Assert.Equal(string.Empty, details[0].Values["Make"]);
+    }
+
+    [Fact]
+    public void Eigene_angaben_der_anlagedaten_bleiben_erhalten()
+    {
+        using var fixture = new TestDatabase();
+        var session = fixture.LoginAsAdmin();
+        var projects = new ProjectService(fixture.Database, session);
+        var tables = new ProjectTableService(fixture.Database, session);
+        var project = projects.Create(Input(Path.Combine(fixture.Root, "p1")));
+
+        tables.Save(project.Id, ProjectTableCatalog.ZustandsanalyseKey,
+            [Lift("8609861", "Messligfeldstrasse 1", "1994", "PA")]);
+
+        tables.Save(project.Id, ProjectTableCatalog.AnlagedatenKey,
+        [
+            Row(("AssetName", "8609861"), ("Make", "Schindler"), ("Speed", "1.0")),
+        ]);
+
+        // Jahrgang und Aufzugstyp ändern sich in der Zustandsanalyse: Das Fabrikat bleibt.
+        tables.Save(project.Id, ProjectTableCatalog.ZustandsanalyseKey,
+            [Lift("8609861", "Messligfeldstrasse 1", "1999", "WA")]);
+
+        var details = Assert.Single(tables.Get(project.Id, ProjectTableCatalog.AnlagedatenKey));
+        Assert.Equal("Schindler", details.Values["Make"]);
+        Assert.Equal("1.0", details.Values["Speed"]);
+        Assert.Equal("1999", details.Values["Year"]);
+        Assert.Equal("WA", details.Values["LiftType"]);
+        Assert.Equal("8609861", details.Values["AssetName"]);
+    }
+
+    [Fact]
+    public void Umbenannter_aufzug_behaelt_seine_anlagedaten()
+    {
+        using var fixture = new TestDatabase();
+        var session = fixture.LoginAsAdmin();
+        var projects = new ProjectService(fixture.Database, session);
+        var tables = new ProjectTableService(fixture.Database, session);
+        var project = projects.Create(Input(Path.Combine(fixture.Root, "p1")));
+
+        tables.Save(project.Id, ProjectTableCatalog.ZustandsanalyseKey,
+        [
+            Lift("8609861", "Messligfeldstrasse 1", "1994", "PA"),
+            Lift("8609862", "Messligfeldstrasse 3", "2001", "WA"),
+        ]);
+
+        tables.Save(project.Id, ProjectTableCatalog.AnlagedatenKey,
+        [
+            Row(("AssetName", "8609861"), ("Make", "Schindler")),
+            Row(("AssetName", "8609862"), ("Make", "Otis")),
+        ]);
+
+        tables.Save(project.Id, ProjectTableCatalog.ZustandsanalyseKey,
+        [
+            Lift("8609861-N", "Messligfeldstrasse 1", "1994", "PA"),
+            Lift("8609862", "Messligfeldstrasse 3", "2001", "WA"),
+        ]);
+
+        var details = tables.Get(project.Id, ProjectTableCatalog.AnlagedatenKey);
+
+        Assert.Equal(2, details.Count);
+
+        // Zwei Standorte: Die Anlagebezeichnung trägt den Standort mit, wie im Reiter.
+        Assert.Equal("8609861-N (Messligfeldstrasse 1)", details[0].Values["AssetName"]);
+        Assert.Equal("Schindler", details[0].Values["Make"]);
+        Assert.Equal("Otis", details[1].Values["Make"]);
+    }
+
+    [Fact]
     public void Speichern_der_investitionsplanung_aendert_die_zustandsanalyse_nicht()
     {
         using var fixture = new TestDatabase();

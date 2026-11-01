@@ -41,6 +41,9 @@ public partial class AnalysisView : UserControl
     /// <summary>Die Foto-Reiter je Aufzug; „4. Fotos“ ist grün, sobald einer etwas hat.</summary>
     private readonly List<TabStatus> _photoTabStatuses = [];
 
+    /// <summary>Aufzüge, für die gerade ein Foto-Reiter steht.</summary>
+    private IReadOnlyList<string> _photoLiftKeys = [];
+
     /// <summary>Farbe der Reiter: hellrot ohne Inhalt, hellgrün mit Inhalt.</summary>
     private static readonly SolidColorBrush MissingBrush = CreateBrush(0xF9, 0xD6, 0xD5);
     private static readonly SolidColorBrush DoneBrush = CreateBrush(0xD7, 0xF0, 0xDA);
@@ -69,6 +72,7 @@ public partial class AnalysisView : UserControl
             if (args.NewValue is true)
             {
                 LoadProjects(keepSelection: true);
+                RefreshTables();
             }
         };
     }
@@ -227,6 +231,46 @@ public partial class AnalysisView : UserControl
     }
 
     /// <summary>
+    /// Zieht Anlagedaten und Foto-Reiter nach, wenn im Reiter „Zustandsanalyse“ ein Aufzug
+    /// erfasst wurde. Die erfassten Texte bleiben stehen; die Anlagedaten werden nur geladen,
+    /// solange der Reiter leer ist, damit ungespeicherte Zeilen nicht verloren gehen.
+    /// </summary>
+    private void RefreshTables()
+    {
+        if (SelectedProject is not { } project)
+        {
+            return;
+        }
+
+        if (_stateTable is { HasRows: false })
+        {
+            _stateTable.Reload();
+        }
+
+        // Neue oder weggefallene Aufzüge: nur dann entstehen die Foto-Reiter neu, damit
+        // bereits hinzugefügte Fotos nicht aus der Ansicht fallen.
+        if (!_photoLiftKeys.SequenceEqual(CurrentPhotoLiftKeys(project.Id)))
+        {
+            BuildPhotoTabs(project.Id);
+        }
+
+        UpdateTabColors();
+    }
+
+    /// <summary>Aufzüge, die jetzt einen Foto-Reiter hätten; bei Fehlern der bisherige Stand.</summary>
+    private IReadOnlyList<string> CurrentPhotoLiftKeys(Guid projectId)
+    {
+        try
+        {
+            return _services.Analysis.GetLifts(projectId).Select(lift => lift.Key).ToArray();
+        }
+        catch (LiftUpException)
+        {
+            return _photoLiftKeys;
+        }
+    }
+
+    /// <summary>
     /// Legt die Foto-Reiter an: ein Unterpunkt je Aufzug aus der Zustandsanalyse, sobald
     /// Anlagebezeichnung und Standort erfasst sind. Ohne solche Zeilen bleibt der Haupttitel
     /// ohne Unter-Reiter.
@@ -245,8 +289,11 @@ public partial class AnalysisView : UserControl
         catch (LiftUpException exception)
         {
             InfoText.Text = exception.Message;
+            _photoLiftKeys = [];
             return;
         }
+
+        _photoLiftKeys = lifts.Select(lift => lift.Key).ToArray();
 
         for (var index = 0; index < lifts.Count; index++)
         {

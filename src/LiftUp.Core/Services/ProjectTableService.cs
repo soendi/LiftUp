@@ -70,11 +70,13 @@ public sealed class ProjectTableService
         var saved = _tables.ReplaceRows(
             connection, transaction, projectId, definition.Key, prepared, _actor.UserName);
 
-        // Beide Tabellen führen dieselben Aufzüge: Je Zeile der Zustandsanalyse entsteht in
-        // der Investitionsplanung die passende Zeile mit den übereinstimmenden Angaben.
+        // Alle Tabellen führen dieselben Aufzüge: Je Zeile der Zustandsanalyse entsteht in
+        // der Investitionsplanung und in den Anlagedaten die passende Zeile mit den
+        // übereinstimmenden Angaben.
         if (string.Equals(definition.Key, ProjectTableCatalog.ZustandsanalyseKey, StringComparison.OrdinalIgnoreCase))
         {
             SyncInvestitionsplanung(connection, transaction, projectId, saved);
+            SyncAnlagedaten(connection, transaction, projectId, saved);
         }
 
         _changes.Record(connection, transaction, "ProjectTable", projectId.ToString("D"), "Update",
@@ -153,6 +155,113 @@ public sealed class ProjectTableService
         }
 
         _tables.ReplaceRows(connection, transaction, projectId, definition.Key, merged, _actor.UserName);
+    }
+
+    /// <summary>
+    /// Hält die Anlagedaten („1. Anlagedaten“ der Analyse) bei den Aufzügen der
+    /// Zustandsanalyse: Anlagebezeichnung, Aufzugstyp, Jahrgang und Nutzlast werden
+    /// übernommen, die übrigen Angaben bleiben stehen. Zugeordnet wird über die
+    /// Anlagebezeichnung, bei einer Umbenennung über die Position.
+    /// </summary>
+    private void SyncAnlagedaten(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        Guid projectId,
+        IReadOnlyList<ProjectTableRow> lifts)
+    {
+        var definition = ProjectTableCatalog.Anlagedaten;
+        var remaining = new List<ProjectTableRow>(
+            _tables.GetRows(connection, transaction, projectId, definition.Key));
+        var merged = new List<ProjectTableRowInput>(lifts.Count + remaining.Count);
+
+        // Einen Standort kennen die Anlagedaten nicht: Bei mehreren Standorten trägt die
+        // Anlagebezeichnung den Standort mit – wie in der Vorbelegung des Reiters.
+        var locations = lifts
+            .Select(row => Value(row, "Location"))
+            .Where(value => value.Length > 0)
+            .Distinct(StringComparer.CurrentCultureIgnoreCase)
+            .ToArray();
+        var withLocation = locations.Length > 1;
+        var labels = lifts.Select(row => Label(row, withLocation)).ToArray();
+
+        for (var index = 0; index < lifts.Count; index++)
+        {
+            var lift = lifts[index];
+            var label = labels[index];
+            var name = Value(lift, "AssetName");
+
+            ProjectTableRow? match = null;
+            if (label.Length > 0)
+            {
+                match = remaining.FirstOrDefault(row =>
+                    string.Equals(Value(row, "AssetName"), label, StringComparison.OrdinalIgnoreCase));
+            }
+
+            // Der Reiter trug bisher nur die Anlagebezeichnung ohne Standort.
+            if (match is null && name.Length > 0)
+            {
+                match = remaining.FirstOrDefault(row =>
+                    string.Equals(Value(row, "AssetName"), name, StringComparison.OrdinalIgnoreCase));
+            }
+
+            // Umbenannt: Die Zeile an derselben Stelle gehört weiterhin zu diesem Aufzug –
+            // solange sie nicht schon zu einem anderen Aufzug gehört.
+            if (match is null && index < remaining.Count)
+            {
+                var candidate = remaining[index];
+                var candidateName = Value(candidate, "AssetName");
+                var claimed = candidateName.Length > 0
+                    && (labels.Contains(candidateName, StringComparer.OrdinalIgnoreCase)
+                        || lifts.Any(item => string.Equals(Value(item, "AssetName"), candidateName, StringComparison.OrdinalIgnoreCase)));
+                if (!claimed)
+                {
+                    match = candidate;
+                }
+            }
+
+            if (match is not null)
+            {
+                remaining.Remove(match);
+            }
+
+            var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var column in definition.Columns)
+            {
+                values[column.Key] = match is not null && match.Values.TryGetValue(column.Key, out var previous)
+                    ? previous
+                    : string.Empty;
+            }
+
+            foreach (var (target, source) in ProjectTableCatalog.AnlagedatenFromZustandsanalyse)
+            {
+                values[target] = string.Equals(target, "AssetName", StringComparison.OrdinalIgnoreCase)
+                    ? label
+                    : Value(lift, source);
+            }
+
+            // Eine Zeile ohne jede Angabe gehört nicht in den Bericht.
+            if (values.Values.Any(value => value.Length > 0))
+            {
+                merged.Add(new ProjectTableRowInput(values));
+            }
+        }
+
+        // Zeilen ohne Aufzug in der Zustandsanalyse bleiben mit ihren Angaben erhalten.
+        foreach (var row in remaining)
+        {
+            merged.Add(new ProjectTableRowInput(
+                new Dictionary<string, string>(row.Values, StringComparer.OrdinalIgnoreCase)));
+        }
+
+        _tables.ReplaceRows(connection, transaction, projectId, definition.Key, merged, _actor.UserName);
+    }
+
+    /// <summary>Anlagebezeichnung der Anlagedaten; bei mehreren Standorten mit Standort.</summary>
+    private static string Label(ProjectTableRow lift, bool withLocation)
+    {
+        var name = Value(lift, "AssetName");
+        var location = Value(lift, "Location");
+        return withLocation && name.Length > 0 && location.Length > 0 ? $"{name} ({location})" : name;
     }
 
     private static string Value(ProjectTableRow row, string key) =>

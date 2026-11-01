@@ -181,6 +181,19 @@ public static class ProjectTableCatalog
     public static IReadOnlyList<string> SharedWithInvestitionsplanung { get; } =
         ["Year", "AssetName", "Service", "Location", "Type"];
 
+    /// <summary>
+    /// Spalten der Anlagedaten, die aus der Zustandsanalyse stammen (links die Anlagedaten,
+    /// rechts die Zustandsanalyse). Die übrigen Angaben werden im Reiter „1. Anlagedaten“
+    /// gepflegt und bleiben beim Speichern der Zustandsanalyse stehen.
+    /// </summary>
+    public static IReadOnlyList<(string Anlagedaten, string Zustandsanalyse)> AnlagedatenFromZustandsanalyse { get; } =
+    [
+        ("AssetName", "AssetName"),
+        ("LiftType", "Type"),
+        ("Year", "Year"),
+        ("Load", "Load"),
+    ];
+
     /// <summary>Alle Tabellen in der Reihenfolge, in der sie im PDF erscheinen.</summary>
     public static IReadOnlyList<ProjectTableDefinition> All { get; } = [Zustandsanalyse, Investitionsplanung];
 

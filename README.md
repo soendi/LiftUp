@@ -100,11 +100,13 @@ Zwei projektbezogene Tabellen, die direkt hinter dem Reiter "Projekte" liegen:
   eine Zeile: Jahr und Anlagendaten, danach **Variante 1 – Modernisierung** und
   **Variante 2 – Ersatzanlage** mit Massnahme, Kosten und Erläuterung.
 
-Beide Tabellen führen dieselben Aufzüge: **Speichern der Zustandsanalyse legt je Zeile die passende
-Zeile der Investitionsplanung an** und übernimmt Baujahr, Anlagebezeichnung, Servicefirma, Standort
-und Art des Aufzugs. Zugeordnet wird über die Anlagebezeichnung, bei einer Umbenennung über die
-Position. Eigene Angaben der Investitionsplanung (Massnahme, Kosten, Erläuterung) bleiben dabei
-stehen; Zeilen zu Aufzügen, die es in der Zustandsanalyse nicht mehr gibt, bleiben mit ihren
+Alle projektbezogenen Tabellen führen dieselben Aufzüge: **Speichern der Zustandsanalyse legt je
+Zeile die passende Zeile der Investitionsplanung und der Anlagedaten („1. Anlagedaten“ der
+Analyse) an.** Die Investitionsplanung übernimmt Baujahr, Anlagebezeichnung, Servicefirma, Standort
+und Art des Aufzugs, die Anlagedaten Anlagebezeichnung, Aufzugstyp, Jahrgang und Nutzlast. Zugeordnet
+wird über die Anlagebezeichnung, bei einer Umbenennung über die Position. Eigene Angaben (Massnahme
+und Kosten in der Investitionsplanung, Antrieb, Fabrikat, Abmessungen in den Anlagedaten) bleiben
+dabei stehen; Zeilen zu Aufzügen, die es in der Zustandsanalyse nicht mehr gibt, bleiben mit ihren
 Angaben erhalten.
 
 Bewertungen, ja/nein und die Aufzugsart werden aus einer Auswahlliste gewählt (Spaltenkopf zeigt die
@@ -241,10 +243,13 @@ Vorlagen bestehen aus HTML und CSS (Register "Vorlagen"). Der Editor bietet HTML
 Vorschau mit Beispieldaten und eine Platzhalterliste, aus der per Doppelklick eingefügt wird.
 
 **Startvorlage:** LiftUp legt den **Zustandsbericht Aufzugsanlagen** an. Beim Erstellen eines
-Dokuments erscheinen seine Abschnitte als Tabs: „1. Anlagedaten“ (bringt die Anlagedaten-Tabelle
-al Startinhalt mit – Aufzugstyp, Jahrgang, Antrieb, Steuerung/Regler, Fabrikat, Nutzlast,
-Geschwindigkeit, Haltestellen, Zugänge, Förderhöhe, Maschinenraum, Kabinenabschluss, Schachttüren,
-Schachtausführung, Auffahrsockel), „2. Analyse“ und „3. Fazit / Empfehlung“ (nur Titel). Ein
+Dokuments erscheinen seine Abschnitte als Tabs: „1. Anlagedaten“, „2. Analyse“ und
+„3. Fazit / Empfehlung“ (nur Titel). Der Abschnitt „1. Anlagedaten“ bringt die Anlagedaten-Tabelle
+mit – Aufzugstyp, Jahrgang, Antrieb, Steuerung/Regler, Fabrikat, Nutzlast, Geschwindigkeit,
+Haltestellen, Zugänge, Förderhöhe, Maschinenraum, Kabinenabschluss, Schachttüren, Schachtausführung,
+Auffahrsockel – und ist mit den im Reiter „Analyse“ gespeicherten Anlagedaten des Projekts bereits
+ausgefüllt; bei mehreren Aufzügen steht je Aufzug eine Tabelle mit Anlagebezeichnung und Standort
+als Überschrift. Ohne gespeicherte Zeilen bleibt die leere Tabelle der Vorlage stehen. Ein
 Startinhalt bleibt erhalten, wenn die Titel der Abschnitte angepasst werden.
 
 **Deckblatt:** Die erste Seite ist als Deckblatt gestaltet: „Zustandsbericht / Aufzugsanlagen“,
@@ -296,9 +301,10 @@ Dokuments neu zu tippen. Der Reiter folgt dem Bericht:
 - **1. Anlagedaten** – je Aufzug eine Zeile mit Anlagebezeichnung, Aufzugstyp, Jahrgang,
   Antrieb, Steuerung / Regler, Fabrikat, Nutzlast, Geschwindigkeit, Haltestellen, Zugänge,
   Förderhöhe, Maschinenraum, Kabinenabschluss, Schachttüren, Schachausführung und Auffahrsockel.
-  Ohne gespeicherte Angaben entstehen so viele Zeilen, wie die Zustandsanalyse Aufzüge hat; die
-  Anlagebezeichnung wird von dort übernommen, bei mehreren Standorten mit Standort. Das Projekt
-  kommt aus der Auswahl oben, die Tabelle zieht mit.
+  Beim Speichern der Zustandsanalyse entstehen die Zeilen mit den vorhandenen Angaben; solange dort
+  nichts gespeichert ist, entstehen so viele Zeilen, wie die Zustandsanalyse Aufzüge hat, mit deren
+  Anlagebezeichnung (bei mehreren Standorten mit Standort). Das Projekt kommt aus der Auswahl oben,
+  die Tabelle zieht mit.
 - **2. Analyse** – je Analysepunkt ein Unter-Reiter: 2.1 Aggregat, 2.2 Hubzylinder / Tragmittel,
   2.3 Steuerung / Regler, 2.4 Regulator (Geschwindigkeitsbegrenzer), 2.5 Fangvorrichtung,
   2.6 Kabine / Triebmechanik und 2.7 Zugänglichkeit.

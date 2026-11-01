@@ -188,17 +188,32 @@ public partial class DocumentComposerWindow : Window
 
     /// <summary>
     /// Startinhalt eines Abschnitts. Im Reiter „2. Analyse“ stehen die im Reiter „Analyse“
-    /// erfassten Texte des Projekts, damit sie nicht nochmals getippt werden müssen.
+    /// erfassten Texte des Projekts, unter „1. Anlagedaten“ die erfassten Anlagedaten – damit
+    /// sie nicht nochmals getippt werden müssen.
     /// </summary>
     private string StartHtml(TemplateSection section)
     {
-        if (!ProjectAnalysisCatalog.IsChapterTitle(section.Title) || SelectedProject is not { } project)
+        if (SelectedProject is not { } project)
         {
             return section.DefaultHtml;
         }
 
         try
         {
+            if (ProjectAnalysisCatalog.IsAnlagedatenTitle(section.Title))
+            {
+                // Die gespeicherten Zeilen der Tabelle „1. Anlagedaten“; ohne Zeilen bleibt die
+                // Tabelle der Vorlage mit ihren leeren Feldern stehen.
+                var rows = _services.ProjectTables.Get(project.Id, ProjectTableCatalog.AnlagedatenKey);
+                var details = ProjectTableSheet.RenderDetails(ProjectTableCatalog.Anlagedaten, rows);
+                return details.Length > 0 ? details : section.DefaultHtml;
+            }
+
+            if (!ProjectAnalysisCatalog.IsChapterTitle(section.Title))
+            {
+                return section.DefaultHtml;
+            }
+
             // Der Haupttitel steht schon als Überschrift des Abschnitts im Dokument.
             var html = ProjectAnalysisCatalog.Render(
                 _services.Analysis.Get(project.Id), includeChapterTitle: false);
@@ -206,7 +221,7 @@ public partial class DocumentComposerWindow : Window
         }
         catch (LiftUpException)
         {
-            // Ohne Recht auf die Analyse bleibt der Startinhalt der Vorlage.
+            // Ohne Recht auf Analyse oder Tabellen bleibt der Startinhalt der Vorlage.
             return section.DefaultHtml;
         }
     }
