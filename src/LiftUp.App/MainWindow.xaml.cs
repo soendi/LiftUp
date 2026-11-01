@@ -29,6 +29,9 @@ public partial class MainWindow : Window
         // Zwischen den Gruppen steht je ein Trennstrich; leere Gruppen fallen weg.
         var groups = new List<List<TabItem>>();
 
+        // Zustandsanalyse, Investitionsplanung, Analyse und PDF teilen die Projektauswahl.
+        var selection = new ProjectSelection();
+
         var overview = new List<TabItem>();
         if (session.Can(Permission.ViewProjects))
         {
@@ -39,16 +42,16 @@ public partial class MainWindow : Window
         {
             // Die beiden Tabellen erscheinen direkt hinter den Projekten; die Zustandsanalyse
             // wird zusätzlich als zweites Blatt ins PDF übernommen.
-            overview.Add(CreateTab("Zustandsanalyse", new ProjectTableView(_services, ProjectTableCatalog.Zustandsanalyse)));
-            overview.Add(CreateTab("Investitionsplanung", new ProjectTableView(_services, ProjectTableCatalog.Investitionsplanung)));
+            overview.Add(CreateTab("Zustandsanalyse", new ProjectTableView(_services, ProjectTableCatalog.Zustandsanalyse, selection)));
+            overview.Add(CreateTab("Investitionsplanung", new ProjectTableView(_services, ProjectTableCatalog.Investitionsplanung, selection)));
 
             // Die Analyse wird je Projekt einmal erfasst und fließt in jedes Dokument ein.
-            overview.Add(CreateTab("Analyse", new AnalysisView(_services)));
+            overview.Add(CreateTab("Analyse", new AnalysisView(_services, selection)));
         }
 
         if (session.Can(Permission.CreateDocuments) || session.Can(Permission.ManageTemplates))
         {
-            overview.Add(CreateTab("PDF", new PdfView(_services)));
+            overview.Add(CreateTab("PDF", new PdfView(_services, selection)));
         }
 
         groups.Add(overview);

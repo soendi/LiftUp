@@ -19,6 +19,12 @@ public sealed record ProjectAnalysisChapter(
     string Title,
     IReadOnlyList<ProjectAnalysisSection> Sections)
 {
+    /// <summary>
+    /// Tabelle, die den Haupttitel füllt, etwa die Zustandsanalyse unter „1. Anlagedaten“;
+    /// <c>null</c>, wenn der Haupttitel aus Texten besteht.
+    /// </summary>
+    public string? TableKey { get; init; }
+
     /// <summary>Überschrift im Reiter und im Dokument, etwa „2. Analyse“.</summary>
     public string Heading => $"{Number.TrimEnd('.')}. {Title}";
 }
@@ -50,6 +56,21 @@ public sealed record ProjectAnalysisTextInput(string SectionKey, string Html);
 public static class ProjectAnalysisCatalog
 {
     public const string AnalyseKey = "Analyse";
+    public const string AnlagedatenKey = "Anlagedaten";
+    public const string FazitKey = "Fazit";
+
+    /// <summary>
+    /// Haupttitel „1. Anlagedaten“: die Datenaufnahme der Aufzüge als Tabelle, wie sie
+    /// unter „Zustandsanalyse“ gepflegt wird.
+    /// </summary>
+    public static ProjectAnalysisChapter Anlagedaten { get; } = new(
+        AnlagedatenKey,
+        "1",
+        "Anlagedaten",
+        [])
+    {
+        TableKey = ProjectTableCatalog.ZustandsanalyseKey,
+    };
 
     /// <summary>Haupttitel „2. Analyse“ mit den Unterpunkten aus der Datenaufnahme.</summary>
     public static ProjectAnalysisChapter Analyse { get; } = new(
@@ -66,11 +87,19 @@ public static class ProjectAnalysisCatalog
             new("Zugänglichkeit", "2.7", "Zugänglichkeit"),
         ]);
 
+    /// <summary>Haupttitel „3. Fazit / Empfehlung“ mit dem abschließenden Text.</summary>
+    public static ProjectAnalysisChapter Fazit { get; } = new(
+        FazitKey,
+        "3",
+        "Fazit / Empfehlung",
+        [new("Fazit", "3.1", "Fazit und Empfehlung")]);
+
     /// <summary>Alle Haupttitel in der Reihenfolge des Berichts.</summary>
-    public static IReadOnlyList<ProjectAnalysisChapter> All { get; } = [Analyse];
+    public static IReadOnlyList<ProjectAnalysisChapter> All { get; } = [Anlagedaten, Analyse, Fazit];
 
     /// <summary>Alle Unterpunkte in der Reihenfolge des Berichts.</summary>
-    public static IReadOnlyList<ProjectAnalysisSection> Sections => Analyse.Sections;
+    public static IReadOnlyList<ProjectAnalysisSection> Sections =>
+        All.SelectMany(chapter => chapter.Sections).ToArray();
 
     public static ProjectAnalysisChapter? FindChapter(string? key) =>
         All.FirstOrDefault(chapter => string.Equals(chapter.Key, key?.Trim(), StringComparison.OrdinalIgnoreCase));

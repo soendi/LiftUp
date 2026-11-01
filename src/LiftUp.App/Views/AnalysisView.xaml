@@ -26,7 +26,7 @@
 
                 <TextBlock Grid.Column="1" Margin="16,0" VerticalAlignment="Center" TextWrapping="Wrap"
                            Style="{StaticResource LiftUpMutedText}"
-                           Text="Die Texte gelten für das ganze Projekt. Sie erscheinen im PDF über {{analyse}} und belegen beim Erstellen eines Dokuments den Reiter „2. Analyse“ vor. Nicht gespeicherte Änderungen gehen beim Projektwechsel verloren." />
+                           Text="Die Texte gelten für das ganze Projekt. Sie erscheinen im PDF über {{analyse}} und belegen beim Erstellen eines Dokuments den Reiter „2. Analyse“ vor. Im Text mit /Textbaustein, &amp;Bild (&amp;Bild im Projekt, &amp;&amp;Bild auch global) und //Feld (Werte aus der Zustandsanalyse) suchen. Nicht gespeicherte Änderungen gehen beim Projektwechsel verloren." />
 
                 <StackPanel Grid.Column="2" Orientation="Horizontal">
                     <Button Content="Neu laden" Click="OnReloadClick" />

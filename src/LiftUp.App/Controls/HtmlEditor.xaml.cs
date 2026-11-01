@@ -345,6 +345,20 @@ public partial class HtmlEditor : UserControl
                 var offset = selection.anchorOffset;
                 var before = node.nodeValue.substring(0, offset);
 
+                // „//feld“ sucht in den gefüllten Feldern der Zustandsanalyse (etwa der
+                // Anlagebezeichnung). Zwei Schrägstriche, damit „/“ die Textbausteine behält.
+                var table = /(^|[\s\u00a0>])\/\/([^\s\/]{0,60})$/.exec(before);
+                if (table) {
+                    return {
+                        kind: 'table',
+                        all: false,
+                        node: node,
+                        start: offset - table[2].length - 2,
+                        length: table[2].length + 2,
+                        query: table[2]
+                    };
+                }
+
                 // „&&bild“ sucht im aktiven Projekt plus globaler Bibliothek, „&bild“ nur im Projekt.
                 var image = /(^|[\s\u00a0>])(&{1,2})([^\s&]{0,40})$/.exec(before);
                 if (image) {
@@ -447,7 +461,8 @@ public partial class HtmlEditor : UserControl
                 var requestId = ++window.liftupSnippetRequest;
                 try {
                     window.chrome.webview.postMessage(JSON.stringify({
-                        type: token.kind === 'image' ? 'imageQuery' : 'snippetQuery',
+                        type: token.kind === 'image' ? 'imageQuery'
+                            : (token.kind === 'table' ? 'tableQuery' : 'snippetQuery'),
                         requestId: requestId,
                         query: token.query,
                         all: !!token.all
@@ -884,6 +899,7 @@ public partial class HtmlEditor : UserControl
     private string _pendingHtml = string.Empty;
     private Func<string, IReadOnlyList<SnippetChoice>>? _snippetSearch;
     private Func<string, bool, IReadOnlyList<ImageChoice>>? _imageSearch;
+    private Func<string, IReadOnlyList<SnippetChoice>>? _tableSearch;
 
     public HtmlEditor()
     {
@@ -990,6 +1006,20 @@ public partial class HtmlEditor : UserControl
         }
     }
 
+    /// <summary>
+    /// Schaltet die Feldersuche ein: nach „//“ schlägt der Editor die gefüllten Felder der
+    /// Zustandsanalyse vor, etwa die Anlagebezeichnung samt Standort.
+    /// </summary>
+    public void EnableTableAutocomplete(Func<string, IReadOnlyList<SnippetChoice>> search)
+    {
+        _tableSearch = search;
+
+        if (_ready && Browser.CoreWebView2 is not null)
+        {
+            _ = EnableSnippetsAsync();
+        }
+    }
+
     private async Task EnableSnippetsAsync()
     {
         try
@@ -1017,7 +1047,8 @@ public partial class HtmlEditor : UserControl
             ? active
             : 0;
 
-        var isImage = root.TryGetProperty("kind", out var kindElement) && kindElement.GetString() == "image";
+        var kindName = root.TryGetProperty("kind", out var kindElement) ? kindElement.GetString() : null;
+        var isImage = kindName == "image";
 
         SnippetList.Children.Clear();
 
@@ -1025,7 +1056,9 @@ public partial class HtmlEditor : UserControl
         {
             SnippetList.Children.Add(new TextBlock
             {
-                Text = isImage ? "Keine Bilder gefunden" : "Keine Textbausteine gefunden",
+                Text = isImage
+                    ? "Keine Bilder gefunden"
+                    : kindName == "table" ? "Keine Felder gefunden" : "Keine Textbausteine gefunden",
                 Foreground = new SolidColorBrush(Color.FromRgb(0x6B, 0x76, 0x86)),
                 Margin = new Thickness(8, 6, 8, 6),
             });
@@ -1267,7 +1300,7 @@ public partial class HtmlEditor : UserControl
                 return;
             }
 
-            if (kind is not ("snippetQuery" or "imageQuery") ||
+            if (kind is not ("snippetQuery" or "imageQuery" or "tableQuery") ||
                 !root.TryGetProperty("requestId", out var requestElement) ||
                 !requestElement.TryGetInt64(out var requestId))
             {
@@ -1298,6 +1331,15 @@ public partial class HtmlEditor : UserControl
                         detail = choice.Detail,
                         html = choice.Html,
                         preview = choice.Preview,
+                    })
+                    .ToArray(),
+                "tableQuery" when _tableSearch is not null => _tableSearch(query)
+                    .Select(choice => (object)new
+                    {
+                        name = choice.Name,
+                        detail = choice.Detail,
+                        html = choice.Html,
+                        preview = string.Empty,
                     })
                     .ToArray(),
                 _ => [],

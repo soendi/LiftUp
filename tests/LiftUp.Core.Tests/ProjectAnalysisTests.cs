@@ -159,4 +159,37 @@ public sealed class ProjectAnalysisTests
         Assert.Equal("Steuerung", ProjectAnalysisCatalog.FindSection("Steuerung / Regler")?.Key);
         Assert.Null(ProjectAnalysisCatalog.FindSection("9.9"));
     }
+
+    [Fact]
+    public void Haupttitel_folgen_dem_bericht_mit_anlagedaten_und_fazit()
+    {
+        Assert.Equal(
+            ["1. Anlagedaten", "2. Analyse", "3. Fazit / Empfehlung"],
+            ProjectAnalysisCatalog.All.Select(chapter => chapter.Heading));
+
+        // „1. Anlagedaten“ ist die Tabelle der Zustandsanalyse, kein Text.
+        Assert.Equal(ProjectTableCatalog.ZustandsanalyseKey, ProjectAnalysisCatalog.Anlagedaten.TableKey);
+        Assert.Empty(ProjectAnalysisCatalog.Anlagedaten.Sections);
+
+        Assert.Equal("3.1 Fazit und Empfehlung", Assert.Single(ProjectAnalysisCatalog.Fazit.Sections).Heading);
+        Assert.Equal("Fazit", ProjectAnalysisCatalog.FindSection("3.1")?.Key);
+    }
+
+    [Fact]
+    public void Fazit_wird_gespeichert_und_mit_seinem_haupttitel_ausgegeben()
+    {
+        using var fixture = new TestDatabase();
+        var session = fixture.LoginAsAdmin();
+        var projects = new ProjectService(fixture.Database, session);
+        var analysis = new ProjectAnalysisService(fixture.Database, session);
+
+        var project = projects.Create(Input(Path.Combine(fixture.Root, "p1")));
+        analysis.Save(project.Id, [Text("Fazit", "<p>Modernisierung empfohlen.</p>")]);
+
+        var html = ProjectAnalysisCatalog.Render(analysis.Get(project.Id));
+
+        Assert.Contains("3. Fazit / Empfehlung", html);
+        Assert.Contains("3.1 Fazit und Empfehlung", html);
+        Assert.Contains("Modernisierung empfohlen.", html);
+    }
 }

@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using LiftUp.App.Controls;
+using LiftUp.App.Documents;
 using LiftUp.Core.Domain;
 
 namespace LiftUp.App.Views;
@@ -17,7 +18,14 @@ public partial class AnalysisView : UserControl
     private sealed record SectionDraft(ProjectAnalysisSection Section, HtmlEditor Editor);
 
     private readonly AppServices _services;
+    private readonly ProjectSelection _selection;
     private readonly List<SectionDraft> _sections = [];
+
+    /// <summary>Suche für „/“ (Textbausteine) und „&amp;“ / „&amp;&amp;“ (Bilder) in den Editoren.</summary>
+    private readonly EditorSearch _search;
+
+    /// <summary>Tabelle unter „1. Anlagedaten“ – dieselbe Datenaufnahme wie unter „Zustandsanalyse“.</summary>
+    private ProjectTableView? _stateTable;
 
     /// <summary>Unter-Reiter je Aufzug unter „4. Fotos“.</summary>
     private readonly TabControl _photoTabs = new();
@@ -25,13 +33,20 @@ public partial class AnalysisView : UserControl
     /// <summary>Projekt, dessen Texte gerade in den Reitern stehen.</summary>
     private Guid? _loadedProjectId;
 
-    public AnalysisView(AppServices services)
+    public AnalysisView(AppServices services, ProjectSelection selection)
     {
         _services = services;
+        _selection = selection;
         InitializeComponent();
+
+        _search = new EditorSearch(services, () => SelectedProject?.Id, message => InfoText.Text = message);
 
         BuildTabs();
         LoadProjects();
+
+        // Ein Projektwechsel in einem anderen Reiter zieht die Analyse sofort mit.
+        _selection.Changed += (_, _) => ShowSelectedProject();
+        ShowSelectedProject();
 
         // Neu angelegte Projekte stehen sofort zur Auswahl, sobald der Reiter geöffnet wird.
         IsVisibleChanged += (_, args) =>
@@ -50,10 +65,23 @@ public partial class AnalysisView : UserControl
     {
         foreach (var chapter in ProjectAnalysisCatalog.All)
         {
+            if (chapter.TableKey is not null)
+            {
+                // „1. Anlagedaten“: die Datenaufnahme der Aufzüge als Tabelle. Das Projekt
+                // wählt die Auswahl oben; die Tabelle zieht mit.
+                _stateTable = new ProjectTableView(_services, ProjectTableCatalog.Zustandsanalyse,
+                    _selection, showProjectSelector: false);
+                ChapterTabs.Items.Add(new TabItem { Header = chapter.Heading, Content = _stateTable });
+                continue;
+            }
+
             var sections = new TabControl();
             foreach (var section in chapter.Sections)
             {
                 var editor = new HtmlEditor();
+                editor.EnableSnippetAutocomplete(_search.SearchSnippets);
+                editor.EnableImageAutocomplete(_search.SearchImages);
+                editor.EnableTableAutocomplete(_search.SearchTableValues);
                 var tab = new TabItem { Header = section.Heading, Content = editor };
                 sections.Items.Add(tab);
                 _sections.Add(new SectionDraft(section, editor));
@@ -75,7 +103,7 @@ public partial class AnalysisView : UserControl
 
     private void LoadProjects(bool keepSelection = false)
     {
-        var previousId = keepSelection ? SelectedProject?.Id : null;
+        var previousId = keepSelection ? SelectedProject?.Id : _selection.ProjectId;
 
         try
         {
@@ -196,6 +224,36 @@ public partial class AnalysisView : UserControl
         }
 
         LoadTexts();
+
+        // Die Auswahl gilt für alle Reiter (Zustandsanalyse, Investitionsplanung, Analyse, PDF).
+        if (SelectedProject is { } project)
+        {
+            _selection.Select(project.Id);
+        }
+    }
+
+    /// <summary>Übernimmt das gemeinsame Projekt; ohne Auswahl gilt das erste Projekt.</summary>
+    private void ShowSelectedProject()
+    {
+        if (ProjectBox.ItemsSource is not IEnumerable<ProjectOption> options)
+        {
+            return;
+        }
+
+        var all = options.ToArray();
+        if (all.Length == 0)
+        {
+            return;
+        }
+
+        var target = all.FirstOrDefault(option => option.Id == _selection.ProjectId) ?? all[0];
+        if (!ReferenceEquals(ProjectBox.SelectedItem, target))
+        {
+            ProjectBox.SelectedItem = target;
+            return;
+        }
+
+        _selection.Select(target.Id);
     }
 
     private void OnReloadClick(object sender, RoutedEventArgs e) => LoadTexts();

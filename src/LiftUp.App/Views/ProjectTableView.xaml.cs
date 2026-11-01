@@ -27,6 +27,7 @@ public partial class ProjectTableView : UserControl
 
     private readonly AppServices _services;
     private readonly ProjectTableDefinition _definition;
+    private readonly ProjectSelection _selection;
     private readonly ObservableCollection<ProjectTableRowModel> _rows = [];
     private readonly List<SnippetOption> _snippets = [];
     private readonly List<SnippetOption> _matches = [];
@@ -35,16 +36,34 @@ public partial class ProjectTableView : UserControl
     private int _slashIndex = -1;
     private int _selectedMatch = -1;
 
-    public ProjectTableView(AppServices services, ProjectTableDefinition definition)
+    /// <param name="showProjectSelector">
+    /// <c>false</c>, wenn die Tabelle in einem Reiter mit eigener Projektauswahl steht
+    /// (etwa „1. Anlagedaten“ der Analyse); das Projekt kommt dann über <see cref="SelectProject"/>.
+    /// </param>
+    public ProjectTableView(
+        AppServices services,
+        ProjectTableDefinition definition,
+        ProjectSelection selection,
+        bool showProjectSelector = true)
     {
         _services = services;
         _definition = definition;
+        _selection = selection;
 
         InitializeComponent();
+
+        if (!showProjectSelector)
+        {
+            ProjectBar.Visibility = Visibility.Collapsed;
+        }
 
         BuildColumns();
         LoadSnippets();
         LoadProjects();
+
+        // Ein Projektwechsel in einem anderen Reiter zieht die Tabelle sofort mit.
+        _selection.Changed += (_, _) => ShowSelectedProject();
+        ShowSelectedProject();
 
         RowsGrid.ItemsSource = _rows;
         RowsGrid.PreparingCellForEdit += OnPreparingCellForEdit;
@@ -166,6 +185,36 @@ public partial class ProjectTableView : UserControl
     {
         HideSnippets();
         LoadRows();
+
+        // Die Auswahl gilt für alle Reiter (Zustandsanalyse, Investitionsplanung, Analyse, PDF).
+        if (ProjectBox.SelectedItem is ProjectOption project)
+        {
+            _selection.Select(project.Id);
+        }
+    }
+
+    /// <summary>Übernimmt das gemeinsame Projekt; ohne Auswahl gilt das erste Projekt.</summary>
+    private void ShowSelectedProject()
+    {
+        if (ProjectBox.ItemsSource is not IEnumerable<ProjectOption> options)
+        {
+            return;
+        }
+
+        var all = options.ToArray();
+        if (all.Length == 0)
+        {
+            return;
+        }
+
+        var target = all.FirstOrDefault(option => option.Id == _selection.ProjectId) ?? all[0];
+        if (!ReferenceEquals(ProjectBox.SelectedItem, target))
+        {
+            ProjectBox.SelectedItem = target;
+            return;
+        }
+
+        _selection.Select(target.Id);
     }
 
     private void OnRefreshClick(object sender, RoutedEventArgs e) => LoadRows();

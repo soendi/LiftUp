@@ -38,8 +38,7 @@ public partial class DocumentComposerWindow : Window
     private readonly Guid? _presetProjectId;
     private readonly Guid? _presetTemplateId;
     private IReadOnlyList<DocumentSectionContent>? _presetSections;
-    private IReadOnlyList<TextSnippet>? _snippetBodies;
-    private readonly HashSet<Guid> _scannedProjects = [];
+    private readonly EditorSearch _search;
     private string? _lastPdfPath;
 
     public DocumentComposerWindow(
@@ -54,6 +53,8 @@ public partial class DocumentComposerWindow : Window
         _presetSections = sections;
 
         InitializeComponent();
+
+        _search = new EditorSearch(services, () => SelectedProject?.Id, message => InfoText.Text = message);
 
         FormatBox.ItemsSource = Formats;
         FormatBox.SelectedIndex = 0;
@@ -182,7 +183,7 @@ public partial class DocumentComposerWindow : Window
         }
 
         SelectFirstSection();
-        InfoText.Text = $"{template.Name}: {defined.Count} Abschnitt(e) fließen mit Abstand untereinander; der erste beginnt auf Seite 2. Im Text mit /Textbaustein und &Bild suchen (&Bild im Projekt, &&Bild auch in der globalen Bibliothek).";
+        InfoText.Text = $"{template.Name}: {defined.Count} Abschnitt(e) fließen mit Abstand untereinander; der erste beginnt auf Seite 2. Im Text mit /Textbaustein, &Bild (&Bild im Projekt, &&Bild auch global) und //Feld (Werte aus der Zustandsanalyse) suchen.";
     }
 
     /// <summary>
@@ -253,6 +254,7 @@ public partial class DocumentComposerWindow : Window
         var editor = new HtmlEditor();
         editor.EnableSnippetAutocomplete(SearchSnippets);
         editor.EnableImageAutocomplete(SearchImages);
+        editor.EnableTableAutocomplete(_search.SearchTableValues);
         editor.ImageFormatRequested = request =>
         {
             var dialog = new ImageFormatWindow(request.Current) { Owner = this };
@@ -294,86 +296,16 @@ public partial class DocumentComposerWindow : Window
     /// Sucht für die „/“-Eingabe im Editor nach Textbausteinen. Die Inhalte werden
     /// beim ersten Aufruf geladen und bis zum Schließen des Fensters wiederverwendet.
     /// </summary>
-    private IReadOnlyList<HtmlEditor.SnippetChoice> SearchSnippets(string query)
-    {
-        try
-        {
-            _snippetBodies ??= _services.Snippets.GetAll()
-                .Select(item => _services.Snippets.Get(item.Id))
-                .ToArray();
-
-            return SnippetAutocomplete.Search(_snippetBodies, query)
-                .Select(snippet => new HtmlEditor.SnippetChoice(
-                    snippet.Name,
-                    string.IsNullOrWhiteSpace(snippet.Category)
-                        ? SnippetAutocomplete.Preview(snippet.Html)
-                        : snippet.Category!,
-                    snippet.Html))
-                .ToArray();
-        }
-        catch (LiftUpException exception)
-        {
-            InfoText.Text = exception.Message;
-            return [];
-        }
-    }
+    private IReadOnlyList<HtmlEditor.SnippetChoice> SearchSnippets(string query) =>
+        _search.SearchSnippets(query);
 
     /// <summary>
     /// Sucht für die „&amp;“-Eingabe im Editor nach Bildern. „&amp;“ durchsucht nur das aktive
     /// Projekt, „&amp;&amp;“ zusätzlich die globale Bibliothek – Bilder anderer Projekte nie.
     /// Jeder Treffer bringt ein kleines Vorschaubild für die Liste mit.
     /// </summary>
-    private IReadOnlyList<HtmlEditor.ImageChoice> SearchImages(string query, bool includeGlobal)
-    {
-        var project = SelectedProject;
-        if (project is null)
-        {
-            return [];
-        }
-
-        try
-        {
-            // Bilder, die im Projektordner liegen, werden einmal je Fenster übernommen,
-            // damit sie auch ohne den Umweg über die Bilderansicht auffindbar sind.
-            if (_scannedProjects.Add(project.Id))
-            {
-                _services.Images.SyncProjectFolder(project.Id);
-            }
-
-            var images = _services.Images.SearchForDocument(project.Id, query, includeGlobal);
-            var choices = new List<HtmlEditor.ImageChoice>();
-
-            foreach (var image in images)
-            {
-                if (image.IsArchived)
-                {
-                    continue;
-                }
-
-                var html = ImageEmbedding.ToImageTag(image.FilePath, image.Name);
-                if (html is null)
-                {
-                    continue;
-                }
-
-                var detail = string.Join(" · ", new[] { image.Category, image.Tags, image.ScopeText }
-                    .Where(value => !string.IsNullOrWhiteSpace(value)));
-
-                choices.Add(new HtmlEditor.ImageChoice(
-                    image.Name,
-                    detail,
-                    ImageFormat.Wrap(html),
-                    ImagePreviews.DataUri(image.FilePath) ?? string.Empty));
-            }
-
-            return choices;
-        }
-        catch (LiftUpException exception)
-        {
-            InfoText.Text = exception.Message;
-            return [];
-        }
-    }
+    private IReadOnlyList<HtmlEditor.ImageChoice> SearchImages(string query, bool includeGlobal) =>
+        _search.SearchImages(query, includeGlobal);
 
     private void OnAddSectionClick(object sender, RoutedEventArgs e) => AddSection(string.Empty);
 
@@ -483,7 +415,7 @@ public partial class DocumentComposerWindow : Window
             });
 
             // Damit die „/“-Suche den neuen Baustein sofort kennt.
-            _snippetBodies = null;
+            _search.ForgetSnippets();
             InfoText.Text = $"„{snippet.Name}“ als Textbaustein gespeichert – im Text mit /{snippet.Name} einfügbar.";
         }
         catch (LiftUpException exception)

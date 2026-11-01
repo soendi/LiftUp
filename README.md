@@ -282,18 +282,32 @@ bleiben unangetastet.
 | `{{date}}`, `{{datetime}}` | Datum bzw. Datum mit Uhrzeit |
 | `{{user}}` | Angemeldeter Benutzer |
 | `{{snippet:Name}}` | Textbaustein mit diesem Namen (HTML) |
-| `{{analyse}}` | Analyse mit allen erfassten Unterpunkten (Reiter „Analyse“) |
+| `{{analyse}}` | Analyse mit allen erfassten Texten (Reiter „Analyse“; ohne die Tabelle „1. Anlagedaten“) |
 | `{{analyse:2.1}}` | Ein Unterpunkt der Analyse, nach Nummer oder Namen |
 
 Werte aus der Datenbank werden HTML-escaped eingesetzt (`&`, `<`, `>`, `"`, `'`), Umlaute bleiben
 lesbar. Textbausteine werden bewusst als HTML eingefügt.
 
-**Reiter „Analyse“:** Die Texte der Analyse werden direkt in LiftUp erfasst, statt sie beim
-Erstellen jedes Dokuments neu zu tippen. Der Reiter zeigt den Haupttitel „2. Analyse“ als Tab und
-darunter je Analysepunkt einen Unter-Reiter: 2.1 Aggregat, 2.2 Hubzylinder / Tragmittel,
-2.3 Steuerung / Regler, 2.4 Regulator (Geschwindigkeitsbegrenzer), 2.5 Fangvorrichtung,
-2.6 Kabine / Triebmechanik und 2.7 Zugänglichkeit. Die Texte gehören zum Projekt: „Speichern“ gilt
-für alle Unterpunkte, leere bleiben im Dokument weg. Beim Erstellen eines Dokuments belegt der
+**Reiter „Analyse“:** Die Analyse wird direkt in LiftUp erfasst, statt sie beim Erstellen jedes
+Dokuments neu zu tippen. Der Reiter folgt dem Bericht:
+
+- **1. Anlagedaten** – die Datenaufnahme der Aufzüge als Tabelle, dieselbe wie unter
+  „Zustandsanalyse“. Das Projekt kommt aus der Auswahl oben, die Tabelle zieht mit.
+- **2. Analyse** – je Analysepunkt ein Unter-Reiter: 2.1 Aggregat, 2.2 Hubzylinder / Tragmittel,
+  2.3 Steuerung / Regler, 2.4 Regulator (Geschwindigkeitsbegrenzer), 2.5 Fangvorrichtung,
+  2.6 Kabine / Triebmechanik und 2.7 Zugänglichkeit.
+- **3. Fazit / Empfehlung** – 3.1 Fazit und Empfehlung als abschließender Text.
+- **4. Fotos** – Fotos je Aufzug (siehe unten).
+
+Die Texte gehören zum Projekt: „Speichern“ gilt für alle Unterpunkte, leere bleiben im Dokument
+weg. In jedem dieser Textfelder sucht `/` nach Textbausteinen, `&` nach den Bildern des Projekts,
+`&&` zusätzlich in der globalen Bibliothek und `//` nach den gefüllten Feldern der
+Zustandsanalyse: `//Aufzugsanlage` bietet die passenden Anlagebezeichnungen an und fügt eine davon
+als Text ein. Sind mehrere Standorte erfasst, steht der Standort dabei – in der Vorschlagsliste
+und im eingefügten Text: „Aufzugsanlage 938702809 (Messligfeldstrasse 1)“.
+
+Außerhalb der Analyse gilt dasselbe im Dokument-Editor und in den Tabellenzellen der
+Zustandsanalyse (dort `//` und `/` als reiner Text, ohne Bilder). Beim Erstellen eines Dokuments belegt der
 Abschnitt „2. Analyse“ der Vorlage den Reiter mit diesen Texten vor; alternativ setzt `{{analyse}}`
 sie ein, `{{analyse:2.1}}` einen einzelnen Punkt.
 

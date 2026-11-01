@@ -21,12 +21,14 @@ public partial class PdfView : UserControl
     private static readonly OrientationOption[] Orientations = [new(false, "Hochformat"), new(true, "Querformat")];
 
     private readonly AppServices _services;
+    private readonly ProjectSelection _selection;
     private MissingPlaceholders _missing = MissingPlaceholders.Empty;
     private bool _previewShown;
 
-    public PdfView(AppServices services)
+    public PdfView(AppServices services, ProjectSelection selection)
     {
         _services = services;
+        _selection = selection;
         InitializeComponent();
 
         FormatBox.ItemsSource = Formats;
@@ -38,6 +40,10 @@ public partial class PdfView : UserControl
         LoadProjects();
         LoadTemplates();
         LoadDocuments();
+
+        // Ein Projektwechsel in einem anderen Reiter zieht das PDF sofort mit.
+        _selection.Changed += (_, _) => ShowSelectedProject();
+        ShowSelectedProject();
 
         // Neu angelegte Projekte stehen sofort zur Auswahl, sobald der Reiter geöffnet wird.
         IsVisibleChanged += (_, args) =>
@@ -51,7 +57,9 @@ public partial class PdfView : UserControl
 
     private void LoadProjects(bool keepSelection = false)
     {
-        var previousId = keepSelection ? (ProjectBox.SelectedItem as ProjectOption)?.Id : null;
+        var previousId = keepSelection
+            ? (ProjectBox.SelectedItem as ProjectOption)?.Id
+            : _selection.ProjectId;
 
         try
         {
@@ -153,6 +161,36 @@ public partial class PdfView : UserControl
     {
         LoadDocuments();
         UpdateMissing();
+
+        // Die Auswahl gilt für alle Reiter (Zustandsanalyse, Investitionsplanung, Analyse, PDF).
+        if (ProjectBox.SelectedItem is ProjectOption project)
+        {
+            _selection.Select(project.Id);
+        }
+    }
+
+    /// <summary>Übernimmt das gemeinsame Projekt; ohne Auswahl gilt das erste Projekt.</summary>
+    private void ShowSelectedProject()
+    {
+        if (ProjectBox.ItemsSource is not IEnumerable<ProjectOption> options)
+        {
+            return;
+        }
+
+        var all = options.ToArray();
+        if (all.Length == 0)
+        {
+            return;
+        }
+
+        var target = all.FirstOrDefault(option => option.Id == _selection.ProjectId) ?? all[0];
+        if (!ReferenceEquals(ProjectBox.SelectedItem, target))
+        {
+            ProjectBox.SelectedItem = target;
+            return;
+        }
+
+        _selection.Select(target.Id);
     }
 
     private void OnDocumentSelectionChanged(object sender, SelectionChangedEventArgs e)
