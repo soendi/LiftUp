@@ -52,6 +52,35 @@ public sealed class MilestoneTests
     }
 
     [Fact]
+    public void Meilensteine_lassen_sich_ohne_projekt_update_pflegen()
+    {
+        using var fixture = new TestDatabase();
+        var session = fixture.LoginAsAdmin();
+        var projects = new ProjectService(fixture.Database, session);
+        var project = projects.Create(Input(Path.Combine(fixture.Root, "p1")));
+
+        projects.SaveMilestones(project.Id, [
+            new ProjectMilestoneInput { Title = "Begehung", IsDone = true, DoneDate = new DateTime(2026, 7, 30) },
+            new ProjectMilestoneInput { Title = "Bericht" },
+        ]);
+
+        var loaded = projects.GetProject(project.Id);
+        Assert.Equal(2, loaded.Milestones.Count);
+        Assert.Equal(ProjectMilestoneCatalog.Inspection, loaded.Milestones[0].Title);
+        Assert.True(loaded.Milestones[0].IsDone);
+        Assert.Equal("Bericht", loaded.Milestones[1].Title);
+
+        // Ein eigener Meilenstein lässt sich löschen, die Begehung bleibt.
+        projects.SaveMilestones(project.Id, [
+            new ProjectMilestoneInput { Title = "Begehung", IsDone = true, DoneDate = new DateTime(2026, 7, 30) },
+        ]);
+
+        Assert.Equal(
+            ProjectMilestoneCatalog.Inspection,
+            Assert.Single(projects.GetProject(project.Id).Milestones).Title);
+    }
+
+    [Fact]
     public void Begehung_ist_immer_vorhanden_und_fest()
     {
         using var fixture = new TestDatabase();

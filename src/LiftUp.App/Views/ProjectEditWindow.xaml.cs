@@ -20,19 +20,6 @@ public partial class ProjectEditWindow : Window
         public string Responsibility { get; set; } = string.Empty;
     }
 
-    /// <summary>Bearbeitbare Zeile der Meilenstein-Tabelle.</summary>
-    public sealed class MilestoneRow
-    {
-        public string Title { get; set; } = string.Empty;
-        public bool IsDone { get; set; }
-
-        /// <summary>Fester Meilenstein (Begehung): Bezeichnung und Zeile sind nicht änderbar.</summary>
-        public bool IsFixed { get; init; }
-
-        /// <summary>Datum als Text in der Form TT.MM.JJJJ.</summary>
-        public string DoneDateText { get; set; } = string.Empty;
-    }
-
     private readonly AppServices _services;
     private readonly Guid? _projectId;
     private readonly ObservableCollection<ContactRow> _contacts = [];

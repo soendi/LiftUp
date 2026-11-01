@@ -46,24 +46,78 @@
             </Grid>
         </Border>
 
-        <DataGrid x:Name="ProjectsGrid"
-                  Grid.Row="2"
-                  IsReadOnly="True"
-                  SelectionChanged="OnSelectionChanged"
-                  MouseDoubleClick="OnRowDoubleClick">
-            <DataGrid.Columns>
-                <DataGridTextColumn Header="Nr." Binding="{Binding Number}" Width="90" />
-                <DataGridTextColumn Header="Projekt" Binding="{Binding Name}" Width="*" />
-                <DataGridTextColumn Header="Kunde" Binding="{Binding Customer}" Width="150" />
-                <DataGridTextColumn Header="Ansprechpartner" Binding="{Binding Contact}" Width="130" />
-                <DataGridTextColumn Header="Verantwortlich" Binding="{Binding Responsible}" Width="130" />
-                <DataGridTextColumn Header="Status" Binding="{Binding StatusText}" Width="105" />
-                <DataGridTextColumn Header="Archiviert" Binding="{Binding ArchivedText}" Width="140" />
-                <DataGridTextColumn Header="Projektordner" Binding="{Binding FolderPath}" Width="240" />
-                <DataGridTextColumn Header="Ordner" Binding="{Binding FolderState}" Width="75" />
-                <DataGridTextColumn Header="Geändert" Binding="{Binding UpdatedText}" Width="120" />
-            </DataGrid.Columns>
-        </DataGrid>
+        <!-- Links die Projektliste, rechts die Meilensteine des gewählten Projekts. -->
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="7*" />
+                <ColumnDefinition Width="12" />
+                <ColumnDefinition Width="3*" />
+            </Grid.ColumnDefinitions>
+
+            <DataGrid x:Name="ProjectsGrid"
+                      Grid.Column="0"
+                      IsReadOnly="True"
+                      SelectionChanged="OnSelectionChanged"
+                      MouseDoubleClick="OnRowDoubleClick">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Nr." Binding="{Binding Number}" Width="90" />
+                    <DataGridTextColumn Header="Projekt" Binding="{Binding Name}" Width="*" />
+                    <DataGridTextColumn Header="Kunde" Binding="{Binding Customer}" Width="150" />
+                    <DataGridTextColumn Header="Ansprechpartner" Binding="{Binding Contact}" Width="130" />
+                    <DataGridTextColumn Header="Verantwortlich" Binding="{Binding Responsible}" Width="130" />
+                    <DataGridTextColumn Header="Status" Binding="{Binding StatusText}" Width="105" />
+                    <DataGridTextColumn Header="Archiviert" Binding="{Binding ArchivedText}" Width="140" />
+                    <DataGridTextColumn Header="Projektordner" Binding="{Binding FolderPath}" Width="240" />
+                    <DataGridTextColumn Header="Ordner" Binding="{Binding FolderState}" Width="75" />
+                    <DataGridTextColumn Header="Geändert" Binding="{Binding UpdatedText}" Width="120" />
+                </DataGrid.Columns>
+            </DataGrid>
+
+            <Border Grid.Column="2" Style="{StaticResource LiftUpCard}" Padding="10">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Text="Meilensteine" Style="{StaticResource LiftUpSubheading}" Margin="0,0,0,2" />
+                    <TextBlock Grid.Row="1" x:Name="MilestoneProjectText"
+                               Style="{StaticResource LiftUpFieldLabel}"
+                               TextTrimming="CharacterEllipsis"
+                               Margin="0,0,0,8" />
+
+                    <DataGrid Grid.Row="2"
+                              x:Name="MilestonesGrid"
+                              AutoGenerateColumns="False"
+                              CanUserAddRows="False"
+                              CanUserDeleteRows="False"
+                              CanUserReorderColumns="False"
+                              HeadersVisibility="Column"
+                              GridLinesVisibility="Horizontal"
+                              SelectionMode="Single"
+                              RowHeight="26">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Meilenstein" Binding="{Binding Title, UpdateSourceTrigger=PropertyChanged}" Width="*" />
+                            <DataGridCheckBoxColumn Header="Erledigt" Binding="{Binding IsDone, UpdateSourceTrigger=PropertyChanged}" Width="70" />
+                            <DataGridTextColumn Header="Datum" Binding="{Binding DoneDateText, UpdateSourceTrigger=PropertyChanged}" Width="95" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,8,0,0">
+                        <Button Content="Hinzufügen" Click="OnAddMilestoneClick" />
+                        <Button Content="Entfernen" Click="OnRemoveMilestoneClick" />
+                    </StackPanel>
+
+                    <TextBlock Grid.Row="4" x:Name="MilestoneInfoText"
+                               Style="{StaticResource LiftUpMutedText}"
+                               TextWrapping="Wrap"
+                               Margin="0,6,0,0" />
+                </Grid>
+            </Border>
+        </Grid>
 
         <TextBlock x:Name="InfoText" Grid.Row="3" Style="{StaticResource LiftUpMutedText}" Margin="2,8,0,0" />
     </Grid>

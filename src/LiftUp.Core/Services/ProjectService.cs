@@ -61,6 +61,33 @@ public sealed class ProjectService
         return project;
     }
 
+    /// <summary>
+    /// Schreibt nur die Meilensteine eines Projekts – für die Projektübersicht, in der sie
+    /// direkt gepflegt werden. Die Begehung bleibt dabei so fest wie im Projektdialog.
+    /// </summary>
+    public Project SaveMilestones(Guid projectId, IReadOnlyList<ProjectMilestoneInput> milestones)
+    {
+        _actor.Require(Permission.EditProjects);
+        ArgumentNullException.ThrowIfNull(milestones);
+
+        using var connection = _database.Open();
+        using var transaction = connection.BeginTransaction();
+
+        var project = _projects.GetById(connection, transaction, projectId)
+                      ?? throw new ValidationException("Das Projekt wurde nicht gefunden.");
+
+        var prepared = PrepareMilestones(milestones);
+        project.Milestones = _projects.ReplaceMilestones(
+            connection, transaction, projectId, prepared, _actor.UserName);
+
+        _changes.Record(connection, transaction, "Project", projectId.ToString("D"), "Milestones",
+            new { Milestones = prepared.Count, project.Name },
+            project.RowVersion);
+
+        transaction.Commit();
+        return project;
+    }
+
     public Project Create(ProjectInput input)
     {
         _actor.Require(Permission.CreateProjects);

@@ -1,3 +1,5 @@
+using System.Collections.ObjectModel;
+using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -29,6 +31,9 @@ public partial class ProjectsView : UserControl
     ];
 
     private readonly AppServices _services;
+    private readonly ObservableCollection<MilestoneRow> _milestones = [];
+    private Guid? _milestoneProjectId;
+    private bool _milestonesLoading;
 
     public ProjectsView(AppServices services)
     {
@@ -48,6 +53,11 @@ public partial class ProjectsView : UserControl
         RestoreButton.IsEnabled = session.Can(Permission.ArchiveProjects);
         ArchiveToggle.IsEnabled = session.Can(Permission.ViewArchivedProjects);
 
+        MilestonesGrid.ItemsSource = _milestones;
+        MilestonesGrid.IsReadOnly = !session.Can(Permission.EditProjects);
+        MilestonesGrid.BeginningEdit += OnMilestoneBeginningEdit;
+        MilestonesGrid.RowEditEnding += OnMilestoneRowEditEnding;
+
         LoadProjects();
     }
 
@@ -65,9 +75,18 @@ public partial class ProjectsView : UserControl
                 Sort = (SortBox.SelectedItem as SortOption)?.Value ?? ProjectSort.Name,
             });
 
+            var keepId = Selected?.Id;
             ProjectsGrid.ItemsSource = items;
+
+            // Nach dem Neuladen bleibt das Projekt gewählt, damit die Meilensteine stehen bleiben.
+            if (keepId is not null)
+            {
+                ProjectsGrid.SelectedItem = items.FirstOrDefault(item => item.Id == keepId);
+            }
+
             UpdateInfoText(items.Count);
             UpdateButtons();
+            LoadMilestones(Selected);
         }
         catch (LiftUpException exception)
         {
@@ -105,7 +124,202 @@ public partial class ProjectsView : UserControl
 
     private void OnArchiveToggleClick(object sender, RoutedEventArgs e) => LoadProjects();
 
-    private void OnSelectionChanged(object sender, SelectionChangedEventArgs e) => UpdateButtons();
+    private void OnSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        UpdateButtons();
+        LoadMilestones(Selected);
+    }
+
+    /// <summary>Zeigt die Meilensteine des gewählten Projekts auf der rechten Seite.</summary>
+    private void LoadMilestones(ProjectListItem? project)
+    {
+        _milestonesLoading = true;
+        _milestoneProjectId = project?.Id;
+        _milestones.Clear();
+
+        if (project is null)
+        {
+            MilestoneProjectText.Text = "Kein Projekt gewählt";
+            MilestoneInfoText.Text = "Bitte links ein Projekt auswählen.";
+            _milestonesLoading = false;
+            return;
+        }
+
+        MilestoneProjectText.Text = $"{project.Number} · {project.Name}";
+
+        try
+        {
+            foreach (var milestone in _services.Projects.GetProject(project.Id).Milestones)
+            {
+                _milestones.Add(ToRow(milestone));
+            }
+
+            // Die Begehung ist fester Bestandteil jedes Projekts.
+            if (!_milestones.Any(row => row.IsFixed))
+            {
+                _milestones.Insert(0, new MilestoneRow
+                {
+                    Title = ProjectMilestoneCatalog.Inspection,
+                    IsFixed = true,
+                });
+            }
+
+            MilestoneInfoText.Text = _milestones.Count == 1
+                ? "1 Meilenstein"
+                : $"{_milestones.Count} Meilensteine";
+        }
+        catch (LiftUpException exception)
+        {
+            MilestoneInfoText.Text = exception.Message;
+        }
+        finally
+        {
+            _milestonesLoading = false;
+        }
+    }
+
+    private static MilestoneRow ToRow(ProjectMilestone milestone) => new()
+    {
+        Title = milestone.Title,
+        IsDone = milestone.IsDone,
+        DoneDateText = milestone.DoneDate?.ToString("dd.MM.yyyy") ?? string.Empty,
+        IsFixed = string.Equals(
+            milestone.Title, ProjectMilestoneCatalog.Inspection, StringComparison.OrdinalIgnoreCase),
+    };
+
+    private void OnAddMilestoneClick(object sender, RoutedEventArgs e)
+    {
+        if (_milestoneProjectId is not Guid)
+        {
+            MilestoneInfoText.Text = "Bitte links ein Projekt auswählen.";
+            return;
+        }
+
+        if (!_services.CurrentSession.Can(Permission.EditProjects))
+        {
+            MilestoneInfoText.Text = "Für Änderungen an den Meilensteinen fehlt das Recht.";
+            return;
+        }
+
+        var row = new MilestoneRow();
+        _milestones.Add(row);
+        MilestonesGrid.SelectedItem = row;
+        MilestonesGrid.ScrollIntoView(row);
+        MilestonesGrid.CurrentCell = new DataGridCellInfo(row, MilestonesGrid.Columns[0]);
+        MilestonesGrid.BeginEdit();
+        MilestoneInfoText.Text = "Bezeichnung eintragen – beim Verlassen der Zeile wird gespeichert.";
+    }
+
+    private void OnRemoveMilestoneClick(object sender, RoutedEventArgs e)
+    {
+        if (MilestonesGrid.SelectedItem is not MilestoneRow row)
+        {
+            MilestoneInfoText.Text = "Bitte zuerst eine Zeile auswählen.";
+            return;
+        }
+
+        if (row.IsFixed)
+        {
+            MilestoneInfoText.Text =
+                $"Der Meilenstein „{ProjectMilestoneCatalog.Inspection}“ ist fest vorgegeben und lässt sich nicht entfernen.";
+            return;
+        }
+
+        _milestones.Remove(row);
+        SaveMilestones();
+    }
+
+    /// <summary>Die Bezeichnung der Begehung bleibt unverändert; Erledigt und Datum sind frei.</summary>
+    private void OnMilestoneBeginningEdit(object? sender, DataGridBeginningEditEventArgs e)
+    {
+        if (e.Row.Item is MilestoneRow { IsFixed: true } && e.Column == MilestonesGrid.Columns[0])
+        {
+            e.Cancel = true;
+            MilestoneInfoText.Text =
+                $"Der Meilenstein „{ProjectMilestoneCatalog.Inspection}“ ist fest vorgegeben";
+        }
+    }
+
+    private void OnMilestoneRowEditEnding(object? sender, DataGridRowEditEndingEventArgs e)
+    {
+        if (_milestonesLoading || e.EditAction != DataGridEditAction.Commit)
+        {
+            return;
+        }
+
+        // Erst speichern, wenn die Zelle übernommen ist.
+        Dispatcher.BeginInvoke(new Action(SaveMilestones));
+    }
+
+    /// <summary>Schreibt die Liste direkt in die Datenbank; ohne eigenes Speichern-Knopf.</summary>
+    private void SaveMilestones()
+    {
+        if (_milestonesLoading || _milestoneProjectId is not Guid projectId)
+        {
+            return;
+        }
+
+        MilestonesGrid.CommitEdit(DataGridEditingUnit.Cell, true);
+        MilestonesGrid.CommitEdit(DataGridEditingUnit.Row, true);
+
+        var inputs = new List<ProjectMilestoneInput>();
+        foreach (var row in _milestones)
+        {
+            var title = (row.Title ?? string.Empty).Trim();
+            if (title.Length == 0 && !row.IsDone && string.IsNullOrWhiteSpace(row.DoneDateText))
+            {
+                // Eine gerade begonnene Zeile wird erst beim Ausfüllen gespeichert.
+                continue;
+            }
+
+            DateTime? date;
+            try
+            {
+                date = ParseMilestoneDate(row.DoneDateText);
+            }
+            catch (ValidationException exception)
+            {
+                MilestoneInfoText.Text = exception.Message;
+                return;
+            }
+
+            inputs.Add(new ProjectMilestoneInput
+            {
+                Title = title,
+                IsDone = row.IsDone,
+                DoneDate = date,
+            });
+        }
+
+        try
+        {
+            _services.Projects.SaveMilestones(projectId, inputs);
+            LoadMilestones(Selected);
+            MilestoneInfoText.Text = "Meilensteine gespeichert.";
+        }
+        catch (LiftUpException exception)
+        {
+            MilestoneInfoText.Text = exception.Message;
+        }
+    }
+
+    /// <summary>Datum wie im Projektdialog: leer heißt offen, sonst TT.MM.JJJJ.</summary>
+    private static DateTime? ParseMilestoneDate(string? text)
+    {
+        var trimmed = (text ?? string.Empty).Trim();
+        if (trimmed.Length == 0)
+        {
+            return null;
+        }
+
+        string[] formats = ["dd.MM.yyyy", "d.M.yyyy", "dd.MM.yy", "d.M.yy", "yyyy-MM-dd"];
+        if (DateTime.TryParseExact(trimmed, formats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
+        {
+            return date.Date;
+        }
+
+        throw new ValidationException($"Das Datum „{trimmed}“ ist ungültig; bitte TT.MM.JJJJ verwenden.");
+    }
 
     private void OnNewClick(object sender, RoutedEventArgs e)
     {
