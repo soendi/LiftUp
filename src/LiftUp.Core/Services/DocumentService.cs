@@ -447,7 +447,11 @@ public sealed class DocumentService
         return "<!DOCTYPE html>\n<html lang=\"de\">\n<head>\n  <meta charset=\"utf-8\" />\n  <style>\n"
             + $"    @page {{ size: {format}; margin: {margin}mm; }}\n"
             + "    body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 10pt; color: #1f2933; margin: 0; }\n"
-            + "  </style>\n</head>\n<body>"
+            + "    img { max-width: 100%; height: auto; }\n"
+            + "  </style>\n"
+            // Bilder behalten im Bericht Größe, Ausrichtung und Textfluss aus dem Editor.
+            + "  " + ImageFormat.StyleElement + "\n"
+            + "</head>\n<body>"
             + body
             + "</body>\n</html>";
     }

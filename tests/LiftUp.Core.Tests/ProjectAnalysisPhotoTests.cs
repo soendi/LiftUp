@@ -393,6 +393,45 @@ public sealed class ProjectAnalysisPhotoTests
     }
 
     [Fact]
+    public async Task Bilder_im_bericht_behalten_groesse_ausrichtung_und_textfluss()
+    {
+        using var fixture = new TestDatabase();
+        var session = fixture.LoginAsAdmin();
+        var projects = new ProjectService(fixture.Database, session);
+        var templates = new TemplateService(fixture.Database, session);
+        var analysis = new ProjectAnalysisService(fixture.Database, session);
+        var renderer = new FakeRenderer();
+        var documents = new DocumentService(fixture.Database, session, renderer);
+
+        var project = projects.Create(Input(Path.Combine(fixture.Root, "p1")));
+        var template = templates.Create(new TemplateInput
+        {
+            Name = "Gutachten",
+            Html = "<h1>{{project.name}}</h1>",
+        });
+
+        // Wie aus dem Editor: kleines Bild, links, vom Text umflossen.
+        analysis.Save(project.Id,
+        [
+            new ProjectAnalysisTextInput("Fazit", string.Empty,
+                ImageFormat.Wrap(
+                    "<img src=\"data:image/png;base64,AA==\" alt=\"Foto\" />",
+                    new ImageFormat(ImageSize.Small, ImagePlacement.Left, ImageFlow.Square))),
+        ]);
+
+        await documents.CreatePdfAsync(project.Id, template.Id);
+
+        // Die Berichtsseite bringt die Regeln für Größe, Ausrichtung und Textfluss mit;
+        // sonst druckt der Bericht jedes Bild in voller Breite ohne Textumlauf.
+        var report = renderer.Calls.Single(html =>
+            html.TrimStart().StartsWith("<!DOCTYPE html>", StringComparison.Ordinal)
+            && html.Contains("3. Fazit / Empfehlung", StringComparison.Ordinal));
+        Assert.Contains(".liftup-fig-small { width: 33.3333%; }", report);
+        Assert.Contains(".liftup-fig-square.liftup-fig-left", report);
+        Assert.Contains("class=\"liftup-fig liftup-fig-small liftup-fig-left liftup-fig-square\"", report);
+    }
+
+    [Fact]
     public void Ohne_fotos_bleibt_das_dokument_ohne_fotoseite()
     {
         using var fixture = new TestDatabase();
