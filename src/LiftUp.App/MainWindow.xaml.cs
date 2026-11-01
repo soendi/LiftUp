@@ -11,6 +11,7 @@ namespace LiftUp.App;
 public partial class MainWindow : Window
 {
     private readonly AppServices _services;
+    private readonly AnalysisView? _analysisView;
     private readonly DispatcherTimer _syncTimer;
     private bool _updateRunning;
     private bool _syncRunning;
@@ -58,6 +59,9 @@ public partial class MainWindow : Window
             var analysisView = new AnalysisView(_services, selection);
             var analysisTab = CreateTab("Analyse", analysisView);
             overview.Add(analysisTab);
+
+            // Beim Beenden werden offene Texte noch gespeichert.
+            _analysisView = analysisView;
 
             colored.Add((stateTab, "Zustandsanalyse", stateView));
             colored.Add((investmentTab, "Investitionsplanung", investmentView));
@@ -240,29 +244,54 @@ public partial class MainWindow : Window
         }
     }
 
-    /// <summary>Letzter Abgleich vor dem Schließen; höchstens 15 Sekunden warten.</summary>
+    /// <summary>
+    /// Offene Analyse-Texte sichern und zuletzt abgleichen; für den Abgleich höchstens
+    /// 15 Sekunden warten. Beides darf das Beenden nicht verhindern.
+    /// </summary>
     protected override async void OnClosing(CancelEventArgs e)
     {
         base.OnClosing(e);
         _syncTimer.Stop();
 
-        if (_closingAfterSync || _skipSyncOnClose || !_services.Sync.IsConfigured)
+        if (_closingAfterSync || _skipSyncOnClose)
+        {
+            return;
+        }
+
+        // Ohne offene Texte und ohne Abgleich schließt das Fenster sofort wie bisher.
+        var analysisDirty = _analysisView is { HasUnsavedTexts: true };
+        if (!analysisDirty && !_services.Sync.IsConfigured)
         {
             return;
         }
 
         e.Cancel = true;
         _closingAfterSync = true;
-        StatusText.Text = "Synchronisierung vor dem Beenden …";
 
         try
         {
-            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-            await _services.Sync.RunAsync(timeout.Token);
+            // Die Texte kommen vor dem Abgleich in die Datenbank, damit er sie mitnimmt.
+            if (analysisDirty)
+            {
+                StatusText.Text = "Analyse wird gespeichert …";
+                await _analysisView!.SaveIfDirtyAsync();
+            }
+
+            if (_services.Sync.IsConfigured)
+            {
+                StatusText.Text = "Synchronisierung vor dem Beenden …";
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+                await _services.Sync.RunAsync(timeout.Token);
+            }
         }
         catch (OperationCanceledException)
         {
             // Zeitlimit erreicht: Das Schließen darf nicht daran scheitern.
+        }
+        catch (Exception exception)
+        {
+            // Auch ein Fehler beim Speichern hält das Beenden nicht auf.
+            App.LogException("Beenden", exception);
         }
         finally
         {

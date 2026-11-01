@@ -18,6 +18,7 @@ public partial class SnippetCreateWindow : Window
         InitializeComponent();
 
         NameBox.Text = name;
+        BodyEditor.SnippetServices = services;
         BodyEditor.SetHtml("<p></p>");
     }
 

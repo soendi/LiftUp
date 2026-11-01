@@ -9,6 +9,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using LiftUp.Core.Documents;
+using LiftUp.Core.Domain;
 using Microsoft.Web.WebView2.Core;
 
 namespace LiftUp.App.Controls;
@@ -922,6 +923,7 @@ public partial class HtmlEditor : UserControl
     private Func<string, IReadOnlyList<SnippetChoice>>? _snippetSearch;
     private Func<string, bool, IReadOnlyList<ImageChoice>>? _imageSearch;
     private Func<string, IReadOnlyList<SnippetChoice>>? _tableSearch;
+    private AppServices? _snippetServices;
 
     /// <summary>Meldet jede Änderung im Text – die Analyse färbt damit ihre Reiter.</summary>
     public event EventHandler? ContentChanged;
@@ -1491,6 +1493,108 @@ public partial class HtmlEditor : UserControl
     private async void OnNumberedListClick(object sender, RoutedEventArgs e) => await ExecuteAsync("insertOrderedList");
 
     private async void OnClearFormatClick(object sender, RoutedEventArgs e) => await ExecuteAsync("removeFormat");
+
+    /// <summary>
+    /// Dienste, mit denen sich markierter Text als Textvorlage ablegen lässt. Ohne Dienste
+    /// bleibt der Knopf „Als Textvorlage speichern“ aus.
+    /// </summary>
+    public AppServices? SnippetServices
+    {
+        get => _snippetServices;
+        set
+        {
+            _snippetServices = value;
+            SaveSnippetButton.IsEnabled = value is not null;
+        }
+    }
+
+    /// <summary>
+    /// Legt den markierten Text als neuen Textbaustein ab: Der Dialog fragt Name und Kategorie
+    /// ab, gespeichert wird über die Textbausteine. Danach steht der Text über „/“ bereit.
+    /// </summary>
+    private async void OnSaveSnippetClick(object sender, RoutedEventArgs e)
+    {
+        if (_snippetServices is not { } services)
+        {
+            return;
+        }
+
+        var owner = Window.GetWindow(this);
+
+        string? html;
+        try
+        {
+            html = _failed ? FallbackSelectionHtml() : await GetSelectionHtmlAsync();
+        }
+        catch (Exception exception)
+        {
+            Show(owner, "Der markierte Text konnte nicht gelesen werden.\n\n" + exception.Message,
+                MessageBoxImage.Warning);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(html))
+        {
+            Show(owner, "Bitte zuerst den Text markieren, der als Textvorlage gespeichert werden soll.",
+                MessageBoxImage.Information);
+            return;
+        }
+
+        var dialog = new Views.SnippetSaveWindow(html);
+        if (owner is not null)
+        {
+            dialog.Owner = owner;
+        }
+
+        if (dialog.ShowDialog() != true)
+        {
+            return;
+        }
+
+        try
+        {
+            var snippet = services.Snippets.Create(new SnippetInput
+            {
+                Name = dialog.SnippetName,
+                Category = dialog.Category,
+                Html = html,
+            });
+
+            Show(owner, $"Textvorlage gespeichert: {snippet.Name}. Sie steht ab jetzt über „/“ bereit.",
+                MessageBoxImage.Information);
+        }
+        catch (Exception exception) when (exception is LiftUpException or InvalidOperationException)
+        {
+            Show(owner, exception.Message, MessageBoxImage.Warning);
+        }
+    }
+
+    /// <summary>Der markierte Teil des Ersatzfelds als HTML; Zeilenumbrüche bleiben erhalten.</summary>
+    private string? FallbackSelectionHtml()
+    {
+        var selected = FallbackBox.SelectedText;
+        if (string.IsNullOrWhiteSpace(selected))
+        {
+            return null;
+        }
+
+        return WebUtility.HtmlEncode(selected.Trim())
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace("\n", "<br />", StringComparison.Ordinal);
+    }
+
+    /// <summary>Meldung mit dem Fenster als Besitzer, sobald es eines gibt.</summary>
+    private static void Show(Window? owner, string message, MessageBoxImage icon)
+    {
+        const string title = "Als Textvorlage speichern";
+        if (owner is null)
+        {
+            MessageBox.Show(message, title, MessageBoxButton.OK, icon);
+            return;
+        }
+
+        MessageBox.Show(owner, message, title, MessageBoxButton.OK, icon);
+    }
 
     /// <summary>Fügt HTML an der Stelle der letzten Eingabe ein (Textbaustein, Bild).</summary>
     public async Task InsertHtmlAsync(string html)

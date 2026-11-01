@@ -29,6 +29,9 @@
             <Button Content="Nummerierung" Style="{StaticResource HtmlToolbarButton}" Click="OnNumberedListClick" ToolTip="Nummerierte Liste" />
             <Button Content="Formatierung entfernen" Style="{StaticResource HtmlToolbarButton}" Click="OnClearFormatClick"
                     ToolTip="Fett, Kursiv und Unterstrichen im markierten Text aufheben" />
+            <Button x:Name="SaveSnippetButton" Content="Als Textvorlage speichern" Style="{StaticResource HtmlToolbarButton}"
+                    IsEnabled="False" Click="OnSaveSnippetClick"
+                    ToolTip="Markierten Text als Textvorlage ablegen; Name und Kategorie werden abgefragt" />
         </WrapPanel>
 
         <Border Grid.Row="1" Background="White" BorderBrush="{StaticResource LiftUpBorder}" BorderThickness="1" CornerRadius="4">

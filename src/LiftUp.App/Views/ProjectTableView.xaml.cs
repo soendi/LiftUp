@@ -40,6 +40,12 @@ public partial class ProjectTableView : UserControl, ITabFillSource
     private int _slashIndex = -1;
     private int _selectedMatch = -1;
 
+    /// <summary>Projekt, zu dem die angezeigten Zeilen gehören – Ziel beim automatischen Speichern.</summary>
+    private Guid? _rowsProjectId;
+
+    /// <summary>Fenster mit dem „vor dem Schließen speichern“.</summary>
+    private Window? _hostWindow;
+
     /// <summary>Ob seit dem letzten Lesen etwas geändert wurde – dann bleibt der Reiter stehen.</summary>
     private bool _dirty;
 
@@ -105,13 +111,22 @@ public partial class ProjectTableView : UserControl, ITabFillSource
 
         // Die Zustandsanalyse kann in einem anderen Reiter Aufzüge anlegen: Beim Wechsel auf
         // diesen Reiter stehen die Zeilen deshalb sofort da, ohne „Aktualisieren“.
+        // Beim Verlassen des Reiters wird gespeichert, was noch offen ist – so braucht es
+        // keinen Klick auf „Speichern“.
         IsVisibleChanged += (_, args) =>
         {
             if (args.NewValue is true)
             {
                 RefreshIfUnmodified();
             }
+            else
+            {
+                SaveIfDirty();
+            }
         };
+
+        // Auch beim Schließen des Fensters geht nichts verloren.
+        Loaded += (_, _) => AttachHostWindow();
     }
 
     /// <summary>
@@ -317,6 +332,8 @@ public partial class ProjectTableView : UserControl, ITabFillSource
             return;
         }
 
+        _rowsProjectId = project.Id;
+
         try
         {
             foreach (var row in _services.ProjectTables.Get(project.Id, _definition.Key))
@@ -354,6 +371,9 @@ public partial class ProjectTableView : UserControl, ITabFillSource
     private void OnProjectChanged(object sender, SelectionChangedEventArgs e)
     {
         HideSnippets();
+
+        // Erst die Eingaben des bisherigen Projekts sichern, dann das neue laden.
+        SaveIfDirty();
         LoadRows();
 
         // Die Auswahl gilt für alle Reiter (Zustandsanalyse, Investitionsplanung, Analyse, PDF).
@@ -416,12 +436,37 @@ public partial class ProjectTableView : UserControl, ITabFillSource
 
     private void OnSaveClick(object sender, RoutedEventArgs e)
     {
-        if (ProjectBox.SelectedItem is not ProjectOption project)
+        if (_rowsProjectId is not { } projectId)
         {
             InfoText.Text = "Bitte ein Projekt wählen.";
             return;
         }
 
+        Save(projectId, automatic: false);
+    }
+
+    /// <summary>
+    /// Speichert ungespeicherte Eingaben ohne Knopfdruck: beim Verlassen des Reiters, beim
+    /// Projektwechsel und vor dem Schließen des Fensters. Ist nichts offen, passiert nichts.
+    /// </summary>
+    public bool SaveIfDirty()
+    {
+        if (!_dirty)
+        {
+            return true;
+        }
+
+        if (_rowsProjectId is not { } projectId)
+        {
+            return false;
+        }
+
+        return Save(projectId, automatic: true);
+    }
+
+    /// <summary>Schreibt die Zeilen des Projekts; <c>false</c>, wenn nichts gespeichert wurde.</summary>
+    private bool Save(Guid projectId, bool automatic)
+    {
         // Eine offene Zelle muss vor dem Speichern übernommen werden.
         RowsGrid.CommitEdit(DataGridEditingUnit.Cell, true);
         RowsGrid.CommitEdit(DataGridEditingUnit.Row, true);
@@ -437,33 +482,64 @@ public partial class ProjectTableView : UserControl, ITabFillSource
             // Benutzer bestätigen, bevor Daten weg sind.
             if (string.Equals(_definition.Key, ProjectTableCatalog.ZustandsanalyseKey, StringComparison.OrdinalIgnoreCase))
             {
-                var loss = _services.ProjectTables.FindLoss(project.Id, inputs);
+                var loss = _services.ProjectTables.FindLoss(projectId, inputs);
                 if (loss.Any && !ConfirmLoss(loss))
                 {
                     InfoText.Text = "Speichern abgebrochen.";
-                    return;
+                    return false;
                 }
             }
 
-            var saved = _services.ProjectTables.Save(project.Id, _definition.Key, inputs);
+            var saved = _services.ProjectTables.Save(projectId, _definition.Key, inputs);
 
-            _rows.Clear();
-            foreach (var row in saved)
+            // Gehören die Zeilen zu einem anderen Projekt (Wechsel), bleibt die Anzeige stehen.
+            if (_rowsProjectId == projectId)
             {
-                _rows.Add(new ProjectTableRowModel(row));
+                _rows.Clear();
+                foreach (var row in saved)
+                {
+                    _rows.Add(new ProjectTableRowModel(row));
+                }
             }
 
             _dirty = false;
+            var prefix = automatic ? "Automatisch gespeichert" : "Gespeichert";
             InfoText.Text = saved.Count == 1
-                ? "Gespeichert: 1 Zeile."
-                : $"Gespeichert: {saved.Count} Zeilen.";
+                ? $"{prefix}: 1 Zeile."
+                : $"{prefix}: {saved.Count} Zeilen.";
             FillChanged?.Invoke(this, EventArgs.Empty);
+            return true;
         }
         catch (LiftUpException exception)
         {
+            // Eingaben bleiben stehen; gespeichert wird beim nächsten Anlauf.
             InfoText.Text = exception.Message;
+            return false;
         }
     }
+
+    /// <summary>
+    /// Hängt das Speichern vor dem Schließen an das Fenster. Die Ansicht wird je Reiter einmal
+    /// geladen; ein erneutes Anhängen am selben Fenster bleibt deshalb aus.
+    /// </summary>
+    private void AttachHostWindow()
+    {
+        var window = Window.GetWindow(this);
+        if (window is null || ReferenceEquals(window, _hostWindow))
+        {
+            return;
+        }
+
+        if (_hostWindow is not null)
+        {
+            _hostWindow.Closing -= OnHostClosing;
+        }
+
+        _hostWindow = window;
+        _hostWindow.Closing += OnHostClosing;
+    }
+
+    private void OnHostClosing(object? sender, CancelEventArgs e) => SaveIfDirty();
 
     /// <summary>
     /// Rückfrage vor dem Löschen: Nennt die Aufzüge und die Tabellen, in denen ihre Daten

@@ -14,6 +14,9 @@ public partial class SnippetsView : UserControl
     {
         _services = services;
         InitializeComponent();
+
+        // Markierter Text lässt sich hier ebenso als Textvorlage ablegen.
+        BodyEditor.SnippetServices = services;
         LoadSnippets();
     }
 

@@ -123,8 +123,10 @@ nicht verfügbar. Damit die vorderen Spalten mehr Platz haben, stehen im PDF all
 gedreht, und der Gruppenkopf heisst dort „Ersatzteilverfgbk.“. Das Blatt übernimmt auch die
 Gruppenköpfe und den Hinweistext der Vorlage.
 
-Beide Reiter haben oben die Projektauswahl; beim Wechsel auf einen Reiter werden die Zeilen neu
-gelesen (ungespeicherte Eingaben bleiben stehen), „Aktualisieren“ liest sie jederzeit neu. In
+Beide Reiter haben oben die Projektauswahl. Ungespeicherte Eingaben schreibt LiftUp beim Verlassen
+des Reiters, beim Projektwechsel und vor dem Schließen des Fensters selbst – ein Klick auf
+„Speichern“ ist dafür nicht nötig; der Knopf bleibt für den sofortigen Abschluss, „Aktualisieren“
+liest die Zeilen jederzeit neu. Das gilt auch für die Anlagedaten im Reiter „Analyse“. In
 Textfeldern öffnet ein eingetipptes `/` die
 Textbausteine; weitere Buchstaben filtern die Liste (Pfeiltasten wählen, Eingabe übernimmt,
 Escape schließt). In einer Tabellenzelle wird ein Textbaustein als reiner Text eingesetzt, weil die
@@ -342,7 +344,9 @@ sind, und grün, wenn alle Zeilen vollständig gefüllt und gespeichert sind. �
 wenn kein Haupttitel etwas erfasst hat, grün wenn alle erfasst sind, sonst gelb.
 
 Die Texte gehören zum Projekt: „Speichern“ gilt für alle Unterpunkte, leere bleiben im Dokument
-weg. In jedem dieser Textfelder sucht `/` nach Textbausteinen, `&` nach den Bildern des Projekts,
+weg. Ändert sich etwas, schreibt LiftUp die Texte beim Verlassen des Analyse-Reiters, beim
+Projektwechsel und beim Schließen des Fensters selbst – vor einem allfälligen Abgleich; der Knopf
+bleibt für den sofortigen Abschluss. In jedem dieser Textfelder sucht `/` nach Textbausteinen, `&` nach den Bildern des Projekts,
 `&&` zusätzlich in der globalen Bibliothek und `//` nach den gefüllten Feldern der Tabellen
 (Zustandsanalyse, Investitionsplanung und Anlagedaten). Gesucht wird über die
 Spaltenüberschrift oder den Wert: `//Standort` bietet die erfassten Standorte an, `//Jahr` das
@@ -350,6 +354,10 @@ Baujahr der Anlage, das Jahrgang der Anlagedaten und das Jahr der Investitionspl
 Vorschlag nennt in der zweiten Zeile Spalte und Herkunft („Jahr · Investitionsplanung“); eine
 Zeile wird als Text eingefügt. Gesucht wird ausschließlich im aktuell gewählten Projekt. Sind mehrere Standorte erfasst, steht der Standort dabei – in der Vorschlagsliste
 und im eingefügten Text: „Aufzugsanlage 938702809 (Messligfeldstrasse 1)“.
+
+Markierter Text lässt sich in jedem dieser Editoren über „Als Textvorlage speichern“ ablegen:
+Der Dialog fragt Name und Kategorie ab, danach steht der Text über `/` sofort zur Verfügung.
+Gespeichert wird nur die Markierung, ohne den Text davor und danach; Formatierung bleibt erhalten.
 
 Außerhalb der Analyse gilt dasselbe im Dokument-Editor und in den Tabellenzellen der Tabellen
 (dort `//` und `/` als reiner Text, ohne Bilder; `//` durchsucht die Werte des gewählten

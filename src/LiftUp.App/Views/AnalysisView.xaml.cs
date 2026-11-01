@@ -93,6 +93,12 @@ public partial class AnalysisView : UserControl, ITabFillSource
     /// <summary>Zuletzt gemeldeter Füllstand des ganzen Reiters; null vor dem ersten Lauf.</summary>
     private TabFill? _lastFill;
 
+    /// <summary>Ob seit dem Laden etwas geändert wurde – nur dann speichert der Reiterwechsel.</summary>
+    private bool _textsDirty;
+
+    /// <summary>Verhindert, dass sich zwei Speichervorgänge überholen.</summary>
+    private bool _savingTexts;
+
     /// <summary>
     /// Füllstand des Reiters „Analyse“ für die Farbe im Fenster: rot, wenn alle Haupttitel rot
     /// sind, grün, wenn alle grün sind – sonst gelb, auch wenn jeder Titel nur halb erfasst ist.
@@ -141,12 +147,17 @@ public partial class AnalysisView : UserControl, ITabFillSource
         _selection.ProjectsChanged += (_, _) => LoadProjects();
 
         // Neu angelegte Projekte stehen sofort zur Auswahl, sobald der Reiter geöffnet wird.
-        IsVisibleChanged += (_, args) =>
+        // Beim Verlassen des Reiters werden offene Texte gespeichert – ohne Knopfdruck.
+        IsVisibleChanged += async (_, args) =>
         {
             if (args.NewValue is true)
             {
                 LoadProjects(keepSelection: true);
                 RefreshTables();
+            }
+            else
+            {
+                await SaveIfDirtyAsync();
             }
         };
     }
@@ -217,7 +228,7 @@ public partial class AnalysisView : UserControl, ITabFillSource
     /// <summary>Editor eines Analysepunkts samt „/“-, „//“- und „&amp;“-Suche und Farbsignal.</summary>
     private HtmlEditor CreateEditor()
     {
-        var editor = new HtmlEditor();
+        var editor = new HtmlEditor { SnippetServices = _services };
         editor.EnableSnippetAutocomplete(_search.SearchSnippets);
         editor.EnableImageAutocomplete(_search.SearchImages);
         editor.EnableTableAutocomplete(_search.SearchTableValues);
@@ -240,13 +251,18 @@ public partial class AnalysisView : UserControl, ITabFillSource
                 ToolTip = "Untertitel des Punkts, etwa „Aggregat“",
             };
             // Der Reiter heißt sofort „2.1 Untertitel“, sobald einer gesetzt ist.
-            titleBox.TextChanged += (_, _) => NumberSections();
+            titleBox.TextChanged += (_, _) =>
+            {
+                _textsDirty = true;
+                NumberSections();
+            };
         }
 
         var draft = new SectionDraft(key, editor, titleBox);
 
         editor.ContentChanged += (_, _) =>
         {
+            _textsDirty = true;
             draft.Filled = editor.HasText;
             UpdateTabColors();
         };
@@ -670,6 +686,9 @@ public partial class AnalysisView : UserControl, ITabFillSource
             InfoText.Text = filled == 1
                 ? "1 Analysepunkt erfasst."
                 : $"{filled} von {total} Analysepunkten erfasst.";
+
+            // Der geladene Stand ist gespeichert; erst eine Eingabe macht den Reiter wieder offen.
+            _textsDirty = false;
         }
         catch (LiftUpException exception)
         {
@@ -844,6 +863,7 @@ public partial class AnalysisView : UserControl, ITabFillSource
             _fazit.Filled = false;
         }
 
+        _textsDirty = false;
         UpdateTabColors();
     }
 
@@ -942,13 +962,16 @@ public partial class AnalysisView : UserControl, ITabFillSource
         }
     }
 
-    private void OnProjectChanged(object sender, SelectionChangedEventArgs e)
+    private async void OnProjectChanged(object sender, SelectionChangedEventArgs e)
     {
         // Nur die Projektliste neu zuweisen darf die Eingaben nicht verwerfen.
         if (SelectedProject?.Id == _loadedProjectId)
         {
             return;
         }
+
+        // Erst die Texte des bisherigen Projekts sichern, dann die neuen laden.
+        await SaveIfDirtyAsync();
 
         LoadTexts();
 
@@ -993,6 +1016,40 @@ public partial class AnalysisView : UserControl, ITabFillSource
             return;
         }
 
+        await SaveTextsAsync(project.Id, automatic: false);
+    }
+
+    /// <summary>
+    /// Ob Texte offen sind, die vor dem Schließen des Fensters noch gespeichert werden müssen.
+    /// </summary>
+    public bool HasUnsavedTexts => _textsDirty && !_savingTexts;
+
+    /// <summary>
+    /// Speichert offene Texte ohne Knopfdruck; ohne Änderung passiert nichts. Aufgerufen wird
+    /// das beim Verlassen des Reiters, beim Projektwechsel und vor dem Schließen des Fensters.
+    /// </summary>
+    public async Task<bool> SaveIfDirtyAsync()
+    {
+        if (!_textsDirty || _savingTexts || _loadedProjectId is not { } projectId)
+        {
+            return false;
+        }
+
+        return await SaveTextsAsync(projectId, automatic: true);
+    }
+
+    /// <summary>
+    /// Schreibt die Texte des Projekts: alle Analysepunkte samt Untertitel und das Fazit.
+    /// <paramref name="automatic"/> ändert nur die Rückmeldung in der Fußzeile.
+    /// </summary>
+    private async Task<bool> SaveTextsAsync(Guid projectId, bool automatic)
+    {
+        if (_savingTexts)
+        {
+            return false;
+        }
+
+        _savingTexts = true;
         try
         {
             var inputs = new List<ProjectAnalysisTextInput>(_sections.Count + 1);
@@ -1006,18 +1063,29 @@ public partial class AnalysisView : UserControl, ITabFillSource
                 inputs.Add(new ProjectAnalysisTextInput(_fazit.Key, string.Empty, await _fazit.Editor.GetHtmlAsync()));
             }
 
-            var saved = _services.Analysis.Save(project.Id, inputs);
+            var saved = _services.Analysis.Save(projectId, inputs);
+            _textsDirty = false;
+
+            var prefix = automatic ? "Analyse automatisch gespeichert" : "Analyse gespeichert";
             InfoText.Text = saved.Count == 1
-                ? "Analyse gespeichert: 1 Analysepunkt."
-                : $"Analyse gespeichert: {saved.Count} Analysepunkte.";
+                ? $"{prefix}: 1 Analysepunkt."
+                : $"{prefix}: {saved.Count} Analysepunkte.";
+            return true;
         }
         catch (LiftUpException exception)
         {
+            // Eingaben bleiben stehen; der nächste Reiterwechsel versucht es erneut.
             InfoText.Text = exception.Message;
+            return false;
         }
         catch (InvalidOperationException exception)
         {
             InfoText.Text = "Speichern fehlgeschlagen: " + exception.Message;
+            return false;
+        }
+        finally
+        {
+            _savingTexts = false;
         }
     }
 }
