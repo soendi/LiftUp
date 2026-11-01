@@ -41,6 +41,9 @@ public partial class MainWindow : Window
             // wird zusätzlich als zweites Blatt ins PDF übernommen.
             overview.Add(CreateTab("Zustandsanalyse", new ProjectTableView(_services, ProjectTableCatalog.Zustandsanalyse)));
             overview.Add(CreateTab("Investitionsplanung", new ProjectTableView(_services, ProjectTableCatalog.Investitionsplanung)));
+
+            // Die Analyse wird je Projekt einmal erfasst und fließt in jedes Dokument ein.
+            overview.Add(CreateTab("Analyse", new AnalysisView(_services)));
         }
 
         if (session.Can(Permission.CreateDocuments) || session.Can(Permission.ManageTemplates))

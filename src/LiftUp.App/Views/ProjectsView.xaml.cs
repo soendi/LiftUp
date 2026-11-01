@@ -3,7 +3,11 @@ using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using LiftUp.Core.Domain;
 
 namespace LiftUp.App.Views;
@@ -34,6 +38,9 @@ public partial class ProjectsView : UserControl
     private readonly ObservableCollection<MilestoneRow> _milestones = [];
     private Guid? _milestoneProjectId;
     private bool _milestonesLoading;
+    private bool _milestonesSaving;
+    private DataGridRow? _previewRow;
+    private string _previewPath = string.Empty;
 
     public ProjectsView(AppServices services)
     {
@@ -58,6 +65,10 @@ public partial class ProjectsView : UserControl
         MilestonesGrid.BeginningEdit += OnMilestoneBeginningEdit;
         MilestonesGrid.RowEditEnding += OnMilestoneRowEditEnding;
 
+        ProjectsGrid.MouseMove += OnProjectsGridMouseMove;
+        ProjectsGrid.MouseLeave += (_, _) => HideImagePreview();
+        ProjectsGrid.AddHandler(ScrollViewer.ScrollChangedEvent, new ScrollChangedEventHandler((_, _) => HideImagePreview()));
+
         LoadProjects();
     }
 
@@ -76,6 +87,7 @@ public partial class ProjectsView : UserControl
             });
 
             var keepId = Selected?.Id;
+            HideImagePreview();
             ProjectsGrid.ItemsSource = items;
 
             // Nach dem Neuladen bleibt das Projekt gewählt, damit die Meilensteine stehen bleiben.
@@ -128,6 +140,95 @@ public partial class ProjectsView : UserControl
     {
         UpdateButtons();
         LoadMilestones(Selected);
+        HideImagePreview();
+    }
+
+    /// <summary>Zeigt das Projektbild der Zeile unter dem Mauszeiger in einem eigenen Fenster.</summary>
+    private void OnProjectsGridMouseMove(object sender, MouseEventArgs e)
+    {
+        var row = FindRow(e.OriginalSource as DependencyObject);
+        if (row?.Item is not ProjectListItem item)
+        {
+            HideImagePreview();
+            return;
+        }
+
+        if (ReferenceEquals(row, _previewRow) && ImagePopup.IsOpen)
+        {
+            return;
+        }
+
+        ShowImagePreview(row, item);
+    }
+
+    private void ShowImagePreview(DataGridRow row, ProjectListItem item)
+    {
+        _previewRow = row;
+
+        var path = item.ImagePath;
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+        {
+            HideImagePreview();
+            return;
+        }
+
+        if (!string.Equals(path, _previewPath, StringComparison.OrdinalIgnoreCase) || ImagePreview.Source is null)
+        {
+            try
+            {
+                // Ohne OnLoad hält die Vorschau die Datei gesperrt.
+                var image = new BitmapImage();
+                image.BeginInit();
+                image.CacheOption = BitmapCacheOption.OnLoad;
+                image.UriSource = new Uri(path, UriKind.Absolute);
+                image.EndInit();
+                image.Freeze();
+                ImagePreview.Source = image;
+            }
+            catch (Exception exception) when (
+                exception is NotSupportedException or UriFormatException or IOException or FileFormatException)
+            {
+                HideImagePreview();
+                MilestoneInfoText.Text = "Das Projektbild konnte nicht geladen werden: " + exception.Message;
+                return;
+            }
+
+            _previewPath = path;
+        }
+
+        ImageCaption.Text = Path.GetFileName(path);
+        ImagePopup.PlacementTarget = row;
+        ImagePopup.Placement = PlacementMode.Right;
+        ImagePopup.HorizontalOffset = 8;
+        ImagePopup.VerticalOffset = 0;
+        ImagePopup.IsOpen = true;
+    }
+
+    private void HideImagePreview()
+    {
+        _previewRow = null;
+        _previewPath = string.Empty;
+        ImagePopup.IsOpen = false;
+        ImagePreview.Source = null;
+    }
+
+    private static DataGridRow? FindRow(DependencyObject? source)
+    {
+        while (source is not null)
+        {
+            if (source is DataGridRow row)
+            {
+                return row;
+            }
+
+            // Nur visuelle Elemente haben einen visuellen Elternteil; bei Textinhalten
+            // würde VisualTreeHelper sonst eine Ausnahme werfen.
+            source = source is Visual or System.Windows.Media.Media3D.Visual3D
+                ? VisualTreeHelper.GetParent(source)
+                : null;
+        }
+
+        return null;
     }
 
     /// <summary>Zeigt die Meilensteine des gewählten Projekts auf der rechten Seite.</summary>
@@ -135,6 +236,9 @@ public partial class ProjectsView : UserControl
     {
         _milestonesLoading = true;
         _milestoneProjectId = project?.Id;
+
+        // Eine offene Bearbeitung beenden, sonst wehrt sich die Tabelle gegen das Leeren.
+        EndGridEditing(MilestonesGrid);
         _milestones.Clear();
 
         if (project is null)
@@ -247,59 +351,141 @@ public partial class ProjectsView : UserControl
             return;
         }
 
-        // Erst speichern, wenn die Zelle übernommen ist.
-        Dispatcher.BeginInvoke(new Action(SaveMilestones));
+        // Erst speichern, wenn die Zelle übernommen ist; sonst greift das Speichern mitten
+        // in die Bearbeitung ein.
+        Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(SaveMilestones));
     }
 
     /// <summary>Schreibt die Liste direkt in die Datenbank; ohne eigenes Speichern-Knopf.</summary>
     private void SaveMilestones()
     {
-        if (_milestonesLoading || _milestoneProjectId is not Guid projectId)
+        if (_milestonesLoading || _milestonesSaving || _milestoneProjectId is not Guid projectId)
         {
             return;
         }
 
-        MilestonesGrid.CommitEdit(DataGridEditingUnit.Cell, true);
-        MilestonesGrid.CommitEdit(DataGridEditingUnit.Row, true);
-
-        var inputs = new List<ProjectMilestoneInput>();
-        foreach (var row in _milestones)
-        {
-            var title = (row.Title ?? string.Empty).Trim();
-            if (title.Length == 0 && !row.IsDone && string.IsNullOrWhiteSpace(row.DoneDateText))
-            {
-                // Eine gerade begonnene Zeile wird erst beim Ausfüllen gespeichert.
-                continue;
-            }
-
-            DateTime? date;
-            try
-            {
-                date = ParseMilestoneDate(row.DoneDateText);
-            }
-            catch (ValidationException exception)
-            {
-                MilestoneInfoText.Text = exception.Message;
-                return;
-            }
-
-            inputs.Add(new ProjectMilestoneInput
-            {
-                Title = title,
-                IsDone = row.IsDone,
-                DoneDate = date,
-            });
-        }
-
+        _milestonesSaving = true;
         try
         {
-            _services.Projects.SaveMilestones(projectId, inputs);
-            LoadMilestones(Selected);
-            MilestoneInfoText.Text = "Meilensteine gespeichert.";
+            // Die Zelle muss übernommen sein, bevor die Werte gelesen werden. Während eines
+            // laufenden Commits darf nicht erneut committet werden.
+            CommitGridEdits(MilestonesGrid);
+
+            var inputs = new List<ProjectMilestoneInput>();
+            foreach (var row in _milestones)
+            {
+                var title = (row.Title ?? string.Empty).Trim();
+                if (title.Length == 0 && !row.IsDone && string.IsNullOrWhiteSpace(row.DoneDateText))
+                {
+                    // Eine gerade begonnene Zeile wird erst beim Ausfüllen gespeichert.
+                    continue;
+                }
+
+                DateTime? date;
+                try
+                {
+                    date = ParseMilestoneDate(row.DoneDateText);
+                }
+                catch (ValidationException exception)
+                {
+                    MilestoneInfoText.Text = exception.Message;
+                    return;
+                }
+
+                inputs.Add(new ProjectMilestoneInput
+                {
+                    Title = title,
+                    IsDone = row.IsDone,
+                    DoneDate = date,
+                });
+            }
+
+            try
+            {
+                var saved = _services.Projects.SaveMilestones(projectId, inputs);
+                ApplySavedMilestones(saved.Milestones);
+                MilestoneInfoText.Text = "Meilensteine gespeichert.";
+            }
+            catch (LiftUpException exception)
+            {
+                MilestoneInfoText.Text = exception.Message;
+            }
+            catch (Exception exception)
+            {
+                MilestoneInfoText.Text =
+                    "Die Meilensteine konnten nicht gespeichert werden: " + exception.Message;
+            }
         }
-        catch (LiftUpException exception)
+        finally
         {
-            MilestoneInfoText.Text = exception.Message;
+            _milestonesSaving = false;
+        }
+    }
+
+    /// <summary>
+    /// Übernimmt das Gespeicherte in die vorhandenen Zeilen. Die Liste wird bewusst nicht
+    /// neu aufgebaut: Eine gebundene Sammlung mitten in der Bearbeitung zu leeren, beendet
+    /// die Anwendung mit einer Ausnahme aus dem DataGrid.
+    /// </summary>
+    private void ApplySavedMilestones(IReadOnlyList<ProjectMilestone> saved)
+    {
+        if (saved.Count != _milestones.Count)
+        {
+            // Andere Anzahl (etwa leere Zeile oder fehlende Begehung): erst nach dem
+            // Abschluss der Bearbeitung neu laden.
+            Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(ReloadMilestones));
+            return;
+        }
+
+        for (var index = 0; index < saved.Count; index++)
+        {
+            var target = _milestones[index];
+            var source = saved[index];
+            target.Title = source.Title;
+            target.IsDone = source.IsDone;
+            target.DoneDateText = source.DoneDate?.ToString("dd.MM.yyyy") ?? string.Empty;
+            target.IsFixed = string.Equals(
+                source.Title, ProjectMilestoneCatalog.Inspection, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    /// <summary>Lädt die Meilensteine neu, ohne dass eine Bearbeitung offen bleibt.</summary>
+    private void ReloadMilestones()
+    {
+        if (_milestoneProjectId is null)
+        {
+            return;
+        }
+
+        EndGridEditing(MilestonesGrid);
+        LoadMilestones(Selected);
+    }
+
+    /// <summary>Übernimmt offene Zellen; ohne Bearbeitung passiert nichts.</summary>
+    private static void CommitGridEdits(DataGrid grid)
+    {
+        try
+        {
+            grid.CommitEdit(DataGridEditingUnit.Cell, true);
+            grid.CommitEdit(DataGridEditingUnit.Row, true);
+        }
+        catch (InvalidOperationException)
+        {
+            // Gerade keine (oder bereits laufende) Bearbeitung: kein Grund abzubrechen.
+        }
+    }
+
+    /// <summary>Beendet eine offene Bearbeitung, damit die Tabelle neu gefüllt werden darf.</summary>
+    private static void EndGridEditing(DataGrid grid)
+    {
+        try
+        {
+            grid.CancelEdit(DataGridEditingUnit.Cell);
+            grid.CancelEdit(DataGridEditingUnit.Row);
+        }
+        catch (InvalidOperationException)
+        {
+            // Keine Bearbeitung offen.
         }
     }
 

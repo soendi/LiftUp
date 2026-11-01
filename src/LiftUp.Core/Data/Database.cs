@@ -12,7 +12,7 @@ namespace LiftUp.Core.Data;
 /// </summary>
 public sealed class Database
 {
-    public const int CurrentSchemaVersion = 21;
+    public const int CurrentSchemaVersion = 24;
 
     private readonly string _connectionString;
 
@@ -184,6 +184,15 @@ public sealed class Database
         // Version 21 ergänzt das Firmenlogo am Benutzer; das Deckblatt zeigt es oben an.
         MigrateUserCompanyLogo(connection);
         UpgradeReportCover(connection);
+
+        // Version 22 ergänzt die erfassten Texte der Analyse je Projekt.
+        MigrateProjectAnalysis(connection);
+
+        // Version 23 ergänzt die Fotos der Analyse samt Markierungen.
+        MigrateProjectAnalysisPhotos(connection);
+
+        // Version 24 stellt das Projekt mit Anschrift zwischen die beiden Adressblöcke des Deckblatts.
+        UpgradeReportCoverFacts(connection);
 
         using var command = Db.Command(connection, "UPDATE SchemaInfo SET Version = $version;");
         command.With("$version", CurrentSchemaVersion);
@@ -537,6 +546,63 @@ public sealed class Database
     }
 
     /// <summary>
+    /// Version 22: Texte der Analyse je Projekt und Unterpunkt („2.1 Aggregat“ usw.).
+    /// Die Texte hängen am Projekt, damit sie in mehreren Dokumenten wiederverwendet werden.
+    /// </summary>
+    private static void MigrateProjectAnalysis(SqliteConnection connection)
+    {
+        using var create = Db.Command(connection, """
+            CREATE TABLE IF NOT EXISTS ProjectAnalysisTexts (
+                Id         TEXT PRIMARY KEY NOT NULL,
+                ProjectId  TEXT NOT NULL REFERENCES Projects(Id),
+                SectionKey TEXT NOT NULL,
+                Html       TEXT NOT NULL,
+                CreatedUtc TEXT NOT NULL,
+                CreatedBy  TEXT NULL,
+                UpdatedUtc TEXT NOT NULL,
+                UpdatedBy  TEXT NULL,
+                RowVersion INTEGER NOT NULL DEFAULT 1,
+                IsDeleted  INTEGER NOT NULL DEFAULT 0
+            );
+
+            CREATE INDEX IF NOT EXISTS IX_ProjectAnalysisTexts_Project
+                ON ProjectAnalysisTexts (ProjectId, SectionKey);
+            """);
+        create.ExecuteNonQuery();
+    }
+
+    /// <summary>
+    /// Version 23: Fotos der Analyse je Projekt und Aufzug. Die Markierungen (Kreis, Pfeil)
+    /// liegen als JSON an der Zeile; die Bilddatei bleibt im Projektordner.
+    /// </summary>
+    private static void MigrateProjectAnalysisPhotos(SqliteConnection connection)
+    {
+        using var create = Db.Command(connection, """
+            CREATE TABLE IF NOT EXISTS ProjectAnalysisPhotos (
+                Id          TEXT PRIMARY KEY NOT NULL,
+                ProjectId   TEXT NOT NULL REFERENCES Projects(Id),
+                LiftKey     TEXT NOT NULL DEFAULT '',
+                FilePath    TEXT NOT NULL,
+                Caption     TEXT NOT NULL DEFAULT '',
+                Annotations TEXT NOT NULL DEFAULT '[]',
+                ImageWidth  REAL NOT NULL DEFAULT 0,
+                ImageHeight REAL NOT NULL DEFAULT 0,
+                SortOrder   INTEGER NOT NULL DEFAULT 0,
+                CreatedUtc  TEXT NOT NULL,
+                CreatedBy   TEXT NULL,
+                UpdatedUtc  TEXT NOT NULL,
+                UpdatedBy   TEXT NULL,
+                RowVersion  INTEGER NOT NULL DEFAULT 1,
+                IsDeleted   INTEGER NOT NULL DEFAULT 0
+            );
+
+            CREATE INDEX IF NOT EXISTS IX_ProjectAnalysisPhotos_Project
+                ON ProjectAnalysisPhotos (ProjectId, LiftKey);
+            """);
+        create.ExecuteNonQuery();
+    }
+
+    /// <summary>
     /// Version 20: Meilensteine je Projekt. Bestehende Projekte starten ohne Meilensteine.
     /// </summary>
     private static void MigrateProjectMilestones(SqliteConnection connection)
@@ -598,6 +664,55 @@ public sealed class Database
         var isCoverWithoutLogo = html.Contains("class=\"kicker\"", StringComparison.Ordinal)
                                  && !html.Contains("{{company.logo}}", StringComparison.Ordinal);
         if (!isOldCover && !isCoverWithoutLogo)
+        {
+            return;
+        }
+
+        var version = currentVersion + 1;
+        InsertTemplateVersion(connection, id, version, DefaultTemplateHtml);
+        SetTemplateVersion(connection, id, version);
+    }
+
+    /// <summary>
+    /// Version 24: Zwischen Auftraggeber und Projektverfasser steht das Projekt mit Anschrift,
+    /// und unter dem Projektbild ist etwas Luft. Ersetzt wird nur das unveränderte Deckblatt;
+    /// selbst bearbeitete Vorlagen bleiben unangetastet.
+    /// </summary>
+    private static void UpgradeReportCoverFacts(SqliteConnection connection)
+    {
+        var templateId = FindTemplateId(connection, ReportTemplateName, onlyFirstVersion: false);
+        if (templateId is not { } id)
+        {
+            return;
+        }
+
+        int currentVersion;
+        string html;
+        using (var read = Db.Command(connection, """
+            SELECT t.CurrentVersion, v.Html
+            FROM Templates t
+            JOIN TemplateVersions v ON v.TemplateId = t.Id AND v.Version = t.CurrentVersion
+            WHERE t.Id = $id;
+            """))
+        {
+            read.With("$id", id.ToString("D"));
+            using var reader = read.ExecuteReader();
+            if (!reader.Read())
+            {
+                return;
+            }
+
+            currentVersion = reader.Int32(0);
+            html = reader.Text(1);
+        }
+
+        // Erkannt wird das bisherige Deckblatt: zwei Adressspalten, Projektbild ohne Abstand.
+        var isPreviousCover = html.Contains("{{project.image}}", StringComparison.Ordinal)
+                              && html.Contains("<div class=\"label\">Auftraggeber</div>", StringComparison.Ordinal)
+                              && html.Contains("<div class=\"label\">Projektverfasser</div>", StringComparison.Ordinal)
+                              && !html.Contains("facts-three", StringComparison.Ordinal)
+                              && html.Split("<td>", StringSplitOptions.None).Length - 1 == 2;
+        if (!isPreviousCover)
         {
             return;
         }
@@ -784,6 +899,8 @@ public sealed class Database
             .brand { margin-bottom: 6mm; }
             .facts { width: 100%; border-collapse: collapse; }
             .facts td { vertical-align: top; padding: 0 8mm 2mm 0; width: 50%; }
+            .facts-three td { width: 33.33%; padding: 0 6mm 2mm 0; }
+            .cover-image { margin: 0 0 8mm 0; }
             .block { font-size: 9.8pt; line-height: 1.5; color: #243b53; margin-top: 1.5mm; }
             .block strong { color: #102a43; }
             .section { border-top: 1px solid #e1e7ee; padding-top: 3mm; margin-top: 4mm; }
@@ -801,13 +918,17 @@ public sealed class Database
           <div class="label">Projekt</div>
           <div class="project">{{project.number}} – {{project.name}}</div>
 
-          {{project.image}}
+          <div class="cover-image">{{project.image}}</div>
 
-          <table class="facts">
+          <table class="facts facts-three">
             <tr>
               <td>
                 <div class="label">Auftraggeber</div>
                 <div class="block"><strong>{{project.client}}</strong><br />{{project.clientaddress}}</div>
+              </td>
+              <td>
+                <div class="label">Projekt</div>
+                <div class="block"><strong>{{project.name}}</strong><br />{{project.address}}</div>
               </td>
               <td>
                 <div class="label">Projektverfasser</div>
@@ -1259,6 +1380,45 @@ public sealed class Database
         );
 
         CREATE INDEX IF NOT EXISTS IX_ProjectTableRows_Project ON ProjectTableRows (ProjectId, TableKey);
+
+        -- Erfasste Texte der Analyse je Projekt und Unterpunkt.
+        CREATE TABLE IF NOT EXISTS ProjectAnalysisTexts (
+            Id         TEXT PRIMARY KEY NOT NULL,
+            ProjectId  TEXT NOT NULL REFERENCES Projects(Id),
+            SectionKey TEXT NOT NULL,
+            Html       TEXT NOT NULL,
+            CreatedUtc TEXT NOT NULL,
+            CreatedBy  TEXT NULL,
+            UpdatedUtc TEXT NOT NULL,
+            UpdatedBy  TEXT NULL,
+            RowVersion INTEGER NOT NULL DEFAULT 1,
+            IsDeleted  INTEGER NOT NULL DEFAULT 0
+        );
+
+        CREATE INDEX IF NOT EXISTS IX_ProjectAnalysisTexts_Project
+            ON ProjectAnalysisTexts (ProjectId, SectionKey);
+
+        -- Fotos der Analyse je Projekt und Aufzug; Annotations hält Kreis und Pfeil als JSON.
+        CREATE TABLE IF NOT EXISTS ProjectAnalysisPhotos (
+            Id          TEXT PRIMARY KEY NOT NULL,
+            ProjectId   TEXT NOT NULL REFERENCES Projects(Id),
+            LiftKey     TEXT NOT NULL DEFAULT '',
+            FilePath    TEXT NOT NULL,
+            Caption     TEXT NOT NULL DEFAULT '',
+            Annotations TEXT NOT NULL DEFAULT '[]',
+            ImageWidth  REAL NOT NULL DEFAULT 0,
+            ImageHeight REAL NOT NULL DEFAULT 0,
+            SortOrder   INTEGER NOT NULL DEFAULT 0,
+            CreatedUtc  TEXT NOT NULL,
+            CreatedBy   TEXT NULL,
+            UpdatedUtc  TEXT NOT NULL,
+            UpdatedBy   TEXT NULL,
+            RowVersion  INTEGER NOT NULL DEFAULT 1,
+            IsDeleted   INTEGER NOT NULL DEFAULT 0
+        );
+
+        CREATE INDEX IF NOT EXISTS IX_ProjectAnalysisPhotos_Project
+            ON ProjectAnalysisPhotos (ProjectId, LiftKey);
 
         CREATE TABLE IF NOT EXISTS ChangeLog (
             Id             INTEGER PRIMARY KEY AUTOINCREMENT,

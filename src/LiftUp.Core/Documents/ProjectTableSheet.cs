@@ -34,8 +34,12 @@ public static class ProjectTableSheet
 
         AppendLegend(builder, definition);
 
-        builder.Append("<table style=\"width:100%;border-collapse:collapse;font-size:7.5pt;\">");
-        AppendHead(builder, definition.Columns);
+        // Feste Spaltenbreiten und gedrehte Überschriften halten die Tabelle in der
+        // Seitenbreite; ohne table-layout würde der Browser die Spalten wieder aufblähen.
+        var rotated = definition.Columns.Select(RotateHeader).ToArray();
+        builder.Append("<table style=\"width:100%;table-layout:fixed;border-collapse:collapse;font-size:6.8pt;\">");
+        AppendColumnWidths(builder, definition.Columns, rotated);
+        AppendHead(builder, definition.Columns, rotated);
         builder.Append("<tbody>");
 
         foreach (var row in rows)
@@ -47,8 +51,8 @@ public static class ProjectTableSheet
                 var align = column.Kind == ProjectTableColumnKind.Number ? "right" : "left";
                 var background = column.Kind == ProjectTableColumnKind.Rating ? RatingBackground(value) : null;
                 var style = background is null
-                    ? $"border:1px solid #9aa3ac;padding:3pt;text-align:{align};"
-                    : $"border:1px solid #9aa3ac;padding:3pt;text-align:{align};background:{background};";
+                    ? $"border:1px solid #9aa3ac;padding:2pt;text-align:{align};vertical-align:top;overflow-wrap:anywhere;"
+                    : $"border:1px solid #9aa3ac;padding:2pt;text-align:{align};vertical-align:top;overflow-wrap:anywhere;background:{background};";
 
                 builder.Append($"<td style=\"{style}\">").Append(Encode(value)).Append("</td>");
             }
@@ -122,8 +126,61 @@ public static class ProjectTableSheet
         builder.Append("</div>");
     }
 
+    /// <summary>
+    /// Lange Überschrift bei kurzen Werten (Bewertungen, Zahlen, ja/nein): Die Überschrift wird
+    /// um 90° gedreht und braucht nur noch die Breite der Werte.
+    /// </summary>
+    private static bool RotateHeader(ProjectTableColumn column)
+    {
+        var label = column.Label.Trim();
+        if (label.Length < 12)
+        {
+            return false;
+        }
+
+        if (column.Kind is ProjectTableColumnKind.Number or ProjectTableColumnKind.Rating)
+        {
+            return true;
+        }
+
+        return column.Options.Count > 0 && column.Options.All(option => option.Length <= 18);
+    }
+
+    /// <summary>
+    /// Spaltenbreiten in Prozent der Seitenbreite: Gedrehte Überschriften bekommen nur den Platz
+    /// ihrer Werte, Textspalten behalten die gewünschte Breite. Zusammen ergibt das genau 100 %,
+    /// damit die Tabelle auf die A4-Querseite passt.
+    /// </summary>
+    private static void AppendColumnWidths(
+        StringBuilder builder,
+        IReadOnlyList<ProjectTableColumn> columns,
+        IReadOnlyList<bool> rotated)
+    {
+        var weights = new double[columns.Count];
+        for (var index = 0; index < columns.Count; index++)
+        {
+            var column = columns[index];
+            weights[index] = rotated[index]
+                ? column.Kind == ProjectTableColumnKind.Rating ? 95 : 55
+                : Math.Max(column.Width, 40);
+        }
+
+        var total = weights.Sum();
+        builder.Append("<colgroup>");
+        for (var index = 0; index < columns.Count; index++)
+        {
+            var share = weights[index] / total * 100;
+            builder.Append($"<col style=\"width:{share.ToString("0.##", CultureInfo.InvariantCulture)}%\" />");
+        }
+
+        builder.Append("</colgroup>");
+    }
+
     /// <summary>Kopfzeilen: zuerst die Gruppen (mit Spannen), darunter die Spalten selbst.</summary>
-    private static void AppendHead(StringBuilder builder, IReadOnlyList<ProjectTableColumn> columns)
+    private static void AppendHead(
+        StringBuilder builder,
+        IReadOnlyList<ProjectTableColumn> columns,
+        IReadOnlyList<bool> rotated)
     {
         builder.Append("<thead>");
 
@@ -140,7 +197,7 @@ public static class ProjectTableSheet
                     span++;
                 }
 
-                builder.Append($"<th colspan=\"{span}\" style=\"border:1px solid #9aa3ac;padding:3pt;background:{GroupBackground(group)};\">")
+                builder.Append($"<th colspan=\"{span}\" style=\"border:1px solid #9aa3ac;padding:2pt;background:{GroupBackground(group)};\">")
                     .Append(Encode(group))
                     .Append("</th>");
                 index += span;
@@ -150,9 +207,22 @@ public static class ProjectTableSheet
         }
 
         builder.Append("<tr>");
-        foreach (var column in columns)
+        for (var index = 0; index < columns.Count; index++)
         {
-            builder.Append("<th style=\"border:1px solid #9aa3ac;padding:3pt;text-align:left;background:#eef1f4;\">")
+            var column = columns[index];
+            const string style =
+                "border:1px solid #9aa3ac;padding:2pt;text-align:left;vertical-align:bottom;background:#eef1f4;";
+
+            if (rotated[index])
+            {
+                builder.Append($"<th style=\"{style}\">")
+                    .Append("<div style=\"writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;\">")
+                    .Append(Encode(column.Label))
+                    .Append("</div></th>");
+                continue;
+            }
+
+            builder.Append($"<th style=\"{style}\">")
                 .Append(Encode(column.Label))
                 .Append("</th>");
         }

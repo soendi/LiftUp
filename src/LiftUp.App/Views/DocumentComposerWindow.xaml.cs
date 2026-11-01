@@ -178,11 +178,36 @@ public partial class DocumentComposerWindow : Window
 
         foreach (var section in defined)
         {
-            AddSection(section.Title, section.DefaultHtml, select: false);
+            AddSection(section.Title, StartHtml(section), select: false);
         }
 
         SelectFirstSection();
         InfoText.Text = $"{template.Name}: {defined.Count} Abschnitt(e) fließen mit Abstand untereinander; der erste beginnt auf Seite 2. Im Text mit /Textbaustein und &Bild suchen (&Bild im Projekt, &&Bild auch in der globalen Bibliothek).";
+    }
+
+    /// <summary>
+    /// Startinhalt eines Abschnitts. Im Reiter „2. Analyse“ stehen die im Reiter „Analyse“
+    /// erfassten Texte des Projekts, damit sie nicht nochmals getippt werden müssen.
+    /// </summary>
+    private string StartHtml(TemplateSection section)
+    {
+        if (!ProjectAnalysisCatalog.IsChapterTitle(section.Title) || SelectedProject is not { } project)
+        {
+            return section.DefaultHtml;
+        }
+
+        try
+        {
+            // Der Haupttitel steht schon als Überschrift des Abschnitts im Dokument.
+            var html = ProjectAnalysisCatalog.Render(
+                _services.Analysis.Get(project.Id), includeChapterTitle: false);
+            return string.IsNullOrWhiteSpace(html) ? section.DefaultHtml : html;
+        }
+        catch (LiftUpException)
+        {
+            // Ohne Recht auf die Analyse bleibt der Startinhalt der Vorlage.
+            return section.DefaultHtml;
+        }
     }
 
     /// <summary>

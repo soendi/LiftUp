@@ -145,6 +145,13 @@ public static class ProjectTableCatalog
             + "von Komponenten sind nicht aufgeführt.",
     };
 
+    /// <summary>
+    /// Spalten, die in beiden Tabellen vorkommen. Eine Zeile der Zustandsanalyse legt die
+    /// passende Zeile der Investitionsplanung an und füllt diese Angaben von dort.
+    /// </summary>
+    public static IReadOnlyList<string> SharedWithInvestitionsplanung { get; } =
+        ["Year", "AssetName", "Service", "Location", "Type"];
+
     /// <summary>Alle Tabellen in der Reihenfolge, in der sie im PDF erscheinen.</summary>
     public static IReadOnlyList<ProjectTableDefinition> All { get; } = [Zustandsanalyse, Investitionsplanung];
 

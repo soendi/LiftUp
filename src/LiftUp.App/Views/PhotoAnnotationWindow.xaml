@@ -1,0 +1,40 @@
+<Window x:Class="LiftUp.App.Views.PhotoAnnotationWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Foto markieren" Height="760" Width="1040"
+        WindowStartupLocation="CenterOwner">
+
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10">
+            <TextBlock Text="Werkzeug" VerticalAlignment="Center" Margin="0,0,8,0"
+                       Style="{StaticResource LiftUpFieldLabel}" />
+            <ToggleButton x:Name="CircleTool" Content="Kreis" Width="90" Click="OnToolClick" />
+            <ToggleButton x:Name="ArrowTool" Content="Pfeil" Width="90" Click="OnToolClick" />
+            <Button Content="Rückgängig" Click="OnUndoClick" />
+            <Button Content="Alles löschen" Click="OnClearClick" />
+            <TextBlock x:Name="HintText" VerticalAlignment="Center" Margin="12,0,0,0" TextWrapping="Wrap"
+                       Style="{StaticResource LiftUpMutedText}"
+                       Text="Werkzeug wählen und im Bild ziehen: Kreis vom Mittelpunkt nach außen, Pfeil vom Anfang zur Spitze." />
+        </StackPanel>
+
+        <Border Grid.Row="1" Background="#20262E" CornerRadius="4" ClipToBounds="True">
+            <Grid x:Name="Stage" ClipToBounds="True">
+                <Image x:Name="Photo" Stretch="Fill" HorizontalAlignment="Left" VerticalAlignment="Top" />
+                <Canvas x:Name="Overlay" Background="Transparent" HorizontalAlignment="Left"
+                        VerticalAlignment="Top" />
+            </Grid>
+        </Border>
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+            <Button Content="Abbrechen" Click="OnCancelClick" />
+            <Button Content="Übernehmen" Style="{StaticResource LiftUpPrimaryButton}" Margin="0"
+                    Click="OnOkClick" />
+        </StackPanel>
+    </Grid>
+</Window>

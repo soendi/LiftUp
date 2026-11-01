@@ -100,6 +100,13 @@ Zwei projektbezogene Tabellen, die direkt hinter dem Reiter "Projekte" liegen:
   eine Zeile: Jahr und Anlagendaten, danach **Variante 1 – Modernisierung** und
   **Variante 2 – Ersatzanlage** mit Massnahme, Kosten und Erläuterung.
 
+Beide Tabellen führen dieselben Aufzüge: **Speichern der Zustandsanalyse legt je Zeile die passende
+Zeile der Investitionsplanung an** und übernimmt Baujahr, Anlagebezeichnung, Servicefirma, Standort
+und Art des Aufzugs. Zugeordnet wird über die Anlagebezeichnung, bei einer Umbenennung über die
+Position. Eigene Angaben der Investitionsplanung (Massnahme, Kosten, Erläuterung) bleiben dabei
+stehen; Zeilen zu Aufzügen, die es in der Zustandsanalyse nicht mehr gibt, bleiben mit ihren
+Angaben erhalten.
+
 Bewertungen, ja/nein und die Aufzugsart werden aus einer Auswahlliste gewählt (Spaltenkopf zeigt die
 möglichen Werte). Im PDF bekommen die Bewertungszellen dieselben Farben wie im Excel: grün gut /
 in Ordnung / verfügbar, gelb mässig / bedingt verfügbar, rot schlecht / nicht in Ordnung / nicht
@@ -239,8 +246,9 @@ Schachtausführung, Auffahrsockel), „2. Analyse“ und „3. Fazit / Empfehlun
 Startinhalt bleibt erhalten, wenn die Titel der Abschnitte angepasst werden.
 
 **Deckblatt:** Die erste Seite ist als Deckblatt gestaltet: „Zustandsbericht / Aufzugsanlagen“,
-Projektnummer und -name, Projektbild, Auftraggeber mit Anschrift, Projektverfasser (Firma,
-Anschrift und Logo aus dem Benutzerprofil), Verfasser mit Telefon und E-Mail, der Auftrag, das Datum der
+Projektnummer und -name, Projektbild mit Abstand zur Adresszeile, Auftraggeber mit Anschrift, das
+Projekt selbst mit Anschrift, Projektverfasser (Firma, Anschrift und Logo aus dem Benutzerprofil),
+Verfasser mit Telefon und E-Mail, der Auftrag, das Datum der
 Begehung aus dem gleichnamigen Meilenstein sowie Erstellungsdatum und Ort des Benutzers. Eine
 unberührte Startvorlage erhält das neue Deckblatt als neue Version; selbst bearbeitete Vorlagen
 bleiben unangetastet.
@@ -274,9 +282,27 @@ bleiben unangetastet.
 | `{{date}}`, `{{datetime}}` | Datum bzw. Datum mit Uhrzeit |
 | `{{user}}` | Angemeldeter Benutzer |
 | `{{snippet:Name}}` | Textbaustein mit diesem Namen (HTML) |
+| `{{analyse}}` | Analyse mit allen erfassten Unterpunkten (Reiter „Analyse“) |
+| `{{analyse:2.1}}` | Ein Unterpunkt der Analyse, nach Nummer oder Namen |
 
 Werte aus der Datenbank werden HTML-escaped eingesetzt (`&`, `<`, `>`, `"`, `'`), Umlaute bleiben
 lesbar. Textbausteine werden bewusst als HTML eingefügt.
+
+**Reiter „Analyse“:** Die Texte der Analyse werden direkt in LiftUp erfasst, statt sie beim
+Erstellen jedes Dokuments neu zu tippen. Der Reiter zeigt den Haupttitel „2. Analyse“ als Tab und
+darunter je Analysepunkt einen Unter-Reiter: 2.1 Aggregat, 2.2 Hubzylinder / Tragmittel,
+2.3 Steuerung / Regler, 2.4 Regulator (Geschwindigkeitsbegrenzer), 2.5 Fangvorrichtung,
+2.6 Kabine / Triebmechanik und 2.7 Zugänglichkeit. Die Texte gehören zum Projekt: „Speichern“ gilt
+für alle Unterpunkte, leere bleiben im Dokument weg. Beim Erstellen eines Dokuments belegt der
+Abschnitt „2. Analyse“ der Vorlage den Reiter mit diesen Texten vor; alternativ setzt `{{analyse}}`
+sie ein, `{{analyse:2.1}}` einen einzelnen Punkt.
+
+**Reiter „4. Fotos“:** Unter dem Haupttitel folgt je Zeile der Zustandsanalyse ein Unter-Reiter,
+benannt nach Anlagebezeichnung und Standort (4.1 „8609861, Messligfeldstrasse 1“, 4.2 …). Dort lassen sich Fotos hinzufügen – sie werden in den
+Bilderordner des Projekts kopiert – und mit Bildunterschrift versehen. Der kleine Bild-Editor
+legt Kreise und Pfeile über das Foto, um den Kunden auf eine Stelle hinzuweisen; gespeichert
+werden Bildpixel, damit die Markierung im PDF exakt sitzt. Die Fotos erscheinen als eigene
+Seiten hinter den Tabellen: zwei Bilder pro Zeile in einem Raster, je Aufzug eine Überschrift.
 
 **Versionierung:** Jedes Speichern erzeugt eine neue, unveränderliche Vorlagenversion. Erzeugte
 PDFs merken sich die verwendete Version; wird die Vorlage später geändert, bleiben alte PDFs

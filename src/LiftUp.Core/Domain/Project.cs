@@ -317,6 +317,10 @@ public sealed class ProjectListItem
     public string Contact { get; init; } = string.Empty;
     public string Responsible { get; init; } = string.Empty;
     public string FolderPath { get; init; } = string.Empty;
+
+    /// <summary>Projektbild; die Übersicht zeigt es beim Überfahren der Zeile.</summary>
+    public string ImagePath { get; init; } = string.Empty;
+
     public ProjectStatus Status { get; init; }
     public string StatusText => ProjectStatusCatalog.Describe(Status);
     public bool IsArchived => Status == ProjectStatus.Archived;

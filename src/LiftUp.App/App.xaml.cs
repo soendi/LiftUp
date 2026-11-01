@@ -78,6 +78,9 @@ public sealed class AppServices(Database database)
 
     /// <summary>Zustandsanalyse und Investitionsplanung je Projekt.</summary>
     public ProjectTableService ProjectTables => new(Database, CurrentSession);
+
+    /// <summary>Erfasste Texte der Analyse je Projekt.</summary>
+    public ProjectAnalysisService Analysis => new(Database, CurrentSession);
     public UserService Users => new(Database, CurrentSession);
     public RoleService Roles => new(Database, CurrentSession);
     public TemplateService Templates => new(Database, CurrentSession);

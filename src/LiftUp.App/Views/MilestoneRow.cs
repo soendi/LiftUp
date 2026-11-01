@@ -10,7 +10,7 @@ public sealed class MilestoneRow
     public bool IsDone { get; set; }
 
     /// <summary>Fester Meilenstein (Begehung): Bezeichnung und Zeile sind nicht änderbar.</summary>
-    public bool IsFixed { get; init; }
+    public bool IsFixed { get; set; }
 
     /// <summary>Datum als Text in der Form TT.MM.JJJJ.</summary>
     public string DoneDateText { get; set; } = string.Empty;

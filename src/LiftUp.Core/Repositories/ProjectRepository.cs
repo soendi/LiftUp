@@ -46,7 +46,7 @@ public sealed class ProjectRepository
 
         var sql = $"""
             SELECT p.Id, p.Number, p.Name, p.Customer, p.Contact, p.ResponsibleName, p.FolderPath, p.Status,
-                   p.ArchivedUtc, p.ArchivedBy, p.UpdatedUtc, p.UpdatedBy
+                   p.ArchivedUtc, p.ArchivedBy, p.UpdatedUtc, p.UpdatedBy, p.ImagePath
             FROM Projects p
             WHERE {string.Join(" AND ", conditions)}
             {OrderBy(query.Sort, query.Descending)};
@@ -85,6 +85,7 @@ public sealed class ProjectRepository
                 UpdatedText = reader.Date(10).ToLocalTime().ToString("dd.MM.yyyy HH:mm"),
                 UpdatedBy = reader.Text(11),
                 FolderState = Directory.Exists(folder) ? "vorhanden" : "fehlt",
+                ImagePath = reader.TextOrNull(12) ?? string.Empty,
             });
         }
 

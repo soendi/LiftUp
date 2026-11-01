@@ -21,6 +21,8 @@ public sealed class DocumentService
     private readonly SnippetRepository _snippets = new();
     private readonly ImageRepository _images = new();
     private readonly ProjectTableRepository _tables = new();
+    private readonly ProjectAnalysisRepository _analysis = new();
+    private readonly ProjectAnalysisPhotoRepository _photos = new();
     private readonly ChangeLogWriter _changes;
 
     public DocumentService(Database database, Session actor, IHtmlToPdfRenderer renderer)
@@ -260,6 +262,7 @@ public sealed class DocumentService
             Company = company,
             SnippetResolver = name => snippets.TryGetValue(name, out var snippet) ? snippet : null,
             ImageResolver = name => images.TryGetValue(name, out var image) ? ImageEmbedding.ToImageTag(image) : null,
+            Analysis = _analysis.Get(connection, transaction, project.Id),
         });
 
         // In der Vorschau hängen Zustandsanalyse und Investitionsplanung als eigene Blätter an;
@@ -283,7 +286,36 @@ public sealed class DocumentService
             builder.Append(ProjectTableSheet.Render(definition, rows));
         }
 
+        // Die Fotos der Analyse folgen als eigene Seiten nach den Tabellen.
+        builder.Append(ProjectPhotoSheet.Render(
+            _photos.Get(connection, transaction, projectId),
+            liftLocations: CollectLiftLocations(connection, transaction, projectId)));
+
         return builder.ToString();
+    }
+
+    /// <summary>
+    /// Standorte der Aufzüge aus der Zustandsanalyse; sie stehen in der Überschrift der
+    /// Fotoseiten („4.1 8609861, Messligfeldstrasse 1“).
+    /// </summary>
+    private Dictionary<string, string> CollectLiftLocations(
+        Microsoft.Data.Sqlite.SqliteConnection connection,
+        Microsoft.Data.Sqlite.SqliteTransaction? transaction,
+        Guid projectId)
+    {
+        var locations = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var row in _tables.GetRows(connection, transaction, projectId, ProjectTableCatalog.ZustandsanalyseKey))
+        {
+            var name = row.Values.TryGetValue("AssetName", out var assetName) ? assetName.Trim() : string.Empty;
+            if (name.Length == 0)
+            {
+                continue;
+            }
+
+            locations[name] = row.Values.TryGetValue("Location", out var place) ? place.Trim() : string.Empty;
+        }
+
+        return locations;
     }
 
     /// <summary>Tabellen mit Zeilen, in der Reihenfolge der Blätter im PDF.</summary>
@@ -318,9 +350,10 @@ public sealed class DocumentService
         CancellationToken cancellationToken)
     {
         var sheets = CollectSheets(connection, transaction, projectId);
+        var photos = _photos.Get(connection, transaction, projectId);
         var main = await _renderer.RenderAsync(html, settings, cancellationToken).ConfigureAwait(false);
 
-        if (sheets.Count == 0)
+        if (sheets.Count == 0 && photos.Count == 0)
         {
             return main;
         }
@@ -336,6 +369,14 @@ public sealed class DocumentService
             }
 
             parts.Add(await _renderer.RenderAsync(sheetHtml, landscape, cancellationToken).ConfigureAwait(false));
+        }
+
+        // Die Fotoseiten im Format des Berichts; sie beginnen auf einer neuen Seite.
+        var photoHtml = ProjectPhotoSheet.RenderDocument(
+            photos, settings, CollectLiftLocations(connection, transaction, projectId));
+        if (photoHtml.Length > 0)
+        {
+            parts.Add(await _renderer.RenderAsync(photoHtml, settings, cancellationToken).ConfigureAwait(false));
         }
 
         var merged = PdfPageMerger.TryMerge(parts);

@@ -119,6 +119,35 @@
             </Border>
         </Grid>
 
+        <!-- Projektbild beim Überfahren einer Zeile: ein eigenes Fenster, damit es
+             nicht an der Tabellengrenze abgeschnitten wird. -->
+        <Popup x:Name="ImagePopup"
+               AllowsTransparency="True"
+               Focusable="False"
+               Placement="Relative"
+               PopupAnimation="Fade"
+               StaysOpen="True">
+            <Border Background="White"
+                    BorderBrush="{StaticResource LiftUpBorder}"
+                    BorderThickness="1"
+                    CornerRadius="6"
+                    Padding="6"
+                    IsHitTestVisible="False">
+                <StackPanel>
+                    <Image x:Name="ImagePreview"
+                           MaxWidth="440"
+                           MaxHeight="320"
+                           Stretch="Uniform"
+                           StretchDirection="DownOnly" />
+                    <TextBlock x:Name="ImageCaption"
+                               Style="{StaticResource LiftUpMutedText}"
+                               MaxWidth="440"
+                               TextTrimming="CharacterEllipsis"
+                               Margin="0,6,0,0" />
+                </StackPanel>
+            </Border>
+        </Popup>
+
         <TextBlock x:Name="InfoText" Grid.Row="3" Style="{StaticResource LiftUpMutedText}" Margin="2,8,0,0" />
     </Grid>
 </UserControl>

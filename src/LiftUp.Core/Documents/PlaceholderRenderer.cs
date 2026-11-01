@@ -18,6 +18,9 @@ public sealed class PlaceholderContext
 
     /// <summary>Liefert den HTML-Baustein eines Bildes (Name, ohne Präfix).</summary>
     public Func<string, string?>? ImageResolver { get; init; }
+
+    /// <summary>Erfasste Texte der Analyse; Grundlage für <c>{{analyse}}</c>.</summary>
+    public IReadOnlyList<ProjectAnalysisText>? Analysis { get; init; }
 }
 
 /// <summary>
@@ -63,6 +66,8 @@ public static class PlaceholderRenderer
         ("{{project.image}}", "Projektbild für das Deckblatt"),
         ("{{project.inspectiondate}}", "Datum der Begehung (Meilenstein „Begehung“)"),
         ("{{project.milestones}}", "Meilensteine untereinander"),
+        ("{{analyse}}", "Analyse mit allen erfassten Unterpunkten (Reiter „Analyse“)"),
+        ("{{analyse:2.1}}", "Ein Unterpunkt der Analyse, nach Nummer oder Namen"),
         ("{{date}}", "Datum (TT.MM.JJJJ)"),
         ("{{datetime}}", "Datum und Uhrzeit"),
         ("{{user}}", "Angemeldeter Benutzer"),
@@ -178,6 +183,14 @@ public static class PlaceholderRenderer
             return context.ImageResolver?.Invoke(token[ImagePrefixEnglish.Length..]) ?? string.Empty;
         }
 
+        // {{analyse}} setzt alle erfassten Unterpunkte ein, {{analyse:2.1}} nur einen.
+        if (key.StartsWith("analyse", StringComparison.Ordinal) || key.StartsWith("analysis", StringComparison.Ordinal))
+        {
+            var separator = token.IndexOf(':');
+            var section = separator >= 0 ? token[(separator + 1)..] : null;
+            return ProjectAnalysisCatalog.Render(context.Analysis, section);
+        }
+
         return key switch
         {
             "project.number" or "projekt.nummer" => Encode(project.Number),
@@ -208,6 +221,7 @@ public static class PlaceholderRenderer
             "project.image" or "project.bild" or "projekt.bild" => RenderProjectImage(project),
             "project.inspectiondate" or "projekt.begehungsdatum" => Encode(InspectionDate(project)),
             "project.milestones" or "projekt.meilensteine" => RenderMilestones(project.Milestones),
+            "analyse" or "analysis" => ProjectAnalysisCatalog.Render(context.Analysis),
             "date" or "datum" => context.Now.ToString("dd.MM.yyyy"),
             "time" or "zeit" => context.Now.ToString("HH:mm"),
             "datetime" or "datumzeit" => context.Now.ToString("dd.MM.yyyy HH:mm"),
