@@ -34,7 +34,6 @@
                   HeadersVisibility="Column"
                   GridLinesVisibility="Horizontal"
                   SelectionMode="Single"
-                  RowHeight="Auto"
                   MinRowHeight="26" />
 
         <Border Grid.Row="3" Style="{StaticResource LiftUpCard}" Padding="10" Margin="0,10,0,0">
