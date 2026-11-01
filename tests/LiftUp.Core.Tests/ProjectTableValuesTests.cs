@@ -26,7 +26,7 @@ public sealed class ProjectTableValuesTests
         var value = Assert.Single(ProjectTableValues.Search(ProjectTableCatalog.Zustandsanalyse, rows, "Aufzugsanlage"));
 
         Assert.Equal("Aufzugsanlage 63879387", value.Text);
-        Assert.Equal("Anlagebezeichnung", value.Detail);
+        Assert.Equal("Anlagebezeichnung · Zustandsanalyse", value.Detail);
     }
 
     [Fact]
@@ -72,7 +72,77 @@ public sealed class ProjectTableValuesTests
         var value = Assert.Single(ProjectTableValues.Search(ProjectTableCatalog.Zustandsanalyse, rows, "schindler"));
 
         Assert.Equal("Schindler", value.Text);
-        Assert.Equal("Servicefirma", value.Detail);
+        Assert.Equal("Servicefirma · Zustandsanalyse", value.Detail);
+    }
+
+    [Fact]
+    public void Spaltenueberschrift_findet_die_werte_der_spalte()
+    {
+        var rows = new[]
+        {
+            Row(("AssetName", "Aufzugsanlage 63879387"), ("Location", "Messligfeldstrasse 1")),
+            Row(("AssetName", "Aufzugsanlage 63879388"), ("Location", "Messligfeldstrasse 1")),
+        };
+
+        // „//Standort“ bietet die erfassten Standorte an, obwohl das Wort in keiner Zelle steht.
+        var found = ProjectTableValues.Search(ProjectTableCatalog.Zustandsanalyse, rows, "Standort");
+
+        Assert.Equal("Messligfeldstrasse 1", Assert.Single(found).Text);
+        Assert.Equal("Standort · Zustandsanalyse", found[0].Detail);
+    }
+
+    [Fact]
+    public void Teil_der_spaltenueberschrift_findet_die_spalte()
+    {
+        var rows = new[] { Row(("AssetName", "8609861"), ("Load", "630")) };
+
+        var found = ProjectTableValues.Search(ProjectTableCatalog.Zustandsanalyse, rows, "Nutzlast");
+
+        Assert.Equal("630", Assert.Single(found).Text);
+        Assert.Equal("Nutzlast (kg) · Zustandsanalyse", found[0].Detail);
+    }
+
+    [Fact]
+    public void Suche_ueber_mehrere_tabellen_nennt_die_herkunft()
+    {
+        var found = ProjectTableValues.Search(
+            [
+                (ProjectTableCatalog.Zustandsanalyse, new[] { Row(("Year", "1994")) }),
+                (ProjectTableCatalog.Investitionsplanung, new[] { Row(("Year", "2026")) }),
+                (ProjectTableCatalog.Anlagedaten, new[] { Row(("Year", "1987")) }),
+            ],
+            "Jahr");
+
+        // „Jahr“ der Investitionsplanung zuerst, dann „Jahrgang“ und „Baujahr“.
+        Assert.Equal(["2026", "1987", "1994"], found.Select(value => value.Text));
+        Assert.Equal(
+            [
+                "Jahr · Investitionsplanung",
+                "Jahrgang · Anlagedaten",
+                "Baujahr · Zustandsanalyse",
+            ],
+            found.Select(value => value.Detail));
+    }
+
+    [Fact]
+    public void Nur_zeilen_des_gewaehlten_projekts_zaehlen()
+    {
+        var project = Guid.NewGuid();
+        var other = Guid.NewGuid();
+
+        ProjectTableRow Lift(Guid projectId, string year) => new()
+        {
+            ProjectId = projectId,
+            TableKey = ProjectTableCatalog.ZustandsanalyseKey,
+            Values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["Year"] = year },
+        };
+
+        var found = ProjectTableValues.Search(
+            [(ProjectTableCatalog.Zustandsanalyse, new[] { Lift(project, "1994"), Lift(other, "2001") })],
+            "Jahr",
+            projectId: project);
+
+        Assert.Equal("1994", Assert.Single(found).Text);
     }
 
     [Fact]

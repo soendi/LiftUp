@@ -55,8 +55,9 @@ public sealed class EditorSearch
     }
 
     /// <summary>
-    /// Gefüllte Felder der Zustandsanalyse zur „//“-Eingabe. Bei mehreren Standorten trägt
-    /// die Anlagebezeichnung ihren Standort mit; eingefügt wird reiner Text.
+    /// Gefüllte Felder der Tabellen zur „//“-Eingabe – nur aus dem gewählten Projekt. Jeder
+    /// Vorschlag nennt Spalte und Herkunft („Jahr · Investitionsplanung“); bei mehreren
+    /// Standorten trägt die Anlagebezeichnung ihren Standort mit. Eingefügt wird reiner Text.
     /// </summary>
     public IReadOnlyList<HtmlEditor.SnippetChoice> SearchTableValues(string query)
     {
@@ -67,9 +68,11 @@ public sealed class EditorSearch
 
         try
         {
-            var rows = _services.ProjectTables.Get(projectId, ProjectTableCatalog.ZustandsanalyseKey);
+            var tables = ProjectTableCatalog.Known
+                .Select(definition => (definition, _services.ProjectTables.Get(projectId, definition.Key)))
+                .ToArray();
 
-            return ProjectTableValues.Search(ProjectTableCatalog.Zustandsanalyse, rows, query)
+            return ProjectTableValues.Search(tables, query, projectId: projectId)
                 .Select(value => new HtmlEditor.SnippetChoice(
                     value.Text,
                     value.Detail,

@@ -47,6 +47,7 @@ public static class ProjectTableCatalog
 {
     public const string ZustandsanalyseKey = "Zustandsanalyse";
     public const string InvestitionsplanungKey = "Investitionsplanung";
+    public const string AnlagedatenKey = "Anlagedaten";
 
     private const string Anlagendaten = "Anlagendaten";
     private const string Analysepunkte = "Analysepunkte";
@@ -147,6 +148,33 @@ public static class ProjectTableCatalog
     };
 
     /// <summary>
+    /// Reiter „1. Anlagedaten“ der Analyse: je Aufzug eine Zeile mit den technischen Angaben
+    /// des Berichts. Die Anlagebezeichnung stammt aus der Zustandsanalyse; das Blatt steht
+    /// nicht als eigene Seite im PDF.
+    /// </summary>
+    public static ProjectTableDefinition Anlagedaten { get; } = new(
+        AnlagedatenKey,
+        "Anlagedaten",
+        [
+            Column("AssetName", "Anlagebezeichnung", ProjectTableColumnKind.Text, 160, string.Empty),
+            Column("LiftType", "Aufzugstyp", ProjectTableColumnKind.Text, 110, string.Empty),
+            Column("Year", "Jahrgang", ProjectTableColumnKind.Number, 80, string.Empty),
+            Column("Drive", "Antrieb", ProjectTableColumnKind.Text, 120, string.Empty),
+            Column("Control", "Steuerung / Regler", ProjectTableColumnKind.Text, 130, string.Empty),
+            Column("Make", "Fabrikat", ProjectTableColumnKind.Text, 110, string.Empty),
+            Column("Load", "Nutzlast", ProjectTableColumnKind.Number, 80, string.Empty),
+            Column("Speed", "Geschwindigkeit", ProjectTableColumnKind.Number, 100, string.Empty),
+            Column("Stops", "Haltestellen", ProjectTableColumnKind.Number, 90, string.Empty),
+            Column("Entrances", "Zugänge", ProjectTableColumnKind.Number, 80, string.Empty),
+            Column("Travel", "Förderhöhe", ProjectTableColumnKind.Number, 90, string.Empty),
+            Column("MachineRoom", "Maschinenraum", ProjectTableColumnKind.Text, 120, string.Empty),
+            Column("CabinFinish", "Kabinenabschluss", ProjectTableColumnKind.Text, 120, string.Empty),
+            Column("LandingDoors", "Schachttüren", ProjectTableColumnKind.Text, 110, string.Empty),
+            Column("ShaftDesign", "Schachtausführung", ProjectTableColumnKind.Text, 120, string.Empty),
+            Column("Pit", "Auffahrsockel", ProjectTableColumnKind.Text, 110, string.Empty),
+        ]);
+
+    /// <summary>
     /// Spalten, die in beiden Tabellen vorkommen. Eine Zeile der Zustandsanalyse legt die
     /// passende Zeile der Investitionsplanung an und füllt diese Angaben von dort.
     /// </summary>
@@ -156,8 +184,15 @@ public static class ProjectTableCatalog
     /// <summary>Alle Tabellen in der Reihenfolge, in der sie im PDF erscheinen.</summary>
     public static IReadOnlyList<ProjectTableDefinition> All { get; } = [Zustandsanalyse, Investitionsplanung];
 
+    /// <summary>
+    /// Alle Tabellen, die die Anwendung kennt – auch „Anlagedaten“, das nicht als eigenes
+    /// Blatt ins PDF kommt. Die Schlüssel dienen zugleich als Name in der Oberfläche.
+    /// </summary>
+    public static IReadOnlyList<ProjectTableDefinition> Known { get; } =
+        [Anlagedaten, Zustandsanalyse, Investitionsplanung];
+
     public static ProjectTableDefinition? Find(string key) =>
-        All.FirstOrDefault(definition => string.Equals(definition.Key, key, StringComparison.OrdinalIgnoreCase));
+        Known.FirstOrDefault(definition => string.Equals(definition.Key, key, StringComparison.OrdinalIgnoreCase));
 
     private static ProjectTableColumn Column(
         string key,

@@ -31,6 +31,7 @@ public partial class ProjectTableView : UserControl
     private readonly ObservableCollection<ProjectTableRowModel> _rows = [];
     private readonly List<SnippetOption> _snippets = [];
     private readonly List<SnippetOption> _matches = [];
+    private readonly Func<Guid, IReadOnlyList<ProjectTableRowInput>>? _draftRows;
 
     private TextBox? _editingBox;
     private int _slashIndex = -1;
@@ -40,15 +41,21 @@ public partial class ProjectTableView : UserControl
     /// <c>false</c>, wenn die Tabelle in einem Reiter mit eigener Projektauswahl steht
     /// (etwa „1. Anlagedaten“ der Analyse); das Projekt kommt dann über <see cref="SelectProject"/>.
     /// </param>
+    /// <param name="draftRows">
+    /// Zeilen, die ohne gespeicherte Angaben als Vorschlag erscheinen – etwa je Aufzug der
+    /// Zustandsanalyse eine Zeile. Gespeichert wird erst auf Knopfdruck.
+    /// </param>
     public ProjectTableView(
         AppServices services,
         ProjectTableDefinition definition,
         ProjectSelection selection,
-        bool showProjectSelector = true)
+        bool showProjectSelector = true,
+        Func<Guid, IReadOnlyList<ProjectTableRowInput>>? draftRows = null)
     {
         _services = services;
         _definition = definition;
         _selection = selection;
+        _draftRows = draftRows;
 
         InitializeComponent();
 
@@ -119,6 +126,9 @@ public partial class ProjectTableView : UserControl
         }
     }
 
+    /// <summary>Ob die Tabelle Zeilen hat – die Analyse färbt damit den Reiter „1. Anlagedaten“.</summary>
+    public bool HasRows => _rows.Count > 0;
+
     private void LoadSnippets()
     {
         try
@@ -169,6 +179,21 @@ public partial class ProjectTableView : UserControl
             foreach (var row in _services.ProjectTables.Get(project.Id, _definition.Key))
             {
                 _rows.Add(new ProjectTableRowModel(row));
+            }
+
+            // Ohne gespeicherte Zeilen entstehen so viele, wie die Zustandsanalyse Aufzüge hat.
+            if (_rows.Count == 0 && _draftRows is not null)
+            {
+                foreach (var draft in _draftRows(project.Id))
+                {
+                    var model = new ProjectTableRowModel();
+                    foreach (var column in _definition.Columns)
+                    {
+                        model[column.Key] = draft.Values.TryGetValue(column.Key, out var value) ? value : string.Empty;
+                    }
+
+                    _rows.Add(model);
+                }
             }
 
             InfoText.Text = _rows.Count == 1

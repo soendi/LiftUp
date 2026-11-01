@@ -1,5 +1,7 @@
 using System.IO;
+using System.Net;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -542,8 +544,28 @@ public partial class HtmlEditor : UserControl
                 }
             }, true);
 
+            // Meldet der Anwendung, ob im Text etwas steht – die Analyse färbt damit ihre Reiter.
+            window.liftupHasContent = function () {
+                var body = document.body;
+                if (!body) {
+                    return false;
+                }
+                if (body.querySelector('img, table, ul, ol')) {
+                    return true;
+                }
+                return !!body.textContent.replace(/\u00a0/g, ' ').trim();
+            };
+
             document.addEventListener('input', function () {
                 window.liftupSnippetQuery();
+                try {
+                    window.chrome.webview.postMessage(JSON.stringify({
+                        type: 'changed',
+                        filled: window.liftupHasContent()
+                    }));
+                } catch (error) {
+                    // Ohne Verbindung zur Anwendung bleibt die Farbe beim letzten Stand.
+                }
             });
 
             // Ein Klick in den Text beendet die Vorschläge, die nicht mehr zur Stelle passen.
@@ -901,10 +923,28 @@ public partial class HtmlEditor : UserControl
     private Func<string, bool, IReadOnlyList<ImageChoice>>? _imageSearch;
     private Func<string, IReadOnlyList<SnippetChoice>>? _tableSearch;
 
+    /// <summary>Meldet jede Änderung im Text – die Analyse färbt damit ihre Reiter.</summary>
+    public event EventHandler? ContentChanged;
+
+    /// <summary><c>true</c>, solange Text, eine Liste, eine Tabelle oder ein Bild im Feld steht.</summary>
+    public bool HasText { get; private set; }
+
     public HtmlEditor()
     {
         InitializeComponent();
         Loaded += OnLoaded;
+
+        // Ohne WebView2 zählt der Ersatztext; die Reiterfarbe soll auch dort mitgehen.
+        FallbackBox.TextChanged += (_, _) =>
+        {
+            if (!_failed)
+            {
+                return;
+            }
+
+            HasText = !string.IsNullOrWhiteSpace(FallbackBox.Text);
+            ContentChanged?.Invoke(this, EventArgs.Empty);
+        };
 
         // Das Vorschlagenfenster ist ein eigenes Fenster über dem Editor und
         // verschwindet mit ihm.
@@ -915,6 +955,7 @@ public partial class HtmlEditor : UserControl
     public void SetHtml(string? html)
     {
         _pendingHtml = html ?? string.Empty;
+        HasText = HasVisibleContent(_pendingHtml);
 
         if (_failed)
         {
@@ -1294,6 +1335,13 @@ public partial class HtmlEditor : UserControl
                 return;
             }
 
+            if (kind == "changed")
+            {
+                HasText = root.TryGetProperty("filled", out var filled) && filled.ValueKind == JsonValueKind.True;
+                ContentChanged?.Invoke(this, EventArgs.Empty);
+                return;
+            }
+
             if (kind == "snippetShow")
             {
                 ShowSnippets(root);
@@ -1490,6 +1538,30 @@ public partial class HtmlEditor : UserControl
         {
             // Formatierung ist eine Bedienhilfe; ein Fehlschlag darf die Eingabe nicht stören.
         }
+    }
+
+    /// <summary>
+    /// Ob im HTML etwas Sichtbares steht: Text, eine Liste, eine Tabelle oder ein Bild.
+    /// Leere Absätze und Platzhalter zählen nicht.
+    /// </summary>
+    private static bool HasVisibleContent(string? html)
+    {
+        if (string.IsNullOrWhiteSpace(html))
+        {
+            return false;
+        }
+
+        if (html.Contains("<img", StringComparison.OrdinalIgnoreCase)
+            || html.Contains("<table", StringComparison.OrdinalIgnoreCase)
+            || html.Contains("<ul", StringComparison.OrdinalIgnoreCase)
+            || html.Contains("<ol", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var text = Regex.Replace(html, "<[^>]*>", " ")
+            .Replace("&nbsp;", " ", StringComparison.OrdinalIgnoreCase);
+        return !string.IsNullOrWhiteSpace(WebUtility.HtmlDecode(text));
     }
 
     /// <summary>Chromium liefert für ein leeres Feld Platzhalter wie <c>&lt;br&gt;</c>.</summary>

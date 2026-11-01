@@ -50,6 +50,40 @@ public sealed class ProjectTableTests
         new(values.ToDictionary(pair => pair.Key, pair => pair.Value));
 
     [Fact]
+    public void Anlagedaten_hat_die_spalten_des_berichts()
+    {
+        var definition = ProjectTableCatalog.Anlagedaten;
+
+        Assert.Equal(ProjectTableCatalog.AnlagedatenKey, ProjectTableCatalog.Find("Anlagedaten")?.Key);
+        Assert.Equal(
+            [
+                "Anlagebezeichnung", "Aufzugstyp", "Jahrgang", "Antrieb", "Steuerung / Regler",
+                "Fabrikat", "Nutzlast", "Geschwindigkeit", "Haltestellen", "Zugänge", "Förderhöhe",
+                "Maschinenraum", "Kabinenabschluss", "Schachttüren", "Schachtausführung", "Auffahrsockel",
+            ],
+            definition.Columns.Select(column => column.Label));
+    }
+
+    [Fact]
+    public void Anlagedaten_werden_gespeichert_und_gelesen()
+    {
+        using var fixture = new TestDatabase();
+        var session = fixture.LoginAsAdmin();
+        var projects = new ProjectService(fixture.Database, session);
+        var tables = new ProjectTableService(fixture.Database, session);
+        var project = projects.Create(Input(Path.Combine(fixture.Root, "p1")));
+
+        tables.Save(project.Id, ProjectTableCatalog.AnlagedatenKey,
+        [
+            Row(("AssetName", "8609861 (Messligfeldstrasse 1)"), ("Year", "1994"), ("Speed", "1.6")),
+        ]);
+
+        var rows = tables.Get(project.Id, ProjectTableCatalog.AnlagedatenKey);
+        Assert.Equal("8609861 (Messligfeldstrasse 1)", Assert.Single(rows).Values["AssetName"]);
+        Assert.Equal("1.6", rows[0].Values["Speed"]);
+    }
+
+    [Fact]
     public void Zustandsanalyse_wird_gespeichert_und_gelesen()
     {
         using var fixture = new TestDatabase();

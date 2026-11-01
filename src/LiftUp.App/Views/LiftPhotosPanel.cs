@@ -29,6 +29,12 @@ public sealed class LiftPhotosPanel : Grid
     private readonly Button _edit = new() { Content = "Markieren …", IsEnabled = false };
     private readonly Button _remove = new() { Content = "Entfernen", IsEnabled = false };
 
+    /// <summary>Meldet, wenn Fotos hinzukommen oder wegfallen – für die Farbe des Reiters.</summary>
+    public event EventHandler? PhotosChanged;
+
+    /// <summary>Anzahl der Fotos in der Liste.</summary>
+    public int PhotoCount => _rows.Count;
+
     public LiftPhotosPanel(AppServices services, Guid projectId, string liftKey)
     {
         _services = services;
@@ -183,6 +189,7 @@ public sealed class LiftPhotosPanel : Grid
             _rows.Add(row);
             _list.SelectedItem = row;
             _info.Text = "Foto übernommen – bitte speichern.";
+            PhotosChanged?.Invoke(this, EventArgs.Empty);
         }
         catch (LiftUpException exception)
         {
@@ -229,6 +236,7 @@ public sealed class LiftPhotosPanel : Grid
 
         _rows.Remove(row);
         _info.Text = "Foto entfernt – bitte speichern. Die Bilddatei bleibt im Projektordner.";
+        PhotosChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private void OnSaveClick(object sender, RoutedEventArgs e)
@@ -253,6 +261,7 @@ public sealed class LiftPhotosPanel : Grid
             }
 
             _info.Text = saved.Count == 1 ? "Gespeichert: 1 Foto." : $"Gespeichert: {saved.Count} Fotos.";
+            PhotosChanged?.Invoke(this, EventArgs.Empty);
         }
         catch (LiftUpException exception)
         {

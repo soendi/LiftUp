@@ -293,19 +293,31 @@ lesbar. Textbausteine werden bewusst als HTML eingefügt.
 **Reiter „Analyse“:** Die Analyse wird direkt in LiftUp erfasst, statt sie beim Erstellen jedes
 Dokuments neu zu tippen. Der Reiter folgt dem Bericht:
 
-- **1. Anlagedaten** – die Datenaufnahme der Aufzüge als Tabelle, dieselbe wie unter
-  „Zustandsanalyse“. Das Projekt kommt aus der Auswahl oben, die Tabelle zieht mit.
+- **1. Anlagedaten** – je Aufzug eine Zeile mit Anlagebezeichnung, Aufzugstyp, Jahrgang,
+  Antrieb, Steuerung / Regler, Fabrikat, Nutzlast, Geschwindigkeit, Haltestellen, Zugänge,
+  Förderhöhe, Maschinenraum, Kabinenabschluss, Schachttüren, Schachausführung und Auffahrsockel.
+  Ohne gespeicherte Angaben entstehen so viele Zeilen, wie die Zustandsanalyse Aufzüge hat; die
+  Anlagebezeichnung wird von dort übernommen, bei mehreren Standorten mit Standort. Das Projekt
+  kommt aus der Auswahl oben, die Tabelle zieht mit.
 - **2. Analyse** – je Analysepunkt ein Unter-Reiter: 2.1 Aggregat, 2.2 Hubzylinder / Tragmittel,
   2.3 Steuerung / Regler, 2.4 Regulator (Geschwindigkeitsbegrenzer), 2.5 Fangvorrichtung,
   2.6 Kabine / Triebmechanik und 2.7 Zugänglichkeit.
 - **3. Fazit / Empfehlung** – 3.1 Fazit und Empfehlung als abschließender Text.
 - **4. Fotos** – Fotos je Aufzug (siehe unten).
 
+Die Reiter zeigen auf einen Blick, wo noch etwas fehlt: Sie sind **hellrot**, solange nichts
+erfasst ist, und **hellgrün**, sobald etwas da ist – ein Haupttitel wird grün, sobald einer seiner
+Unter-Reiter Inhalt hat. Die Farbe folgt dem Text beim Tippen, den Fotos beim Hinzufügen und bei
+„1. Anlagedaten“ den Zeilen der Tabelle.
+
 Die Texte gehören zum Projekt: „Speichern“ gilt für alle Unterpunkte, leere bleiben im Dokument
 weg. In jedem dieser Textfelder sucht `/` nach Textbausteinen, `&` nach den Bildern des Projekts,
-`&&` zusätzlich in der globalen Bibliothek und `//` nach den gefüllten Feldern der
-Zustandsanalyse: `//Aufzugsanlage` bietet die passenden Anlagebezeichnungen an und fügt eine davon
-als Text ein. Sind mehrere Standorte erfasst, steht der Standort dabei – in der Vorschlagsliste
+`&&` zusätzlich in der globalen Bibliothek und `//` nach den gefüllten Feldern der Tabellen
+(Zustandsanalyse, Investitionsplanung und Anlagedaten). Gesucht wird über die
+Spaltenüberschrift oder den Wert: `//Standort` bietet die erfassten Standorte an, `//Jahr` das
+Baujahr der Anlage, das Jahrgang der Anlagedaten und das Jahr der Investitionsplanung. Jeder
+Vorschlag nennt in der zweiten Zeile Spalte und Herkunft („Jahr · Investitionsplanung“); eine
+Zeile wird als Text eingefügt. Gesucht wird ausschließlich im aktuell gewählten Projekt. Sind mehrere Standorte erfasst, steht der Standort dabei – in der Vorschlagsliste
 und im eingefügten Text: „Aufzugsanlage 938702809 (Messligfeldstrasse 1)“.
 
 Außerhalb der Analyse gilt dasselbe im Dokument-Editor und in den Tabellenzellen der
