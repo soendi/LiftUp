@@ -36,10 +36,9 @@ public static class ProjectTableSheet
 
         // Feste Spaltenbreiten und gedrehte Überschriften halten die Tabelle in der
         // Seitenbreite; ohne table-layout würde der Browser die Spalten wieder aufblähen.
-        var rotated = definition.Columns.Select(RotateHeader).ToArray();
         builder.Append("<table style=\"width:100%;table-layout:fixed;border-collapse:collapse;font-size:6.8pt;\">");
-        AppendColumnWidths(builder, definition.Columns, rotated);
-        AppendHead(builder, definition.Columns, rotated);
+        AppendColumnWidths(builder, definition.Columns);
+        AppendHead(builder, definition.Columns);
         builder.Append("<tbody>");
 
         foreach (var row in rows)
@@ -48,11 +47,17 @@ public static class ProjectTableSheet
             foreach (var column in definition.Columns)
             {
                 var value = row.Values.TryGetValue(column.Key, out var found) ? found : string.Empty;
+
+                // Bewertungen zeigen nur die Farbe; was sie bedeutet, steht in der Legende.
+                if (column.Kind == ProjectTableColumnKind.Rating)
+                {
+                    var fill = RatingBackground(value) ?? "#ffffff";
+                    builder.Append($"<td style=\"border:1px solid #9aa3ac;padding:2pt;background:{fill};\">&#160;</td>");
+                    continue;
+                }
+
                 var align = column.Kind == ProjectTableColumnKind.Number ? "right" : "left";
-                var background = column.Kind == ProjectTableColumnKind.Rating ? RatingBackground(value) : null;
-                var style = background is null
-                    ? $"border:1px solid #9aa3ac;padding:2pt;text-align:{align};vertical-align:top;overflow-wrap:anywhere;"
-                    : $"border:1px solid #9aa3ac;padding:2pt;text-align:{align};vertical-align:top;overflow-wrap:anywhere;background:{background};";
+                var style = $"border:1px solid #9aa3ac;padding:2pt;text-align:{align};vertical-align:top;overflow-wrap:anywhere;";
 
                 builder.Append($"<td style=\"{style}\">").Append(Encode(value)).Append("</td>");
             }
@@ -127,44 +132,24 @@ public static class ProjectTableSheet
     }
 
     /// <summary>
-    /// Lange Überschrift bei kurzen Werten (Bewertungen, Zahlen, ja/nein): Die Überschrift wird
-    /// um 90° gedreht und braucht nur noch die Breite der Werte.
+    /// Gewicht einer Spalte: Farbfelder und Zahlen brauchen nur die Breite ihrer Werte,
+    /// Textspalten behalten die gewünschte Breite.
     /// </summary>
-    private static bool RotateHeader(ProjectTableColumn column)
+    private static double ColumnWeight(ProjectTableColumn column) => column.Kind switch
     {
-        var label = column.Label.Trim();
-        if (label.Length < 12)
-        {
-            return false;
-        }
-
-        if (column.Kind is ProjectTableColumnKind.Number or ProjectTableColumnKind.Rating)
-        {
-            return true;
-        }
-
-        return column.Options.Count > 0 && column.Options.All(option => option.Length <= 18);
-    }
+        ProjectTableColumnKind.Rating => 24,
+        ProjectTableColumnKind.Number or ProjectTableColumnKind.Date => 55,
+        _ => Math.Max(column.Width, 40),
+    };
 
     /// <summary>
-    /// Spaltenbreiten in Prozent der Seitenbreite: Gedrehte Überschriften bekommen nur den Platz
-    /// ihrer Werte, Textspalten behalten die gewünschte Breite. Zusammen ergibt das genau 100 %,
+    /// Spaltenbreiten in Prozent der Seitenbreite: Die gedrehten Überschriften brauchen keine
+    /// Breite mehr, also bestimmen die Werte den Platz. Zusammen ergibt das genau 100 %,
     /// damit die Tabelle auf die A4-Querseite passt.
     /// </summary>
-    private static void AppendColumnWidths(
-        StringBuilder builder,
-        IReadOnlyList<ProjectTableColumn> columns,
-        IReadOnlyList<bool> rotated)
+    private static void AppendColumnWidths(StringBuilder builder, IReadOnlyList<ProjectTableColumn> columns)
     {
-        var weights = new double[columns.Count];
-        for (var index = 0; index < columns.Count; index++)
-        {
-            var column = columns[index];
-            weights[index] = rotated[index]
-                ? column.Kind == ProjectTableColumnKind.Rating ? 95 : 55
-                : Math.Max(column.Width, 40);
-        }
-
+        var weights = columns.Select(ColumnWeight).ToArray();
         var total = weights.Sum();
         builder.Append("<colgroup>");
         for (var index = 0; index < columns.Count; index++)
@@ -176,11 +161,11 @@ public static class ProjectTableSheet
         builder.Append("</colgroup>");
     }
 
-    /// <summary>Kopfzeilen: zuerst die Gruppen (mit Spannen), darunter die Spalten selbst.</summary>
-    private static void AppendHead(
-        StringBuilder builder,
-        IReadOnlyList<ProjectTableColumn> columns,
-        IReadOnlyList<bool> rotated)
+    /// <summary>
+    /// Kopfzeilen: zuerst die Gruppen (mit Spannen), darunter die Spalten selbst – alle
+    /// Überschriften um 90° gedreht, damit die schmalen Spalten nicht am Titel hängen.
+    /// </summary>
+    private static void AppendHead(StringBuilder builder, IReadOnlyList<ProjectTableColumn> columns)
     {
         builder.Append("<thead>");
 
@@ -207,24 +192,15 @@ public static class ProjectTableSheet
         }
 
         builder.Append("<tr>");
-        for (var index = 0; index < columns.Count; index++)
+        foreach (var column in columns)
         {
-            var column = columns[index];
             const string style =
                 "border:1px solid #9aa3ac;padding:2pt;text-align:left;vertical-align:bottom;background:#eef1f4;";
 
-            if (rotated[index])
-            {
-                builder.Append($"<th style=\"{style}\">")
-                    .Append("<div style=\"writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;\">")
-                    .Append(Encode(column.Label))
-                    .Append("</div></th>");
-                continue;
-            }
-
             builder.Append($"<th style=\"{style}\">")
+                .Append("<div style=\"writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;\">")
                 .Append(Encode(column.Label))
-                .Append("</th>");
+                .Append("</div></th>");
         }
 
         builder.Append("</tr></thead>");
@@ -245,7 +221,7 @@ public static class ProjectTableSheet
         "Anlagendaten" => "#f4b183",
         "Analysepunkte" => "#d5c6e0",
         "ESBA" => "#c5d9b0",
-        "Ersatzteilverfügbarkeit" => "#cfe0ea",
+        "Ersatzteilverfgbk." => "#cfe0ea",
         "Variante 1 – Modernisierung" => "#9dc3e6",
         "Variante 2 – Ersatzanlage" => "#f0b7b7",
         _ => "#eef1f4",

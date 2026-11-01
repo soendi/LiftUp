@@ -36,19 +36,34 @@ public sealed class ProjectTableLayoutTests
     }
 
     [Fact]
-    public void Lange_ueberschriften_mit_kurzen_werten_stehen_gedreht()
+    public void Alle_ueberschriften_stehen_gedreht()
     {
         var html = ProjectTableSheet.Render(ProjectTableCatalog.Zustandsanalyse, [Row()], pageBreak: false);
 
-        Assert.Contains("writing-mode:vertical-rl", html);
+        // Jede Spalte bekommt die gedrehte Überschrift – auch die kurzen Titel.
+        Assert.Equal(
+            ProjectTableCatalog.Zustandsanalyse.Columns.Count,
+            Regex.Matches(html, "writing-mode:vertical-rl").Count);
 
-        // Lange Bewertungs- und Zahlenspalten sind gedreht …
         Assert.Contains(">Regulator (Geschwindigkeitsbegrenzer)</div>", html);
         Assert.Contains(">Anzahl Wartungen pro Jahr</div>", html);
+        Assert.Contains(">Anlagebezeichnung</div>", html);
+        Assert.Contains(">Baujahr</div>", html);
+        Assert.Contains(">Ersatzteilverfgbk.</th>", html);
+    }
 
-        // … Textspalten mit langen Einträgen und kurze Titel bleiben waagerecht.
-        Assert.Contains(">Anlagebezeichnung</th>", html);
-        Assert.Contains(">Baujahr</th>", html);
+    [Fact]
+    public void Bewertungen_zeigen_nur_die_farbe()
+    {
+        var html = ProjectTableSheet.Render(ProjectTableCatalog.Zustandsanalyse, [Row()], pageBreak: false);
+
+        // Der Text der Bewertung fehlt in der Zelle, die Farbe bleibt.
+        Assert.DoesNotContain(">gut</td>", html);
+        Assert.DoesNotContain(">in Ordnung</td>", html);
+        Assert.Contains("background:#a9d18e;", html);
+
+        // Die Legende erklärt die Farben weiterhin.
+        Assert.Contains("grün = gut, gelb = mässig, rot = schlecht.", html);
     }
 
     [Fact]

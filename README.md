@@ -108,9 +108,11 @@ stehen; Zeilen zu Aufzügen, die es in der Zustandsanalyse nicht mehr gibt, blei
 Angaben erhalten.
 
 Bewertungen, ja/nein und die Aufzugsart werden aus einer Auswahlliste gewählt (Spaltenkopf zeigt die
-möglichen Werte). Im PDF bekommen die Bewertungszellen dieselben Farben wie im Excel: grün gut /
-in Ordnung / verfügbar, gelb mässig / bedingt verfügbar, rot schlecht / nicht in Ordnung / nicht
-verfügbar. Das Blatt übernimmt auch die Gruppenköpfe und den Hinweistext der Vorlage.
+möglichen Werte). Im PDF zeigen die Bewertungszellen nur die Farbe, der Text steht in der Legende:
+grün gut / in Ordnung / verfügbar, gelb mässig / bedingt verfügbar, rot schlecht / nicht in Ordnung /
+nicht verfügbar. Damit die vorderen Spalten mehr Platz haben, stehen im PDF alle Spaltenköpfe um 90°
+gedreht, und der Gruppenkopf heisst dort „Ersatzteilverfgbk.“. Das Blatt übernimmt auch die
+Gruppenköpfe und den Hinweistext der Vorlage.
 
 Beide Reiter haben oben die Projektauswahl. In Textfeldern öffnet ein eingetipptes `/` die
 Textbausteine; weitere Buchstaben filtern die Liste (Pfeiltasten wählen, Eingabe übernimmt,

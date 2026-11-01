@@ -51,7 +51,8 @@ public static class ProjectTableCatalog
     private const string Anlagendaten = "Anlagendaten";
     private const string Analysepunkte = "Analysepunkte";
     private const string Esba = "ESBA";
-    private const string Ersatzteile = "Ersatzteilverfügbarkeit";
+    /// <summary>Gekürzt, damit der Gruppenkopf im PDF die Spalten nicht breit macht.</summary>
+    private const string Ersatzteile = "Ersatzteilverfgbk.";
     private const string VarianteModernisierung = "Variante 1 – Modernisierung";
     private const string VarianteErsatz = "Variante 2 – Ersatzanlage";
 
