@@ -31,10 +31,13 @@ public static class ProjectStatusCatalog
 /// <summary>Unterordner, die in jedem Projektordner angelegt werden.</summary>
 public static class ProjectFolders
 {
+    /// <summary>Unterordner für die Bilder eines Projekts; hier landet auch das Projektbild.</summary>
+    public const string Images = "02_Bilder";
+
     public static IReadOnlyList<string> Standard { get; } =
     [
         "01_Dokumente",
-        "02_Bilder",
+        Images,
         "03_PDF",
         "04_Vorlagen",
     ];
@@ -86,6 +89,12 @@ public sealed class Project
     /// <summary>Ansprechpersonen beim Kunden, in der eingegebenen Reihenfolge.</summary>
     public List<ProjectContact> Contacts { get; set; } = [];
 
+    /// <summary>Ansprechpersonen beim Auftraggeber, in der eingegebenen Reihenfolge.</summary>
+    public List<ProjectContact> ClientContacts { get; set; } = [];
+
+    /// <summary>Meilensteine des Projekts, etwa die Begehung vor Ort.</summary>
+    public List<ProjectMilestone> Milestones { get; set; } = [];
+
     /// <summary>Anschrift in einer Zeile, z. B. „Hauptstraße 12, 12345 Musterstadt“.</summary>
     public string CustomerAddress => ComposeAddress(CustomerStreet, CustomerLine2, CustomerZip, CustomerCity);
 
@@ -111,6 +120,12 @@ public sealed class Project
 
     /// <summary>Absoluter Pfad des Projektordners, kann auf jedem Laufwerk liegen.</summary>
     public string FolderPath { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Bild für das Deckblatt. Beim Speichern wird die gewählte Datei in den Bilderordner des
+    /// Projekts kopiert; hier steht danach der Pfad im Projektordner.
+    /// </summary>
+    public string? ImagePath { get; set; }
 
     public ProjectStatus Status { get; set; } = ProjectStatus.Active;
 
@@ -150,26 +165,47 @@ public sealed class ProjectInput
     public string? ClientZip { get; set; }
     public string? ClientCity { get; set; }
 
-    /// <summary>Ansprechpersonen; leere Zeilen werden beim Speichern ignoriert.</summary>
+    /// <summary>Ansprechpersonen beim Kunden; leere Zeilen werden beim Speichern ignoriert.</summary>
     public IReadOnlyList<ProjectContactInput> Contacts { get; set; } = [];
 
-    /// <summary>Name der ersten Ansprechperson, abgeleitet aus <see cref="Contacts"/>.</summary>
+    /// <summary>Ansprechpersonen beim Auftraggeber; leere Zeilen werden beim Speichern ignoriert.</summary>
+    public IReadOnlyList<ProjectContactInput> ClientContacts { get; set; } = [];
+
+    /// <summary>Meilensteine; leere Zeilen werden beim Speichern ignoriert.</summary>
+    public IReadOnlyList<ProjectMilestoneInput> Milestones { get; set; } = [];
+
+    /// <summary>Name der ersten Ansprechperson beim Kunden, abgeleitet aus <see cref="Contacts"/>.</summary>
     public string? PrimaryContact => Contacts.Count > 0 ? Contacts[0].Name : null;
 
     public string? Description { get; set; }
     public Guid? ResponsibleUserId { get; set; }
     public string FolderPath { get; set; } = string.Empty;
+
+    /// <summary>Gewähltes Bild für das Deckblatt; wird beim Speichern in den Projekttordner kopiert.</summary>
+    public string? ImagePath { get; set; }
+
     public ProjectStatus Status { get; set; } = ProjectStatus.Active;
 
     /// <summary>Ordner samt Unterordnern anlegen, wenn er noch nicht existiert.</summary>
     public bool CreateFolderIfMissing { get; set; } = true;
 }
 
-/// <summary>Ansprechperson beim Kunden.</summary>
+/// <summary>Zu wem eine Ansprechperson gehört: Kunde oder Auftraggeber.</summary>
+public enum ProjectContactKind
+{
+    Customer = 0,
+    Client = 1,
+}
+
+/// <summary>Ansprechperson beim Kunden oder beim Auftraggeber.</summary>
 public sealed class ProjectContact
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid ProjectId { get; set; }
+
+    /// <summary>Kunde oder Auftraggeber; bestimmt, in welcher Liste die Person erscheint.</summary>
+    public ProjectContactKind Kind { get; set; } = ProjectContactKind.Customer;
+
     public string Name { get; set; } = string.Empty;
     public string? Email { get; set; }
     public string? Phone { get; set; }
@@ -196,10 +232,52 @@ public sealed class ProjectContact
 /// <summary>Eingabe einer Ansprechperson aus dem Projektdialog.</summary>
 public sealed class ProjectContactInput
 {
+    /// <summary>Kunde oder Auftraggeber.</summary>
+    public ProjectContactKind Kind { get; set; } = ProjectContactKind.Customer;
+
     public string Name { get; set; } = string.Empty;
     public string? Email { get; set; }
     public string? Phone { get; set; }
     public string? Responsibility { get; set; }
+}
+
+/// <summary>Ein Meilenstein im Projekt, etwa die Begehung vor Ort.</summary>
+public sealed class ProjectMilestone
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid ProjectId { get; set; }
+    public string Title { get; set; } = string.Empty;
+
+    /// <summary>Abgehakt: der Meilenstein ist erledigt.</summary>
+    public bool IsDone { get; set; }
+
+    /// <summary>Datum, an dem der Meilenstein erledigt wurde.</summary>
+    public DateTime? DoneDate { get; set; }
+
+    public int SortOrder { get; set; }
+
+    /// <summary>Anzeige für Listen: „erledigt am 30.07.2026“ oder „offen“.</summary>
+    public string StatusText => IsDone
+        ? DoneDate is { } date ? $"erledigt am {date:dd.MM.yyyy}" : "erledigt"
+        : "offen";
+}
+
+/// <summary>Feste Meilensteine, die jedes Projekt mitbringt.</summary>
+public static class ProjectMilestoneCatalog
+{
+    /// <summary>
+    /// Die Begehung vor Ort. Ihr Titel ist fest und sie kann nicht entfernt werden;
+    /// ihr Datum steht auf dem Deckblatt.
+    /// </summary>
+    public const string Inspection = "Begehung";
+}
+
+/// <summary>Eingabe eines Meilensteins aus dem Projektdialog.</summary>
+public sealed class ProjectMilestoneInput
+{
+    public string Title { get; set; } = string.Empty;
+    public bool IsDone { get; set; }
+    public DateTime? DoneDate { get; set; }
 }
 
 public enum ProjectSort

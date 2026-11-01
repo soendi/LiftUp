@@ -12,7 +12,7 @@ namespace LiftUp.Core.Data;
 /// </summary>
 public sealed class Database
 {
-    public const int CurrentSchemaVersion = 16;
+    public const int CurrentSchemaVersion = 21;
 
     private readonly string _connectionString;
 
@@ -169,6 +169,22 @@ public sealed class Database
         MigrateTemplateSectionContent(connection);
         EnsureReportTemplate(connection);
 
+        // Version 17 ordnet Ansprechpersonen dem Kunden oder dem Auftraggeber zu.
+        MigrateProjectContactParty(connection);
+
+        // Version 18 ergänzt das Projektbild für das Deckblatt.
+        MigrateProjectImage(connection);
+
+        // Version 19 ergänzt die Anschrift der eigenen Firma am Benutzer.
+        MigrateUserCompanyAddress(connection);
+
+        // Version 20 ergänzt Meilensteine je Projekt und das neue Deckblatt.
+        MigrateProjectMilestones(connection);
+
+        // Version 21 ergänzt das Firmenlogo am Benutzer; das Deckblatt zeigt es oben an.
+        MigrateUserCompanyLogo(connection);
+        UpgradeReportCover(connection);
+
         using var command = Db.Command(connection, "UPDATE SchemaInfo SET Version = $version;");
         command.With("$version", CurrentSchemaVersion);
         command.ExecuteNonQuery();
@@ -310,6 +326,56 @@ public sealed class Database
     }
 
     /// <summary>
+    /// Version 18: Bild für das Deckblatt am Projekt. Bestehende Projekte bleiben ohne Bild.
+    /// </summary>
+    private static void MigrateProjectImage(SqliteConnection connection)
+    {
+        var existing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using (var info = Db.Command(connection, "PRAGMA table_info(Projects);"))
+        using (var reader = info.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                existing.Add(reader.GetString(1));
+            }
+        }
+
+        if (existing.Contains("ImagePath"))
+        {
+            return;
+        }
+
+        using var alter = Db.Command(connection, "ALTER TABLE Projects ADD COLUMN ImagePath TEXT NULL;");
+        alter.ExecuteNonQuery();
+    }
+
+    /// <summary>
+    /// Version 17: Ansprechpersonen gehören entweder zum Kunden oder zum Auftraggeber.
+    /// Bestehende Zeilen bleiben beim Kunden (Wert 0).
+    /// </summary>
+    private static void MigrateProjectContactParty(SqliteConnection connection)
+    {
+        var existing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using (var info = Db.Command(connection, "PRAGMA table_info(ProjectContacts);"))
+        using (var reader = info.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                existing.Add(reader.GetString(1));
+            }
+        }
+
+        if (existing.Contains("Party"))
+        {
+            return;
+        }
+
+        using var alter = Db.Command(
+            connection, "ALTER TABLE ProjectContacts ADD COLUMN Party INTEGER NOT NULL DEFAULT 0;");
+        alter.ExecuteNonQuery();
+    }
+
+    /// <summary>
     /// Version 8: Rollen speichern ihre Rechte als Maske, die beim Anlegen einmalig
     /// geschrieben wird. Später ergänzte Rechte – etwa <c>ManageSnippets</c> – fehlten
     /// dadurch in älteren Datenbanken selbst beim Administrator. Er gilt in der
@@ -409,6 +475,136 @@ public sealed class Database
             using var alter = Db.Command(connection, $"ALTER TABLE Users ADD COLUMN {name} {definition};");
             alter.ExecuteNonQuery();
         }
+    }
+
+    /// <summary>
+    /// Version 19: Anschrift der eigenen Firma am Benutzer. Bestehende Konten bleiben leer,
+    /// bis sie ihre Angaben erfassen.
+    /// </summary>
+    private static void MigrateUserCompanyAddress(SqliteConnection connection)
+    {
+        var existing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using (var info = Db.Command(connection, "PRAGMA table_info(Users);"))
+        using (var reader = info.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                existing.Add(reader.GetString(1));
+            }
+        }
+
+        (string Name, string Definition)[] additions =
+        [
+            ("CompanyStreet", "TEXT NULL"),
+            ("CompanyZip", "TEXT NULL"),
+            ("CompanyCity", "TEXT NULL"),
+        ];
+
+        foreach (var (name, definition) in additions)
+        {
+            if (existing.Contains(name))
+            {
+                continue;
+            }
+
+            using var alter = Db.Command(connection, $"ALTER TABLE Users ADD COLUMN {name} {definition};");
+            alter.ExecuteNonQuery();
+        }
+    }
+
+    /// <summary>
+    /// Version 21: Firmenlogo am Benutzer. Bestehende Konten bleiben ohne Logo.
+    /// </summary>
+    private static void MigrateUserCompanyLogo(SqliteConnection connection)
+    {
+        var existing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using (var info = Db.Command(connection, "PRAGMA table_info(Users);"))
+        using (var reader = info.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                existing.Add(reader.GetString(1));
+            }
+        }
+
+        if (existing.Contains("CompanyLogo"))
+        {
+            return;
+        }
+
+        using var alter = Db.Command(connection, "ALTER TABLE Users ADD COLUMN CompanyLogo TEXT NULL;");
+        alter.ExecuteNonQuery();
+    }
+
+    /// <summary>
+    /// Version 20: Meilensteine je Projekt. Bestehende Projekte starten ohne Meilensteine.
+    /// </summary>
+    private static void MigrateProjectMilestones(SqliteConnection connection)
+    {
+        using var create = Db.Command(connection, """
+            CREATE TABLE IF NOT EXISTS ProjectMilestones (
+                Id         TEXT PRIMARY KEY NOT NULL,
+                ProjectId  TEXT NOT NULL REFERENCES Projects(Id),
+                Title      TEXT NOT NULL,
+                IsDone     INTEGER NOT NULL DEFAULT 0,
+                DoneDate   TEXT NULL,
+                SortOrder  INTEGER NOT NULL DEFAULT 0,
+                CreatedUtc TEXT NOT NULL,
+                CreatedBy  TEXT NULL,
+                RowVersion INTEGER NOT NULL DEFAULT 1,
+                IsDeleted  INTEGER NOT NULL DEFAULT 0
+            );
+
+            CREATE INDEX IF NOT EXISTS IX_ProjectMilestones_Project ON ProjectMilestones (ProjectId);
+            """);
+        create.ExecuteNonQuery();
+    }
+
+    /// <summary>
+    /// Version 20: Das Deckblatt des Zustandsberichts bekommt das neue Layout. Ersetzt wird nur
+    /// die unberührte Startseite; die bisherige Fassung bleibt als ältere Version erhalten.
+    /// </summary>
+    private static void UpgradeReportCover(SqliteConnection connection)
+    {
+        var templateId = FindTemplateId(connection, ReportTemplateName, onlyFirstVersion: false);
+        if (templateId is not { } id)
+        {
+            return;
+        }
+
+        int currentVersion;
+        string html;
+        using (var read = Db.Command(connection, """
+            SELECT t.CurrentVersion, v.Html
+            FROM Templates t
+            JOIN TemplateVersions v ON v.TemplateId = t.Id AND v.Version = t.CurrentVersion
+            WHERE t.Id = $id;
+            """))
+        {
+            read.With("$id", id.ToString("D"));
+            using var reader = read.ExecuteReader();
+            if (!reader.Read())
+            {
+                return;
+            }
+
+            currentVersion = reader.Int32(0);
+            html = reader.Text(1);
+        }
+
+        // Erkannt werden die frühere Startseite und das Deckblatt ohne Firmenlogo.
+        var isOldCover = html.Contains("<h1>Zustandsbericht Aufzugsanlagen</h1>", StringComparison.Ordinal)
+                         && !html.Contains("class=\"kicker\"", StringComparison.Ordinal);
+        var isCoverWithoutLogo = html.Contains("class=\"kicker\"", StringComparison.Ordinal)
+                                 && !html.Contains("{{company.logo}}", StringComparison.Ordinal);
+        if (!isOldCover && !isCoverWithoutLogo)
+        {
+            return;
+        }
+
+        var version = currentVersion + 1;
+        InsertTemplateVersion(connection, id, version, DefaultTemplateHtml);
+        SetTemplateVersion(connection, id, version);
     }
 
     /// <summary>
@@ -577,24 +773,65 @@ public sealed class Database
         <head>
           <meta charset="utf-8" />
           <style>
-            @page { size: A4; margin: 20mm 18mm; }
-            body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 11pt; color: #1f2933; }
-            h1 { font-size: 18pt; margin: 0 0 4mm 0; }
-            .meta { color: #52606d; font-size: 9.5pt; margin-bottom: 8mm; }
-            table { width: 100%; border-collapse: collapse; }
-            td { padding: 2mm 0; vertical-align: top; }
-            .label { width: 40mm; color: #52606d; }
+            @page { size: A4; margin: 18mm 16mm; }
+            body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 10.5pt; color: #1f2933; margin: 0; }
+            .kicker { font-size: 8pt; letter-spacing: .22em; text-transform: uppercase; color: #0f5fa6; font-weight: 600; }
+            h1 { font-size: 27pt; line-height: 1.1; margin: 1.5mm 0 0 0; color: #102a43; }
+            .rule { height: 3px; width: 46mm; background: #0f5fa6; margin: 5mm 0 9mm 0; }
+            .label { font-size: 7.5pt; letter-spacing: .16em; text-transform: uppercase; color: #627d98; font-weight: 700; }
+            .project { font-size: 15pt; font-weight: 600; color: #102a43; margin: 1.5mm 0 6mm 0; }
+            img { border-radius: 2.5mm; }
+            .brand { margin-bottom: 6mm; }
+            .facts { width: 100%; border-collapse: collapse; }
+            .facts td { vertical-align: top; padding: 0 8mm 2mm 0; width: 50%; }
+            .block { font-size: 9.8pt; line-height: 1.5; color: #243b53; margin-top: 1.5mm; }
+            .block strong { color: #102a43; }
+            .section { border-top: 1px solid #e1e7ee; padding-top: 3mm; margin-top: 4mm; }
+            .section .label { display: block; margin-bottom: 1.2mm; }
+            .text { font-size: 9.8pt; line-height: 1.55; color: #243b53; }
+            .footer { margin-top: 12mm; border-top: 2px solid #102a43; padding-top: 3mm; font-size: 9pt; color: #486581; }
           </style>
         </head>
         <body>
-          <h1>Zustandsbericht Aufzugsanlagen</h1>
-          <div class="meta">Projekt {{project.number}} · {{project.name}} · {{date}}</div>
-          <table>
-            <tr><td class="label">Kunde</td><td>{{project.customer}}</td></tr>
-            <tr><td class="label">Anschrift</td><td>{{project.address}}</td></tr>
-            <tr><td class="label">Auftraggeber</td><td>{{project.client}}</td></tr>
-            <tr><td class="label">Verantwortlich</td><td>{{project.responsible}}</td></tr>
+          <div class="brand">{{company.logo}}</div>
+          <div class="kicker">Zustandsbericht</div>
+          <h1>Aufzugsanlagen</h1>
+          <div class="rule"></div>
+
+          <div class="label">Projekt</div>
+          <div class="project">{{project.number}} – {{project.name}}</div>
+
+          {{project.image}}
+
+          <table class="facts">
+            <tr>
+              <td>
+                <div class="label">Auftraggeber</div>
+                <div class="block"><strong>{{project.client}}</strong><br />{{project.clientaddress}}</div>
+              </td>
+              <td>
+                <div class="label">Projektverfasser</div>
+                <div class="block"><strong>{{company.name}}</strong><br />{{company.address}}</div>
+              </td>
+            </tr>
           </table>
+
+          <div class="section">
+            <span class="label">Verfasser</span>
+            <div class="text">{{company.contact}} · {{company.phone}} · {{company.email}}</div>
+          </div>
+
+          <div class="section">
+            <span class="label">Auftrag</span>
+            <div class="text">Herstellerneutrale und unabhängige Expertise der Anlagen vor Ort inkl. Bericht.</div>
+          </div>
+
+          <div class="section">
+            <span class="label">Begehung</span>
+            <div class="text">Die Daten wurden am <strong>{{project.inspectiondate}}</strong> vor Ort aufgenommen.</div>
+          </div>
+
+          <div class="footer">{{date}}, {{company.city}}</div>
         </body>
         </html>
         """;
@@ -925,6 +1162,10 @@ public sealed class Database
             UserName           TEXT NOT NULL COLLATE NOCASE UNIQUE,
             DisplayName        TEXT NOT NULL DEFAULT '',
             Company            TEXT NULL,
+            CompanyStreet      TEXT NULL,
+            CompanyZip         TEXT NULL,
+            CompanyCity        TEXT NULL,
+            CompanyLogo        TEXT NULL,
             Email              TEXT NULL,
             Phone              TEXT NULL,
             RoleId             TEXT NOT NULL REFERENCES Roles(Id),
@@ -958,6 +1199,7 @@ public sealed class Database
             Description TEXT NULL,
             ResponsibleUserId TEXT NULL,
             ResponsibleName   TEXT NULL,
+            ImagePath   TEXT NULL,
             FolderPath  TEXT NOT NULL COLLATE NOCASE,
             Status      INTEGER NOT NULL DEFAULT 0,
             ArchivedUtc TEXT NULL,
@@ -973,6 +1215,7 @@ public sealed class Database
         CREATE TABLE IF NOT EXISTS ProjectContacts (
             Id             TEXT PRIMARY KEY NOT NULL,
             ProjectId      TEXT NOT NULL REFERENCES Projects(Id),
+            Party          INTEGER NOT NULL DEFAULT 0,
             Name           TEXT NOT NULL,
             Email          TEXT NULL,
             Phone          TEXT NULL,
@@ -983,6 +1226,22 @@ public sealed class Database
             RowVersion     INTEGER NOT NULL DEFAULT 1,
             IsDeleted      INTEGER NOT NULL DEFAULT 0
         );
+
+        -- Meilensteine eines Projekts, abgehakt mit Datum.
+        CREATE TABLE IF NOT EXISTS ProjectMilestones (
+            Id         TEXT PRIMARY KEY NOT NULL,
+            ProjectId  TEXT NOT NULL REFERENCES Projects(Id),
+            Title      TEXT NOT NULL,
+            IsDone     INTEGER NOT NULL DEFAULT 0,
+            DoneDate   TEXT NULL,
+            SortOrder  INTEGER NOT NULL DEFAULT 0,
+            CreatedUtc TEXT NOT NULL,
+            CreatedBy  TEXT NULL,
+            RowVersion INTEGER NOT NULL DEFAULT 1,
+            IsDeleted  INTEGER NOT NULL DEFAULT 0
+        );
+
+        CREATE INDEX IF NOT EXISTS IX_ProjectMilestones_Project ON ProjectMilestones (ProjectId);
 
         -- Zeilen der projektbezogenen Tabellen; Data hält die Werte je Spaltenschlüssel.
         CREATE TABLE IF NOT EXISTS ProjectTableRows (

@@ -170,6 +170,39 @@ public partial class HtmlEditor : UserControl
                 return true;
             };
 
+            // Inhalte ohne Blöcke (Text, <br>, <b> …) kommen direkt an der Cursorstelle
+            // hinein; der Browser teilt den Textknoten dort, Text davor und danach bleiben
+            // stehen. execCommand('insertHTML') ersetzt in Chromium den ganzen Absatz und
+            // löscht damit die Zeilen davor – deshalb wird der Inhalt selbst eingesetzt.
+            window.liftupInsertInline = function (range, html) {
+                var fragment = range.createContextualFragment(html || '');
+                var last = fragment.lastChild;
+                if (!last) {
+                    return true;
+                }
+
+                range.insertNode(fragment);
+
+                var caret = document.createRange();
+                caret.setStartAfter(last);
+                caret.collapse(true);
+                window.liftupPlaceCaret(caret);
+                return true;
+            };
+
+            // Blöcke, die sich nicht teilen lassen (Listen, Tabellen, Bilder): der Baustein
+            // kommt unter den ganzen Block, statt dessen Inhalt zu ersetzen.
+            window.liftupInsertAfterBlock = function (range, block, html) {
+                var outer = block;
+                while (outer.parentNode && outer.parentNode !== document.body
+                    && /^(UL|OL|TABLE|TBODY|TR|DL)$/.test(outer.parentNode.tagName)) {
+                    outer = outer.parentNode;
+                }
+
+                var parent = outer.parentNode || document.body;
+                return window.liftupInsertBlocks(range, html, parent, outer.nextSibling);
+            };
+
             // Fügt HTML an der aktuellen Stelle ein, ohne vorhandene Zeilen oder Absätze
             // zu entfernen. Blockweise Inhalte (Textbausteine, Bilder) werden als eigener
             // Block zwischen den Text davor und danach gesetzt; der Absatz an der
@@ -187,12 +220,12 @@ public partial class HtmlEditor : UserControl
 
                 var probe = document.createRange().createContextualFragment(html || '');
                 if (!window.liftupHasBlockContent(probe)) {
-                    return document.execCommand('insertHTML', false, html || '');
+                    return window.liftupInsertInline(range, html);
                 }
 
                 var block = window.liftupTopBlock(range.startContainer);
                 if (block && !window.liftupCanSplit(block)) {
-                    return document.execCommand('insertHTML', false, html || '');
+                    return window.liftupInsertAfterBlock(range, block, html);
                 }
 
                 // Eine leere Zeile an der Einfügestelle bleibt stehen; der Baustein

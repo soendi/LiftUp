@@ -8,7 +8,8 @@ public sealed class UserRepository
 {
     private const string Columns =
         "Id, UserName, DisplayName, RoleId, IsActive, PasswordHash, PasswordSalt, PasswordIterations, " +
-        "MustChangePassword, CreatedUtc, CreatedBy, LastLoginUtc, RowVersion, IsDeleted, Company, Email, Phone";
+        "MustChangePassword, CreatedUtc, CreatedBy, LastLoginUtc, RowVersion, IsDeleted, Company, Email, Phone, " +
+        "CompanyStreet, CompanyZip, CompanyCity, CompanyLogo";
 
     public IReadOnlyList<UserListItem> GetListItems(SqliteConnection connection, SqliteTransaction? transaction, string? search)
     {
@@ -18,7 +19,7 @@ public sealed class UserRepository
 
         using var command = Db.Command(connection, $"""
             SELECT u.Id, u.UserName, u.DisplayName, u.IsActive, u.LastLoginUtc, r.Name, r.Permissions,
-                   u.Company, u.Email, u.Phone
+                   u.Company, u.Email, u.Phone, u.CompanyStreet, u.CompanyZip, u.CompanyCity, u.CompanyLogo
             FROM Users u
             JOIN Roles r ON r.Id = u.RoleId
             WHERE u.IsDeleted = 0{filter}
@@ -48,6 +49,10 @@ public sealed class UserRepository
                 Company = reader.TextOrNull(7) ?? string.Empty,
                 Email = reader.TextOrNull(8) ?? string.Empty,
                 Phone = reader.TextOrNull(9) ?? string.Empty,
+                CompanyStreet = reader.TextOrNull(10) ?? string.Empty,
+                CompanyZip = reader.TextOrNull(11) ?? string.Empty,
+                CompanyCity = reader.TextOrNull(12) ?? string.Empty,
+                CompanyLogo = reader.TextOrNull(13) ?? string.Empty,
             });
         }
 
@@ -77,11 +82,11 @@ public sealed class UserRepository
             INSERT INTO Users
                 (Id, UserName, DisplayName, RoleId, IsActive, PasswordHash, PasswordSalt, PasswordIterations,
                  MustChangePassword, CreatedUtc, CreatedBy, LastLoginUtc, RowVersion, IsDeleted,
-                 Company, Email, Phone)
+                 Company, Email, Phone, CompanyStreet, CompanyZip, CompanyCity, CompanyLogo)
             VALUES
                 ($id, $userName, $displayName, $roleId, $isActive, $hash, $salt, $iterations,
                  $mustChange, $createdUtc, $createdBy, NULL, 1, 0,
-                 $company, $email, $phone);
+                 $company, $email, $phone, $companyStreet, $companyZip, $companyCity, $companyLogo);
             """, transaction);
         command.With("$id", user.Id.ToString("D"))
             .With("$userName", user.UserName)
@@ -96,7 +101,11 @@ public sealed class UserRepository
             .With("$createdBy", user.CreatedBy)
             .With("$company", user.Company)
             .With("$email", user.Email)
-            .With("$phone", user.Phone);
+            .With("$phone", user.Phone)
+            .With("$companyStreet", user.CompanyStreet)
+            .With("$companyZip", user.CompanyZip)
+            .With("$companyCity", user.CompanyCity)
+            .With("$companyLogo", user.CompanyLogo);
         command.ExecuteNonQuery();
         user.RowVersion = 1;
     }
@@ -110,12 +119,19 @@ public sealed class UserRepository
         bool isActive,
         string? company,
         string? email,
-        string? phone)
+        string? phone,
+        string? companyStreet,
+        string? companyZip,
+        string? companyCity,
+        string? companyLogo)
     {
         using var command = Db.Command(connection, """
             UPDATE Users
             SET DisplayName = $displayName, RoleId = $roleId, IsActive = $isActive,
-                Company = $company, Email = $email, Phone = $phone, RowVersion = RowVersion + 1
+                Company = $company, Email = $email, Phone = $phone,
+                CompanyStreet = $companyStreet, CompanyZip = $companyZip, CompanyCity = $companyCity,
+                CompanyLogo = $companyLogo,
+                RowVersion = RowVersion + 1
             WHERE Id = $id
             RETURNING RowVersion;
             """, transaction);
@@ -125,7 +141,11 @@ public sealed class UserRepository
             .With("$isActive", isActive ? 1 : 0)
             .With("$company", company)
             .With("$email", email)
-            .With("$phone", phone);
+            .With("$phone", phone)
+            .With("$companyStreet", companyStreet)
+            .With("$companyZip", companyZip)
+            .With("$companyCity", companyCity)
+            .With("$companyLogo", companyLogo);
         return Convert.ToInt64(command.ExecuteScalar());
     }
 
@@ -211,5 +231,9 @@ public sealed class UserRepository
         Company = reader.TextOrNull(14),
         Email = reader.TextOrNull(15),
         Phone = reader.TextOrNull(16),
+        CompanyStreet = reader.TextOrNull(17),
+        CompanyZip = reader.TextOrNull(18),
+        CompanyCity = reader.TextOrNull(19),
+        CompanyLogo = reader.TextOrNull(20),
     };
 }

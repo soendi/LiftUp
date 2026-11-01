@@ -21,6 +21,30 @@
             <TextBlock Text="Firma" Style="{StaticResource LiftUpFieldLabel}" />
             <TextBox x:Name="CompanyBox" Margin="0,3,0,8" ToolTip="Eigene Firma für Titelseiten" />
 
+            <TextBlock Text="Straße, Hausnr." Style="{StaticResource LiftUpFieldLabel}" />
+            <TextBox x:Name="CompanyStreetBox" Margin="0,3,0,8" ToolTip="Anschrift der eigenen Firma" />
+
+            <TextBlock Text="PLZ, Ort" Style="{StaticResource LiftUpFieldLabel}" />
+            <Grid Margin="0,3,0,8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="90" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBox Grid.Column="0" x:Name="CompanyZipBox" ToolTip="Postleitzahl" />
+                <TextBox Grid.Column="1" x:Name="CompanyCityBox" Margin="8,0,0,0" ToolTip="Ort" />
+            </Grid>
+
+            <TextBlock Text="Firmenlogo" Style="{StaticResource LiftUpFieldLabel}" />
+            <Grid Margin="0,3,0,8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBox Grid.Column="0" x:Name="CompanyLogoBox"
+                         ToolTip="Logo für Titelseiten; wird beim Speichern in den Logoordner kopiert" />
+                <Button Grid.Column="1" Content="Logo wählen …" Margin="8,0,0,0" Click="OnBrowseLogoClick" />
+            </Grid>
+
             <TextBlock Text="E-Mail" Style="{StaticResource LiftUpFieldLabel}" />
             <TextBox x:Name="EmailBox" Margin="0,3,0,8" ToolTip="Eigene E-Mail-Adresse für Titelseiten" />
 

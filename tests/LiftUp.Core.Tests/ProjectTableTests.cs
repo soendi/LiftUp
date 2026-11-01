@@ -2,6 +2,9 @@ using System.Text;
 using LiftUp.Core.Documents;
 using LiftUp.Core.Domain;
 using LiftUp.Core.Services;
+using PdfSharp.Drawing;
+using PdfSharp.Pdf;
+using PdfSharp.Pdf.IO;
 using Xunit;
 
 namespace LiftUp.Core.Tests;
@@ -13,6 +16,26 @@ public sealed class ProjectTableTests
     {
         public Task<byte[]> RenderAsync(string html, PdfPageSettings settings, CancellationToken cancellationToken = default) =>
             Task.FromResult(Encoding.UTF8.GetBytes("%PDF-1.4 " + html.Length));
+    }
+
+    /// <summary>Liefert echte, leere PDF-Seiten in der gewünschten Ausrichtung.</summary>
+    private sealed class PageRenderer : IHtmlToPdfRenderer
+    {
+        public List<PdfPageSettings> Calls { get; } = [];
+
+        public Task<byte[]> RenderAsync(string html, PdfPageSettings settings, CancellationToken cancellationToken = default)
+        {
+            Calls.Add(settings);
+
+            using var document = new PdfDocument();
+            var page = document.AddPage();
+            page.Width = XUnit.FromMillimeter(settings.Landscape ? 297 : 210);
+            page.Height = XUnit.FromMillimeter(settings.Landscape ? 210 : 297);
+
+            using var stream = new MemoryStream();
+            document.Save(stream, closeStream: false);
+            return Task.FromResult(stream.ToArray());
+        }
     }
 
     private static ProjectInput Input(string folder) => new()
@@ -111,6 +134,71 @@ public sealed class ProjectTableTests
         Assert.Contains("Messligfeldstrasse 1", html);
         // „schlecht“ wird wie in der Vorlage rot hinterlegt.
         Assert.Contains("#ff9999", html);
+        // Legende gegliedert, Notruftechnologie mit der richtigen Abkürzung.
+        Assert.Contains("Bewertung:", html);
+        Assert.Contains("ESBA (Erhöhung der Sicherheit an bestehenden Aufzügen):", html);
+        Assert.Contains("Ersatzteilverfügbarkeit:", html);
+        Assert.Contains("Art des Aufzugs:", html);
+        Assert.Contains("Notruftechnologie:</b> GSM = über Funknetz, ANALOG = analoge Telefonleitung.", html);
+    }
+
+    [Fact]
+    public void Blatt_dokument_ist_ein_querformat()
+    {
+        ProjectTableRow[] rows =
+        [
+            new()
+            {
+                TableKey = ProjectTableCatalog.ZustandsanalyseKey,
+                Values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["AssetName"] = "8609861" },
+            },
+        ];
+
+        var html = ProjectTableSheet.RenderDocument(
+            ProjectTableCatalog.Zustandsanalyse, rows, new PdfPageSettings("A4", true, 12));
+
+        Assert.Contains("A4 landscape", html);
+        Assert.Contains("margin: 12mm", html);
+        Assert.Contains("8609861", html);
+        // Als eigenes Blatt ohne Seitenumbruch am Anfang.
+        Assert.DoesNotContain("page-break-before", html);
+    }
+
+    [Fact]
+    public async Task Tabellenblaetter_stehen_im_querformat_im_pdf()
+    {
+        using var fixture = new TestDatabase();
+        var session = fixture.LoginAsAdmin();
+        var projects = new ProjectService(fixture.Database, session);
+        var templates = new TemplateService(fixture.Database, session);
+        var tables = new ProjectTableService(fixture.Database, session);
+        var renderer = new PageRenderer();
+        var documents = new DocumentService(fixture.Database, session, renderer);
+
+        var project = projects.Create(Input(Path.Combine(fixture.Root, "p1")));
+        var template = templates.Create(new TemplateInput
+        {
+            Name = "Bericht",
+            Html = "<h1>{{project.name}}</h1>",
+        });
+
+        tables.Save(project.Id, ProjectTableCatalog.ZustandsanalyseKey, [Row(("AssetName", "8609861"))]);
+        tables.Save(project.Id, ProjectTableCatalog.InvestitionsplanungKey, [Row(("ModernMeasure", "Modernisierung"))]);
+
+        var created = await documents.CreatePdfAsync(project.Id, template.Id, new PdfPageSettings());
+
+        // Der Bericht bleibt im Hochformat, beide Tabellenblätter werden quer gedruckt.
+        Assert.Equal(3, renderer.Calls.Count);
+        Assert.False(renderer.Calls[0].Landscape);
+        Assert.True(renderer.Calls[1].Landscape);
+        Assert.True(renderer.Calls[2].Landscape);
+
+        // Im PDF stehen die Seiten hintereinander: Bericht, Datenaufnahme, Investitionsplanung.
+        using var merged = PdfReader.Open(created.FilePath, PdfDocumentOpenMode.Import);
+        Assert.Equal(3, merged.PageCount);
+        Assert.True(merged.Pages[0].Height > merged.Pages[0].Width);
+        Assert.True(merged.Pages[1].Width > merged.Pages[1].Height);
+        Assert.True(merged.Pages[2].Width > merged.Pages[2].Height);
     }
 
     [Fact]

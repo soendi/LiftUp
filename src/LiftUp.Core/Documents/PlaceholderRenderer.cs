@@ -56,6 +56,13 @@ public static class PlaceholderRenderer
         ("{{company.contact}}", "Anzeigename des Benutzers"),
         ("{{company.email}}", "Eigene E-Mail-Adresse (Benutzerprofil)"),
         ("{{company.phone}}", "Eigene Telefonnummer (Benutzerprofil)"),
+        ("{{company.street}}", "Straße und Hausnummer der eigenen Firma"),
+        ("{{company.city}}", "Ort der eigenen Firma"),
+        ("{{company.address}}", "Anschrift der eigenen Firma"),
+        ("{{company.logo}}", "Firmenlogo (aus dem Benutzerprofil)"),
+        ("{{project.image}}", "Projektbild für das Deckblatt"),
+        ("{{project.inspectiondate}}", "Datum der Begehung (Meilenstein „Begehung“)"),
+        ("{{project.milestones}}", "Meilensteine untereinander"),
         ("{{date}}", "Datum (TT.MM.JJJJ)"),
         ("{{datetime}}", "Datum und Uhrzeit"),
         ("{{user}}", "Angemeldeter Benutzer"),
@@ -193,12 +200,74 @@ public static class PlaceholderRenderer
             "company.contact" or "company.person" or "firma.ansprechperson" => Encode(context.Company?.Contact),
             "company.email" or "firma.email" => Encode(context.Company?.Email),
             "company.phone" or "firma.telefon" => Encode(context.Company?.Phone),
+            "company.street" or "firma.strasse" => Encode(context.Company?.Street),
+            "company.zip" or "firma.plz" => Encode(context.Company?.Zip),
+            "company.city" or "firma.ort" => Encode(context.Company?.City),
+            "company.address" or "firma.adresse" or "firma.anschrift" => Encode(context.Company?.Address),
+            "company.logo" or "firma.logo" => RenderCompanyLogo(context.Company),
+            "project.image" or "project.bild" or "projekt.bild" => RenderProjectImage(project),
+            "project.inspectiondate" or "projekt.begehungsdatum" => Encode(InspectionDate(project)),
+            "project.milestones" or "projekt.meilensteine" => RenderMilestones(project.Milestones),
             "date" or "datum" => context.Now.ToString("dd.MM.yyyy"),
             "time" or "zeit" => context.Now.ToString("HH:mm"),
             "datetime" or "datumzeit" => context.Now.ToString("dd.MM.yyyy HH:mm"),
             "user" or "benutzer" => Encode(context.UserName),
             _ => string.Empty,
         };
+    }
+
+    /// <summary>Firmenlogo als fertiges <c>img</c>-Element für das Deckblatt.</summary>
+    private static string RenderCompanyLogo(CompanyProfile? company)
+    {
+        if (company is null || string.IsNullOrWhiteSpace(company.LogoPath))
+        {
+            return string.Empty;
+        }
+
+        return ImageEmbedding.ToImageTag(
+                   company.LogoPath,
+                   company.Name,
+                   "height:14mm;width:auto;max-width:60mm;display:block;")
+               ?? string.Empty;
+    }
+
+    /// <summary>Projektbild als fertiges <c>img</c>-Element für das Deckblatt.</summary>
+    private static string RenderProjectImage(Project project)
+    {
+        if (string.IsNullOrWhiteSpace(project.ImagePath))
+        {
+            return string.Empty;
+        }
+
+        return ImageEmbedding.ToImageTag(
+                   project.ImagePath,
+                   project.Name,
+                   "width:100%;height:86mm;object-fit:cover;border-radius:2.5mm;display:block;")
+               ?? string.Empty;
+    }
+
+    /// <summary>Datum der Begehung aus dem gleichnamigen, abgehakten Meilenstein.</summary>
+    private static string InspectionDate(Project project)
+    {
+        var milestone = project.Milestones
+            .Where(item => item.IsDone && item.DoneDate is not null
+                && item.Title.Contains(ProjectMilestoneCatalog.Inspection, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(item => item.DoneDate)
+            .FirstOrDefault();
+
+        return milestone?.DoneDate?.ToString("dd.MM.yyyy") ?? "–";
+    }
+
+    /// <summary>Meilensteine untereinander mit ihrem Stand.</summary>
+    private static string RenderMilestones(IReadOnlyList<ProjectMilestone> milestones)
+    {
+        if (milestones.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        return string.Join("<br />", milestones.Select(milestone =>
+            $"{Encode(milestone.Title)}: {Encode(milestone.StatusText)}"));
     }
 
     /// <summary>Ansprechpersonen untereinander; jede Zeile ist HTML-kodiert.</summary>

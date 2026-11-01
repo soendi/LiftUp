@@ -9,6 +9,18 @@ public sealed class User
     /// <summary>Eigene Firma für Titelseiten.</summary>
     public string? Company { get; set; }
 
+    /// <summary>Straße und Hausnummer der eigenen Firma.</summary>
+    public string? CompanyStreet { get; set; }
+
+    /// <summary>Postleitzahl der eigenen Firma.</summary>
+    public string? CompanyZip { get; set; }
+
+    /// <summary>Ort der eigenen Firma.</summary>
+    public string? CompanyCity { get; set; }
+
+    /// <summary>Firmenlogo für Titelseiten; liegt im Logoordner der Anwendung.</summary>
+    public string? CompanyLogo { get; set; }
+
     /// <summary>Eigene E-Mail-Adresse für Titelseiten.</summary>
     public string? Email { get; set; }
 
@@ -38,6 +50,10 @@ public sealed class UserListItem
     public string UserName { get; init; } = string.Empty;
     public string DisplayName { get; init; } = string.Empty;
     public string Company { get; init; } = string.Empty;
+    public string CompanyStreet { get; init; } = string.Empty;
+    public string CompanyZip { get; init; } = string.Empty;
+    public string CompanyCity { get; init; } = string.Empty;
+    public string CompanyLogo { get; init; } = string.Empty;
     public string Email { get; init; } = string.Empty;
     public string Phone { get; init; } = string.Empty;
     public string RoleName { get; init; } = string.Empty;

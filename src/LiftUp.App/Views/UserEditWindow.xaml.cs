@@ -1,3 +1,4 @@
+using System.IO;
 using System.Windows;
 using LiftUp.Core.Domain;
 using LiftUp.Core.Security;
@@ -47,6 +48,10 @@ public partial class UserEditWindow : Window
             UserNameBox.IsReadOnly = true;
             DisplayNameBox.Text = item.DisplayName;
             CompanyBox.Text = item.Company;
+            CompanyStreetBox.Text = item.CompanyStreet;
+            CompanyZipBox.Text = item.CompanyZip;
+            CompanyCityBox.Text = item.CompanyCity;
+            CompanyLogoBox.Text = item.CompanyLogo;
             EmailBox.Text = item.Email;
             PhoneBox.Text = item.Phone;
             ActiveCheck.IsChecked = item.IsActive;
@@ -89,7 +94,11 @@ public partial class UserEditWindow : Window
                     MustChangeCheck.IsChecked == true,
                     CompanyBox.Text,
                     EmailBox.Text,
-                    PhoneBox.Text);
+                    PhoneBox.Text,
+                    CompanyStreetBox.Text,
+                    CompanyZipBox.Text,
+                    CompanyCityBox.Text,
+                    CompanyLogoBox.Text);
             }
             else
             {
@@ -100,7 +109,11 @@ public partial class UserEditWindow : Window
                     ActiveCheck.IsChecked == true,
                     CompanyBox.Text,
                     EmailBox.Text,
-                    PhoneBox.Text);
+                    PhoneBox.Text,
+                    CompanyStreetBox.Text,
+                    CompanyZipBox.Text,
+                    CompanyCityBox.Text,
+                    CompanyLogoBox.Text);
             }
 
             DialogResult = true;
@@ -116,6 +129,29 @@ public partial class UserEditWindow : Window
         catch (Exception exception)
         {
             ErrorText.Text = "Der Benutzer konnte nicht gespeichert werden: " + exception.Message;
+        }
+    }
+
+    /// <summary>Firmenlogo wählen; gestartet wird im Ordner des bisherigen Logos.</summary>
+    private void OnBrowseLogoClick(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Firmenlogo wählen",
+            Filter = "Bilder|*.png;*.jpg;*.jpeg;*.gif;*.webp;*.bmp;*.svg;*.tif;*.tiff|Alle Dateien|*.*",
+            CheckFileExists = true,
+        };
+
+        var current = CompanyLogoBox.Text?.Trim();
+        if (!string.IsNullOrWhiteSpace(current) && File.Exists(current))
+        {
+            dialog.InitialDirectory = Path.GetDirectoryName(current);
+        }
+
+        if (dialog.ShowDialog(this) == true)
+        {
+            CompanyLogoBox.Text = dialog.FileName;
+            ErrorText.Text = string.Empty;
         }
     }
 

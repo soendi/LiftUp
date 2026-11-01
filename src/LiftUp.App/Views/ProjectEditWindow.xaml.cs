@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -19,9 +20,24 @@ public partial class ProjectEditWindow : Window
         public string Responsibility { get; set; } = string.Empty;
     }
 
+    /// <summary>Bearbeitbare Zeile der Meilenstein-Tabelle.</summary>
+    public sealed class MilestoneRow
+    {
+        public string Title { get; set; } = string.Empty;
+        public bool IsDone { get; set; }
+
+        /// <summary>Fester Meilenstein (Begehung): Bezeichnung und Zeile sind nicht änderbar.</summary>
+        public bool IsFixed { get; init; }
+
+        /// <summary>Datum als Text in der Form TT.MM.JJJJ.</summary>
+        public string DoneDateText { get; set; } = string.Empty;
+    }
+
     private readonly AppServices _services;
     private readonly Guid? _projectId;
     private readonly ObservableCollection<ContactRow> _contacts = [];
+    private readonly ObservableCollection<ContactRow> _clientContacts = [];
+    private readonly ObservableCollection<MilestoneRow> _milestones = [];
 
     public ProjectEditWindow(AppServices services, Guid? projectId)
     {
@@ -32,12 +48,17 @@ public partial class ProjectEditWindow : Window
         StatusBox.ItemsSource = ProjectStatusCatalog.Selectable;
         ResponsibleBox.ItemsSource = BuildResponsibleOptions();
         ContactsGrid.ItemsSource = _contacts;
+        ClientContactsGrid.ItemsSource = _clientContacts;
+        MilestonesGrid.ItemsSource = _milestones;
+        MilestonesGrid.BeginningEdit += OnMilestoneBeginningEdit;
 
         if (projectId is null)
         {
             HeadingText.Text = "Neues Projekt anlegen";
             StatusBox.SelectedValue = ProjectStatus.Active;
             NumberBox.Text = string.Empty;
+            // Die Begehung liefert das Datum für das Deckblatt und ist fest vorgegeben.
+            _milestones.Add(new MilestoneRow { Title = ProjectMilestoneCatalog.Inspection, IsFixed = true });
             Loaded += (_, _) => NameBox.Focus();
         }
         else
@@ -84,23 +105,47 @@ public partial class ProjectEditWindow : Window
             ClientCityBox.Text = project.ClientCity ?? string.Empty;
             DescriptionBox.Text = project.Description ?? string.Empty;
             FolderBox.Text = project.FolderPath;
+            ImageBox.Text = project.ImagePath ?? string.Empty;
 
             _contacts.Clear();
             foreach (var contact in project.Contacts)
             {
-                _contacts.Add(new ContactRow
-                {
-                    Name = contact.Name,
-                    Email = contact.Email ?? string.Empty,
-                    Phone = contact.Phone ?? string.Empty,
-                    Responsibility = contact.Responsibility ?? string.Empty,
-                });
+                _contacts.Add(CreateRow(contact));
             }
 
             // Projekte aus älteren Versionen kennen nur eine Ansprechperson; sie wird zur ersten Zeile.
             if (_contacts.Count == 0 && !string.IsNullOrWhiteSpace(project.Contact))
             {
                 _contacts.Add(new ContactRow { Name = project.Contact });
+            }
+
+            _clientContacts.Clear();
+            foreach (var contact in project.ClientContacts)
+            {
+                _clientContacts.Add(CreateRow(contact));
+            }
+
+            _milestones.Clear();
+            foreach (var milestone in project.Milestones)
+            {
+                _milestones.Add(new MilestoneRow
+                {
+                    Title = milestone.Title,
+                    IsDone = milestone.IsDone,
+                    DoneDateText = milestone.DoneDate?.ToString("dd.MM.yyyy") ?? string.Empty,
+                    IsFixed = string.Equals(
+                        milestone.Title, ProjectMilestoneCatalog.Inspection, StringComparison.OrdinalIgnoreCase),
+                });
+            }
+
+            // Die Begehung ist fester Bestandteil jedes Projekts.
+            if (!_milestones.Any(row => row.IsFixed))
+            {
+                _milestones.Insert(0, new MilestoneRow
+                {
+                    Title = ProjectMilestoneCatalog.Inspection,
+                    IsFixed = true,
+                });
             }
 
             if (project.IsArchived)
@@ -152,41 +197,181 @@ public partial class ProjectEditWindow : Window
         }
     }
 
-    private void OnAddContactClick(object sender, RoutedEventArgs e)
+    private static ContactRow CreateRow(ProjectContact contact) => new()
     {
-        var row = new ContactRow();
-        _contacts.Add(row);
-        ContactsGrid.SelectedItem = row;
-        ContactsGrid.ScrollIntoView(row);
-        ContactsGrid.CurrentCell = new DataGridCellInfo(row, ContactsGrid.Columns[0]);
-        ContactsGrid.BeginEdit();
+        Name = contact.Name,
+        Email = contact.Email ?? string.Empty,
+        Phone = contact.Phone ?? string.Empty,
+        Responsibility = contact.Responsibility ?? string.Empty,
+    };
+
+    /// <summary>
+    /// Bild für das Deckblatt wählen. Liegt der Projektordner schon, startet die Auswahl im
+    /// Bilderordner des Projekts; bei einem neuen Projekt im Ordner der zuletzt gewählten Datei.
+    /// </summary>
+    private void OnBrowseImageClick(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Projektbild wählen",
+            Filter = "Bilder|*.png;*.jpg;*.jpeg;*.gif;*.webp;*.bmp;*.svg;*.tif;*.tiff|Alle Dateien|*.*",
+            CheckFileExists = true,
+        };
+
+        var folder = FolderBox.Text?.Trim();
+        if (!string.IsNullOrWhiteSpace(folder) && Directory.Exists(folder))
+        {
+            var images = Path.Combine(folder, ProjectFolders.Images);
+            dialog.InitialDirectory = Directory.Exists(images) ? images : folder;
+        }
+        else
+        {
+            var selected = ImageBox.Text?.Trim();
+            if (!string.IsNullOrWhiteSpace(selected) && File.Exists(selected))
+            {
+                dialog.InitialDirectory = Path.GetDirectoryName(selected);
+            }
+        }
+
+        if (dialog.ShowDialog(this) == true)
+        {
+            ImageBox.Text = dialog.FileName;
+            ErrorText.Text = string.Empty;
+        }
     }
 
-    private void OnRemoveContactClick(object sender, RoutedEventArgs e)
+    private void OnAddContactClick(object sender, RoutedEventArgs e) =>
+        AddRow(ContactsGrid, _contacts);
+
+    private void OnRemoveContactClick(object sender, RoutedEventArgs e) =>
+        RemoveRow(ContactsGrid, _contacts);
+
+    private void OnAddClientContactClick(object sender, RoutedEventArgs e) =>
+        AddRow(ClientContactsGrid, _clientContacts);
+
+    private void OnAddMilestoneClick(object sender, RoutedEventArgs e)
     {
-        if (ContactsGrid.SelectedItem is ContactRow selected)
+        var row = new MilestoneRow();
+        _milestones.Add(row);
+        MilestonesGrid.SelectedItem = row;
+        MilestonesGrid.ScrollIntoView(row);
+        MilestonesGrid.CurrentCell = new DataGridCellInfo(row, MilestonesGrid.Columns[0]);
+        MilestonesGrid.BeginEdit();
+    }
+
+    private void OnRemoveMilestoneClick(object sender, RoutedEventArgs e)
+    {
+        if (MilestonesGrid.SelectedItem is MilestoneRow { IsFixed: true })
         {
-            _contacts.Remove(selected);
+            ErrorText.Text = $"Der Meilenstein „{ProjectMilestoneCatalog.Inspection}“ ist fest vorgegeben " +
+                             "und lässt sich nicht entfernen.";
+            return;
         }
-        else if (_contacts.Count > 0)
+
+        if (MilestonesGrid.SelectedItem is MilestoneRow selected)
         {
-            _contacts.RemoveAt(_contacts.Count - 1);
+            _milestones.Remove(selected);
+        }
+        else if (_milestones.Count > 0 && _milestones[^1] is { IsFixed: false } last)
+        {
+            _milestones.Remove(last);
         }
     }
+
+    /// <summary>Die Bezeichnung der Begehung bleibt unverändert; Erledigt und Datum sind frei.</summary>
+    private void OnMilestoneBeginningEdit(object? sender, DataGridBeginningEditEventArgs e)
+    {
+        if (e.Row.Item is MilestoneRow { IsFixed: true } && e.Column == MilestonesGrid.Columns[0])
+        {
+            e.Cancel = true;
+            ErrorText.Text = $"Der Meilenstein „{ProjectMilestoneCatalog.Inspection}“ ist fest vorgegeben.";
+        }
+    }
+
+    /// <summary>Liest das Datum aus der Tabelle; leer heißt „kein Datum“.</summary>
+    private static DateTime? ParseDate(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+
+        var value = text.Trim();
+        if (DateTime.TryParseExact(value, "dd.MM.yyyy", CultureInfo.InvariantCulture,
+                DateTimeStyles.None, out var exact))
+        {
+            return exact.Date;
+        }
+
+        if (DateTime.TryParse(value, CultureInfo.CurrentCulture, DateTimeStyles.None, out var parsed))
+        {
+            return parsed.Date;
+        }
+
+        throw new ValidationException($"Das Datum \"{value}\" ist ungültig. Bitte TT.MM.JJJJ verwenden.");
+    }
+
+    private void OnRemoveClientContactClick(object sender, RoutedEventArgs e) =>
+        RemoveRow(ClientContactsGrid, _clientContacts);
+
+    /// <summary>Neue Zeile anlegen und gleich die Namenszelle bearbeiten.</summary>
+    private static void AddRow(DataGrid grid, ObservableCollection<ContactRow> rows)
+    {
+        var row = new ContactRow();
+        rows.Add(row);
+        grid.SelectedItem = row;
+        grid.ScrollIntoView(row);
+        grid.CurrentCell = new DataGridCellInfo(row, grid.Columns[0]);
+        grid.BeginEdit();
+    }
+
+    private static void RemoveRow(DataGrid grid, ObservableCollection<ContactRow> rows)
+    {
+        if (grid.SelectedItem is ContactRow selected)
+        {
+            rows.Remove(selected);
+        }
+        else if (rows.Count > 0)
+        {
+            rows.RemoveAt(rows.Count - 1);
+        }
+    }
+
+    private static ProjectContactInput[] ToInputs(ObservableCollection<ContactRow> rows, ProjectContactKind kind) =>
+        rows.Select(row => new ProjectContactInput
+        {
+            Kind = kind,
+            Name = row.Name,
+            Email = row.Email,
+            Phone = row.Phone,
+            Responsibility = row.Responsibility,
+        }).ToArray();
 
     private void OnSaveClick(object sender, RoutedEventArgs e)
     {
         ErrorText.Text = string.Empty;
 
         // Eine gerade bearbeitete Zelle übernimmt ihren Text sonst erst beim Verlassen.
+        CommitEdits(ContactsGrid);
+        CommitEdits(ClientContactsGrid);
+        CommitEdits(MilestonesGrid);
+
+        ProjectMilestoneInput[] milestones;
         try
         {
-            ContactsGrid.CommitEdit(DataGridEditingUnit.Cell, true);
-            ContactsGrid.CommitEdit(DataGridEditingUnit.Row, true);
+            milestones = _milestones
+                .Select(row => new ProjectMilestoneInput
+                {
+                    Title = row.Title,
+                    IsDone = row.IsDone,
+                    DoneDate = ParseDate(row.DoneDateText),
+                })
+                .ToArray();
         }
-        catch (InvalidOperationException)
+        catch (ValidationException exception)
         {
-            // Nichts in Bearbeitung: kein Grund, das Speichern abzubrechen.
+            ErrorText.Text = exception.Message;
+            return;
         }
 
         var status = StatusBox.SelectedValue is ProjectStatus selectedStatus
@@ -207,20 +392,15 @@ public partial class ProjectEditWindow : Window
             ClientLine2 = ClientLine2Box.Text,
             ClientZip = ClientZipBox.Text,
             ClientCity = ClientCityBox.Text,
-            Contacts = _contacts
-                .Select(row => new ProjectContactInput
-                {
-                    Name = row.Name,
-                    Email = row.Email,
-                    Phone = row.Phone,
-                    Responsibility = row.Responsibility,
-                })
-                .ToArray(),
+            Contacts = ToInputs(_contacts, ProjectContactKind.Customer),
+            ClientContacts = ToInputs(_clientContacts, ProjectContactKind.Client),
+            Milestones = milestones,
             Description = DescriptionBox.Text,
             ResponsibleUserId = ResponsibleBox.SelectedValue is Guid responsibleId && responsibleId != Guid.Empty
                 ? responsibleId
                 : null,
             FolderPath = FolderBox.Text,
+            ImagePath = ImageBox.Text,
             Status = status,
             CreateFolderIfMissing = CreateFolderCheck.IsChecked == true,
         };
@@ -249,6 +429,19 @@ public partial class ProjectEditWindow : Window
         catch (Exception exception)
         {
             ErrorText.Text = "Das Projekt konnte nicht gespeichert werden: " + exception.Message;
+        }
+    }
+
+    private static void CommitEdits(DataGrid grid)
+    {
+        try
+        {
+            grid.CommitEdit(DataGridEditingUnit.Cell, true);
+            grid.CommitEdit(DataGridEditingUnit.Row, true);
+        }
+        catch (InvalidOperationException)
+        {
+            // Nichts in Bearbeitung: kein Grund, das Speichern abzubrechen.
         }
     }
 

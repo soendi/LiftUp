@@ -78,7 +78,13 @@ Benutzer verwalten, Rollen und Rechte verwalten. Die Prüfung passiert in der Co
 - Die Liste zeigt zusätzlich, ob der Ordner aktuell vorhanden ist.
 - Zwei Adressen je Projekt, im Dialog unten als Register **Kunde** und **Auftraggeber** gepflegt:
   Name, Straße und Hausnummer, eine zusätzliche Zeile (Gebäude, Abteilung, Postfach) sowie PLZ und Ort.
-  Die Ansprechpersonen gehören zum Kunden.
+  Beide Register führen eigene Ansprechpersonen (Name, E-Mail, Telefon, Zuständigkeit).
+- **Projektbild** für das Deckblatt, direkt unter dem Projektordner über „Bild wählen …“ ausgewählt:
+  Bei einem bestehenden Projekt startet die Auswahl im Bilderordner, bei einem neuen Projekt
+  landet die Datei beim Speichern in `02_Bilder` des Projektordners.
+- **Meilensteine** im dritten Register des Dialogs: Bezeichnung, Häkchen „Erledigt“ und Datum.
+  Ein abgehakter Meilenstein ohne Datum bekommt das heutige; das Datum des Meilensteins
+  „Begehung“ steht auf dem Deckblatt.
 
 ### Zustandsanalyse und Investitionsplanung
 
@@ -107,7 +113,10 @@ Zelle keine Formatierung kennt.
 Speichern schreibt alle Zeilen des Projekts neu; vollständig leere Zeilen fallen weg. Die Spalten
 stehen an einer Stelle im Code (`ProjectTableCatalog`), die Werte liegen als JSON je Zeile – neue
 Felder brauchen deshalb keine Datenbankmigration. Sind Zeilen vorhanden, erscheinen beide Tabellen
-als eigene Blätter hinter der Vorlage im PDF.
+als eigene Blätter hinter der Vorlage im PDF – immer im Querformat, unabhängig von der gewählten
+Ausrichtung des Berichts. Dafür wird der Bericht zuerst gedruckt, danach die beiden Blätter; die
+Teile fügt `PdfPageMerger` zu einer Datei zusammen. Die Legende der Datenaufnahme steht gegliedert
+unter dem Titel: Bewertung, ESBA, Ersatzteilverfügbarkeit, Art des Aufzugs und Notruftechnologie.
 
 ## Datenmodell
 
@@ -189,16 +198,21 @@ tests/LiftUp.Core.Tests/
 
 ## Projektverwaltung
 
-Projekte haben Nummer, Name, Kunde, Beschreibung, Verantwortlichen und Status. Zum Kunden gehören
-die vollständige Anschrift (Straße, PLZ, Ort) und beliebig viele Ansprechpersonen mit Name,
-E-Mail-Adresse, Telefonnummer und Zuständigkeit. Die erste Person gilt als Hauptansprechpartner
-und erscheint als solche in Übersicht und Vorlagen.
+Projekte haben Nummer, Name, Kunde, Beschreibung, Verantwortlichen und Status. Kunde und Auftraggeber
+haben je eine vollständige Anschrift (Straße, PLZ, Ort) und eine eigene Liste von Ansprechpersonen mit
+Name, E-Mail-Adresse, Telefonnummer und Zuständigkeit. Die erste Person beim Kunden gilt als
+Hauptansprechpartner und erscheint als solche in Übersicht und Vorlagen.
 Die **Projektnummer wird automatisch** im Format `2026-0001` vergeben (eigener Nummernkreis je Jahr,
 in derselben Transaktion wie das Anlegen). Eine vorhandene Nummer kann stattdessen eingetragen werden.
 
 Beim Anlegen entsteht der Projektordner samt Unterordnern `01_Dokumente`, `02_Bilder`, `03_PDF`
 und `04_Vorlagen`; bei bestehenden Ordnern werden nur fehlende Unterordner ergänzt. Der Pfad darf
 auf jedem Laufwerk liegen (lokal, Netzlaufwerk, Wechseldatenträger).
+
+Das **Projektbild** für das Deckblatt darf von beliebiger Stelle gewählt werden. Liegt es beim
+Speichern nicht schon in `02_Bilder`, wird es dorthin kopiert; das Original bleibt unangetastet.
+Ein gleichnamiges Bild wird nicht überschrieben, sondern als „Name (2).png“ abgelegt. Zulässig sind
+PNG, JPG, GIF, WebP, BMP, SVG und TIFF.
 
 Die Übersicht bietet Suche (Name, Nummer, Kunde, Anschrift, Ansprechpersonen mit E-Mail und Telefon,
 Verantwortlicher, Beschreibung),
@@ -224,6 +238,13 @@ Geschwindigkeit, Haltestellen, Zugänge, Förderhöhe, Maschinenraum, Kabinenabs
 Schachtausführung, Auffahrsockel), „2. Analyse“ und „3. Fazit / Empfehlung“ (nur Titel). Ein
 Startinhalt bleibt erhalten, wenn die Titel der Abschnitte angepasst werden.
 
+**Deckblatt:** Die erste Seite ist als Deckblatt gestaltet: „Zustandsbericht / Aufzugsanlagen“,
+Projektnummer und -name, Projektbild, Auftraggeber mit Anschrift, Projektverfasser (Firma,
+Anschrift und Logo aus dem Benutzerprofil), Verfasser mit Telefon und E-Mail, der Auftrag, das Datum der
+Begehung aus dem gleichnamigen Meilenstein sowie Erstellungsdatum und Ort des Benutzers. Eine
+unberührte Startvorlage erhält das neue Deckblatt als neue Version; selbst bearbeitete Vorlagen
+bleiben unangetastet.
+
 | Platzhalter | Inhalt |
 | --- | --- |
 | `{{project.number}}` | Projektnummer |
@@ -240,6 +261,16 @@ Startinhalt bleibt erhalten, wenn die Titel der Abschnitte angepasst werden.
 | `{{project.responsible}}` | Verantwortlicher |
 | `{{project.description}}` | Beschreibung |
 | `{{project.status}}` | Status |
+| `{{project.image}}` | Projektbild als Bild (Deckblatt) |
+| `{{project.inspectiondate}}` | Datum der Begehung aus dem Meilenstein „Begehung“ |
+| `{{project.milestones}}` | Meilensteine untereinander mit Stand |
+| `{{company.name}}` | Eigene Firma (Benutzerprofil) |
+| `{{company.address}}` | Anschrift der eigenen Firma |
+| `{{company.city}}` | Ort der eigenen Firma |
+| `{{company.contact}}` | Anzeigename des Benutzers |
+| `{{company.phone}}` | Telefon des Benutzers |
+| `{{company.email}}` | E-Mail des Benutzers |
+| `{{company.logo}}` | Firmenlogo als Bild (Benutzerprofil) |
 | `{{date}}`, `{{datetime}}` | Datum bzw. Datum mit Uhrzeit |
 | `{{user}}` | Angemeldeter Benutzer |
 | `{{snippet:Name}}` | Textbaustein mit diesem Namen (HTML) |

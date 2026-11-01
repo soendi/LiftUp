@@ -22,6 +22,11 @@ public sealed record ProjectTableColumn(string Key, string Label, ProjectTableCo
 }
 
 /// <summary>
+/// Zeile der Legende: Titel und Erläuterung, etwa „Bewertung“ und „grün = gut, gelb = mässig“.
+/// </summary>
+public sealed record ProjectTableLegend(string Title, string Details);
+
+/// <summary>
 /// Beschreibung einer projektbezogenen Tabelle. Die Spalten stehen bewusst nur hier:
 /// Ein Datenbankfeld je Spalte wäre bei jeder Vorlagenänderung eine Migration.
 /// </summary>
@@ -29,6 +34,9 @@ public sealed record ProjectTableDefinition(string Key, string Title, IReadOnlyL
 {
     /// <summary>Hinweistext unter dem Titel (steht so in der Excel-Vorlage).</summary>
     public string Note { get; init; } = string.Empty;
+
+    /// <summary>Gegliederte Legende unter dem Titel – je Eintrag eine Zeile.</summary>
+    public IReadOnlyList<ProjectTableLegend> Legend { get; init; } = [];
 }
 
 /// <summary>
@@ -76,7 +84,7 @@ public static class ProjectTableCatalog
             Column("Floors", "Anzahl Stockwerke", ProjectTableColumnKind.Number, 90, Anlagendaten),
             Column("Trips", "Anzahl Züge", ProjectTableColumnKind.Number, 80, Anlagendaten),
             Column("EmergencyCall", "Notrufsystem nach EN81-28 (ja/nein)", ProjectTableColumnKind.Text, 130, Anlagendaten, JaNein),
-            Column("EmergencyTechnology", "Technologie Notrufsystem", ProjectTableColumnKind.Text, 120, Anlagendaten, ["GSM", "ANLOG"]),
+            Column("EmergencyTechnology", "Technologie Notrufsystem", ProjectTableColumnKind.Text, 120, Anlagendaten, ["GSM", "ANALOG"]),
             Column("AutomaticDoors", "automatische Türen (ja/nein)", ProjectTableColumnKind.Text, 120, Anlagendaten, JaNein),
             Column("Maintenance", "Anzahl Wartungen pro Jahr", ProjectTableColumnKind.Number, 100, Anlagendaten),
 
@@ -101,11 +109,15 @@ public static class ProjectTableCatalog
             Column("SpareGovernor", "Regulator (Geschwindigkeitsbegrenzer)", ProjectTableColumnKind.Rating, 140, Ersatzteile, ErsatzteilWerte),
         ])
     {
-        Note = "Bewertung: grün = gut, gelb = mässig, rot = schlecht. "
-            + "ESBA (Erhöhung der Sicherheit an bestehenden Aufzügen): grün = in Ordnung, rot = nicht in Ordnung. "
-            + "Ersatzteilverfügbarkeit: grün = verfügbar, gelb = bedingt verfügbar, rot = nicht verfügbar. "
-            + "Art des Aufzugs: PA = Personenanlage, WA = Warenanlage, SA = Serviceanlage, KA = Kehrichtanlage, "
-            + "BA = Bettenanlage, FT = Fahrtreppe. Notruftechnologie: GSM = über Funknetz, ANLOG = analoge Telefonleitung.",
+        Legend =
+        [
+            new("Bewertung", "grün = gut, gelb = mässig, rot = schlecht."),
+            new("ESBA (Erhöhung der Sicherheit an bestehenden Aufzügen)", "grün = in Ordnung, rot = nicht in Ordnung."),
+            new("Ersatzteilverfügbarkeit", "grün = verfügbar, gelb = bedingt verfügbar, rot = nicht verfügbar."),
+            new("Art des Aufzugs", "PA = Personenanlage, WA = Warenanlage, SA = Serviceanlage, KA = Kehrichtanlage, "
+                + "BA = Bettenanlage, FT = Fahrtreppe."),
+            new("Notruftechnologie", "GSM = über Funknetz, ANALOG = analoge Telefonleitung."),
+        ],
     };
 
     /// <summary>Blatt „Investitionsplanung“ aus „Investition.xlsx“.</summary>

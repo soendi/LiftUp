@@ -148,8 +148,12 @@ public sealed class DocumentService
 
         EnsurePlaceholdersPresent(FindMissingPlaceholders(connection, transaction, project.Id, version.Html));
 
-        var html = RenderTitlePage(connection, transaction, project, version);
-        return await SavePdfAsync(connection, transaction, project, template, version, html, null, settings, cancellationToken)
+        // Die Tabellenblätter werden getrennt im Querformat gedruckt und danach angehängt.
+        var html = RenderTitlePage(connection, transaction, project, version, includeSheets: false);
+        var bytes = await ComposePdfAsync(connection, transaction, project.Id, html, settings, cancellationToken)
+            .ConfigureAwait(false);
+
+        return await SavePdfAsync(connection, transaction, project, template, version, bytes, null, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -180,8 +184,10 @@ public sealed class DocumentService
 
         EnsurePlaceholdersPresent(FindMissingPlaceholders(connection, transaction, project.Id, version.Html));
 
-        var titlePage = RenderTitlePage(connection, transaction, project, version);
+        var titlePage = RenderTitlePage(connection, transaction, project, version, includeSheets: false);
         var html = DocumentComposition.Build(titlePage, sections);
+        var bytes = await ComposePdfAsync(connection, transaction, project.Id, html, settings, cancellationToken)
+            .ConfigureAwait(false);
 
         return await SavePdfAsync(
                 connection,
@@ -189,9 +195,8 @@ public sealed class DocumentService
                 project,
                 template,
                 version,
-                html,
+                bytes,
                 DocumentSections.Serialize(sections),
-                settings,
                 cancellationToken)
             .ConfigureAwait(false);
     }
@@ -230,7 +235,8 @@ public sealed class DocumentService
         Microsoft.Data.Sqlite.SqliteConnection connection,
         Microsoft.Data.Sqlite.SqliteTransaction? transaction,
         Project project,
-        TemplateVersion version)
+        TemplateVersion version,
+        bool includeSheets = true)
     {
         var snippets = _snippets.GetActiveByName(connection, transaction);
         var images = BuildImageLookup(connection, transaction, project.Id);
@@ -238,6 +244,10 @@ public sealed class DocumentService
         var company = new CompanyProfile
         {
             Name = _actor.Company,
+            Street = _actor.CompanyStreet,
+            Zip = _actor.CompanyZip,
+            City = _actor.CompanyCity,
+            LogoPath = _actor.CompanyLogo,
             Contact = _actor.DisplayName is { Length: > 0 } display ? display : _actor.UserName,
             Email = _actor.Email,
             Phone = _actor.Phone,
@@ -252,8 +262,9 @@ public sealed class DocumentService
             ImageResolver = name => images.TryGetValue(name, out var image) ? ImageEmbedding.ToImageTag(image) : null,
         });
 
-        // Zustandsanalyse und Investitionsplanung folgen als eigene Blätter – in Vorschau und PDF.
-        return AppendProjectSheets(connection, transaction, project, html);
+        // In der Vorschau hängen Zustandsanalyse und Investitionsplanung als eigene Blätter an;
+        // im PDF werden sie getrennt im Querformat gedruckt und danach zusammengeführt.
+        return includeSheets ? AppendProjectSheets(connection, transaction, project.Id, html) : html;
     }
 
     /// <summary>
@@ -263,17 +274,79 @@ public sealed class DocumentService
     private string AppendProjectSheets(
         Microsoft.Data.Sqlite.SqliteConnection connection,
         Microsoft.Data.Sqlite.SqliteTransaction? transaction,
-        Project project,
+        Guid projectId,
         string html)
     {
         var builder = new System.Text.StringBuilder(html);
-        foreach (var definition in ProjectTableCatalog.All)
+        foreach (var (definition, rows) in CollectSheets(connection, transaction, projectId))
         {
-            var rows = _tables.GetRows(connection, transaction, project.Id, definition.Key);
             builder.Append(ProjectTableSheet.Render(definition, rows));
         }
 
         return builder.ToString();
+    }
+
+    /// <summary>Tabellen mit Zeilen, in der Reihenfolge der Blätter im PDF.</summary>
+    private List<(ProjectTableDefinition Definition, IReadOnlyList<ProjectTableRow> Rows)> CollectSheets(
+        Microsoft.Data.Sqlite.SqliteConnection connection,
+        Microsoft.Data.Sqlite.SqliteTransaction? transaction,
+        Guid projectId)
+    {
+        var sheets = new List<(ProjectTableDefinition, IReadOnlyList<ProjectTableRow>)>();
+        foreach (var definition in ProjectTableCatalog.All)
+        {
+            var rows = _tables.GetRows(connection, transaction, projectId, definition.Key);
+            if (rows.Count > 0)
+            {
+                sheets.Add((definition, rows));
+            }
+        }
+
+        return sheets;
+    }
+
+    /// <summary>
+    /// Druckt den Bericht und die Tabellenblätter. Die Blätter bekommen eine liegende Seite und
+    /// werden danach an das PDF des Berichts gehängt.
+    /// </summary>
+    private async Task<byte[]> ComposePdfAsync(
+        Microsoft.Data.Sqlite.SqliteConnection connection,
+        Microsoft.Data.Sqlite.SqliteTransaction? transaction,
+        Guid projectId,
+        string html,
+        PdfPageSettings settings,
+        CancellationToken cancellationToken)
+    {
+        var sheets = CollectSheets(connection, transaction, projectId);
+        var main = await _renderer.RenderAsync(html, settings, cancellationToken).ConfigureAwait(false);
+
+        if (sheets.Count == 0)
+        {
+            return main;
+        }
+
+        var landscape = settings with { Landscape = true };
+        var parts = new List<byte[]> { main };
+        foreach (var (definition, rows) in sheets)
+        {
+            var sheetHtml = ProjectTableSheet.RenderDocument(definition, rows, landscape);
+            if (sheetHtml.Length == 0)
+            {
+                continue;
+            }
+
+            parts.Add(await _renderer.RenderAsync(sheetHtml, landscape, cancellationToken).ConfigureAwait(false));
+        }
+
+        var merged = PdfPageMerger.TryMerge(parts);
+        if (merged is not null)
+        {
+            return merged;
+        }
+
+        // Lassen sich die Teile nicht zusammenführen, bleiben die Tabellen im Dokument.
+        var combined = AppendProjectSheets(connection, transaction, projectId, html);
+        return await _renderer.RenderAsync(combined, settings, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<ProjectDocument> SavePdfAsync(
@@ -282,13 +355,10 @@ public sealed class DocumentService
         Project project,
         DocumentTemplate template,
         TemplateVersion version,
-        string html,
+        byte[] bytes,
         string? sectionsJson,
-        PdfPageSettings settings,
         CancellationToken cancellationToken)
     {
-        var bytes = await _renderer.RenderAsync(html, settings, cancellationToken).ConfigureAwait(false);
-
         var folder = Path.Combine(project.FolderPath, "03_PDF");
         Directory.CreateDirectory(folder);
 

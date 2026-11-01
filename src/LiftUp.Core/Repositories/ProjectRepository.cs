@@ -11,7 +11,7 @@ public sealed class ProjectRepository
         "Id, Number, Name, Customer, CustomerStreet, CustomerZip, CustomerCity, Contact, Description, " +
         "ResponsibleUserId, ResponsibleName, FolderPath, Status, ArchivedUtc, ArchivedBy, CreatedUtc, " +
         "CreatedBy, UpdatedUtc, UpdatedBy, RowVersion, IsDeleted, CustomerLine2, Client, ClientStreet, " +
-        "ClientLine2, ClientZip, ClientCity";
+        "ClientLine2, ClientZip, ClientCity, ImagePath";
 
     public IReadOnlyList<ProjectListItem> Search(SqliteConnection connection, SqliteTransaction? transaction, ProjectQuery query)
     {
@@ -158,12 +158,13 @@ public sealed class ProjectRepository
             INSERT INTO Projects
                 (Id, Number, Name, Customer, CustomerStreet, CustomerLine2, CustomerZip, CustomerCity,
                  Client, ClientStreet, ClientLine2, ClientZip, ClientCity, Contact, Description,
-                 ResponsibleUserId, ResponsibleName, FolderPath, Status, ArchivedUtc, ArchivedBy, CreatedUtc,
-                 CreatedBy, UpdatedUtc, UpdatedBy, RowVersion, IsDeleted)
+                 ResponsibleUserId, ResponsibleName, ImagePath, FolderPath, Status, ArchivedUtc, ArchivedBy,
+                 CreatedUtc, CreatedBy, UpdatedUtc, UpdatedBy, RowVersion, IsDeleted)
             VALUES
                 ($id, $number, $name, $customer, $customerStreet, $customerLine2, $customerZip, $customerCity,
                  $client, $clientStreet, $clientLine2, $clientZip, $clientCity, $contact,
-                 $description, $responsibleId, $responsibleName, $folderPath, $status, $archivedUtc, $archivedBy,
+                 $description, $responsibleId, $responsibleName, $imagePath, $folderPath, $status,
+                 $archivedUtc, $archivedBy,
                  $createdUtc, $createdBy, $updatedUtc, $updatedBy, 1, 0);
             """, transaction);
         command.With("$id", project.Id.ToString("D"))
@@ -179,6 +180,7 @@ public sealed class ProjectRepository
             .With("$clientLine2", project.ClientLine2)
             .With("$clientZip", project.ClientZip)
             .With("$clientCity", project.ClientCity)
+            .With("$imagePath", project.ImagePath)
             .With("$contact", project.Contact)
             .With("$description", project.Description)
             .With("$responsibleId", project.ResponsibleUserId?.ToString("D"))
@@ -203,6 +205,7 @@ public sealed class ProjectRepository
                 CustomerLine2 = $customerLine2, CustomerZip = $customerZip, CustomerCity = $customerCity,
                 Client = $client, ClientStreet = $clientStreet, ClientLine2 = $clientLine2,
                 ClientZip = $clientZip, ClientCity = $clientCity, Contact = $contact,
+                ImagePath = $imagePath,
                 Description = $description, ResponsibleUserId = $responsibleId, ResponsibleName = $responsibleName,
                 FolderPath = $folderPath, Status = $status, UpdatedUtc = $updatedUtc, UpdatedBy = $updatedBy,
                 RowVersion = RowVersion + 1
@@ -222,6 +225,7 @@ public sealed class ProjectRepository
             .With("$clientLine2", project.ClientLine2)
             .With("$clientZip", project.ClientZip)
             .With("$clientCity", project.ClientCity)
+            .With("$imagePath", project.ImagePath)
             .With("$contact", project.Contact)
             .With("$description", project.Description)
             .With("$responsibleId", project.ResponsibleUserId?.ToString("D"))
@@ -275,7 +279,7 @@ public sealed class ProjectRepository
     public List<ProjectContact> GetContacts(SqliteConnection connection, SqliteTransaction? transaction, Guid projectId)
     {
         using var command = Db.Command(connection, """
-            SELECT Id, ProjectId, Name, Email, Phone, Responsibility, SortOrder
+            SELECT Id, ProjectId, Name, Email, Phone, Responsibility, SortOrder, Party
             FROM ProjectContacts
             WHERE ProjectId = $projectId AND IsDeleted = 0
             ORDER BY SortOrder, Name COLLATE NOCASE;
@@ -295,6 +299,7 @@ public sealed class ProjectRepository
                 Phone = reader.TextOrNull(4),
                 Responsibility = reader.TextOrNull(5),
                 SortOrder = reader.Int32(6),
+                Kind = (ProjectContactKind)reader.Int32(7),
             });
         }
 
@@ -302,8 +307,9 @@ public sealed class ProjectRepository
     }
 
     /// <summary>
-    /// Schreibt die Ansprechpersonen neu. Bisherige Zeilen werden weich gelöscht, damit ein
-    /// späterer Abgleich die Änderung nachvollziehen kann.
+    /// Schreibt die Ansprechpersonen von Kunde und Auftraggeber neu. Bisherige Zeilen werden
+    /// weich gelöscht, damit ein späterer Abgleich die Änderung nachvollziehen kann. Die
+    /// Reihenfolge zählt je Personengruppe.
     /// </summary>
     public List<ProjectContact> ReplaceContacts(
         SqliteConnection connection,
@@ -324,29 +330,34 @@ public sealed class ProjectRepository
 
         var now = DateTime.UtcNow;
         var saved = new List<ProjectContact>();
+        var sortOrders = new Dictionary<ProjectContactKind, int>();
 
-        for (var index = 0; index < contacts.Count; index++)
+        foreach (var input in contacts)
         {
-            var input = contacts[index];
+            var sortOrder = sortOrders.TryGetValue(input.Kind, out var used) ? used : 0;
+            sortOrders[input.Kind] = sortOrder + 1;
+
             var contact = new ProjectContact
             {
                 ProjectId = projectId,
+                Kind = input.Kind,
                 Name = input.Name,
                 Email = input.Email,
                 Phone = input.Phone,
                 Responsibility = input.Responsibility,
-                SortOrder = index,
+                SortOrder = sortOrder,
             };
 
             using var insert = Db.Command(connection, """
                 INSERT INTO ProjectContacts
-                    (Id, ProjectId, Name, Email, Phone, Responsibility, SortOrder, CreatedUtc, CreatedBy,
+                    (Id, ProjectId, Party, Name, Email, Phone, Responsibility, SortOrder, CreatedUtc, CreatedBy,
                      RowVersion, IsDeleted)
-                VALUES ($id, $projectId, $name, $email, $phone, $responsibility, $sortOrder,
+                VALUES ($id, $projectId, $party, $name, $email, $phone, $responsibility, $sortOrder,
                         $createdUtc, $createdBy, 1, 0);
                 """, transaction);
             insert.With("$id", contact.Id.ToString("D"))
                 .With("$projectId", projectId.ToString("D"))
+                .With("$party", (int)contact.Kind)
                 .With("$name", contact.Name)
                 .With("$email", contact.Email)
                 .With("$phone", contact.Phone)
@@ -356,6 +367,95 @@ public sealed class ProjectRepository
                 .With("$createdBy", changedBy);
             insert.ExecuteNonQuery();
             saved.Add(contact);
+        }
+
+        return saved;
+    }
+
+    /// <summary>Meilensteine eines Projekts in der gespeicherten Reihenfolge.</summary>
+    public List<ProjectMilestone> GetMilestones(
+        SqliteConnection connection,
+        SqliteTransaction? transaction,
+        Guid projectId)
+    {
+        using var command = Db.Command(connection, """
+            SELECT Id, ProjectId, Title, IsDone, DoneDate, SortOrder
+            FROM ProjectMilestones
+            WHERE ProjectId = $projectId AND IsDeleted = 0
+            ORDER BY SortOrder, Title COLLATE NOCASE;
+            """, transaction);
+        command.With("$projectId", projectId.ToString("D"));
+
+        using var reader = command.ExecuteReader();
+        var milestones = new List<ProjectMilestone>();
+        while (reader.Read())
+        {
+            milestones.Add(new ProjectMilestone
+            {
+                Id = reader.Guid(0),
+                ProjectId = reader.Guid(1),
+                Title = reader.Text(2),
+                IsDone = reader.Bool(3),
+                DoneDate = reader.DateOrNull(4),
+                SortOrder = reader.Int32(5),
+            });
+        }
+
+        return milestones;
+    }
+
+    /// <summary>
+    /// Schreibt die Meilensteine neu; bisherige Zeilen werden weich gelöscht, damit ein
+    /// späterer Abgleich die Änderung nachvollziehen kann.
+    /// </summary>
+    public List<ProjectMilestone> ReplaceMilestones(
+        SqliteConnection connection,
+        SqliteTransaction? transaction,
+        Guid projectId,
+        IReadOnlyList<ProjectMilestoneInput> milestones,
+        string changedBy)
+    {
+        using (var retire = Db.Command(connection, """
+            UPDATE ProjectMilestones
+            SET IsDeleted = 1, RowVersion = RowVersion + 1
+            WHERE ProjectId = $projectId AND IsDeleted = 0;
+            """, transaction))
+        {
+            retire.With("$projectId", projectId.ToString("D"));
+            retire.ExecuteNonQuery();
+        }
+
+        var now = DateTime.UtcNow;
+        var saved = new List<ProjectMilestone>();
+
+        for (var index = 0; index < milestones.Count; index++)
+        {
+            var input = milestones[index];
+            var milestone = new ProjectMilestone
+            {
+                ProjectId = projectId,
+                Title = input.Title,
+                IsDone = input.IsDone,
+                DoneDate = input.DoneDate,
+                SortOrder = index,
+            };
+
+            using var insert = Db.Command(connection, """
+                INSERT INTO ProjectMilestones
+                    (Id, ProjectId, Title, IsDone, DoneDate, SortOrder, CreatedUtc, CreatedBy,
+                     RowVersion, IsDeleted)
+                VALUES ($id, $projectId, $title, $isDone, $doneDate, $sortOrder, $createdUtc, $createdBy, 1, 0);
+                """, transaction);
+            insert.With("$id", milestone.Id.ToString("D"))
+                .With("$projectId", projectId.ToString("D"))
+                .With("$title", milestone.Title)
+                .With("$isDone", milestone.IsDone ? 1 : 0)
+                .With("$doneDate", milestone.DoneDate.ToDb())
+                .With("$sortOrder", milestone.SortOrder)
+                .With("$createdUtc", now.ToDb())
+                .With("$createdBy", changedBy);
+            insert.ExecuteNonQuery();
+            saved.Add(milestone);
         }
 
         return saved;
@@ -390,5 +490,6 @@ public sealed class ProjectRepository
         ClientLine2 = reader.TextOrNull(24),
         ClientZip = reader.TextOrNull(25),
         ClientCity = reader.TextOrNull(26),
+        ImagePath = reader.TextOrNull(27),
     };
 }

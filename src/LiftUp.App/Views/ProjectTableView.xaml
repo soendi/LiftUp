@@ -14,7 +14,8 @@
             <WrapPanel Orientation="Horizontal">
                 <StackPanel Margin="0,0,12,0">
                     <TextBlock Text="Projekt" Style="{StaticResource LiftUpFieldLabel}" />
-                    <ComboBox x:Name="ProjectBox" Width="320" SelectionChanged="OnProjectChanged" />
+                    <ComboBox x:Name="ProjectBox" Width="320"
+                              DisplayMemberPath="DisplayText" SelectionChanged="OnProjectChanged" />
                 </StackPanel>
 
                 <StackPanel VerticalAlignment="Bottom">

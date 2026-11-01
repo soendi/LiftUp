@@ -9,6 +9,10 @@ public sealed class Session
 
     /// <summary>Absenderdaten aus dem Benutzerprofil für Titelseiten.</summary>
     public string Company { get; init; } = string.Empty;
+    public string CompanyStreet { get; init; } = string.Empty;
+    public string CompanyZip { get; init; } = string.Empty;
+    public string CompanyCity { get; init; } = string.Empty;
+    public string CompanyLogo { get; init; } = string.Empty;
     public string Email { get; init; } = string.Empty;
     public string Phone { get; init; } = string.Empty;
 
@@ -24,6 +28,10 @@ public sealed class Session
         UserName = user.UserName,
         DisplayName = user.DisplayName,
         Company = user.Company ?? string.Empty,
+        CompanyStreet = user.CompanyStreet ?? string.Empty,
+        CompanyZip = user.CompanyZip ?? string.Empty,
+        CompanyCity = user.CompanyCity ?? string.Empty,
+        CompanyLogo = user.CompanyLogo ?? string.Empty,
         Email = user.Email ?? string.Empty,
         Phone = user.Phone ?? string.Empty,
         RoleId = role.Id,

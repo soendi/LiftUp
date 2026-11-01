@@ -14,5 +14,7 @@
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.10" />
     <!-- Direkter Zugriff auf die zentrale PostgreSQL-Datenbank (Abgleich). -->
     <PackageReference Include="Npgsql" Version="8.0.5" />
+    <!-- Führt Bericht und Querformat-Blätter zu einem PDF zusammen. -->
+    <PackageReference Include="PdfSharp" Version="6.1.1" />
   </ItemGroup>
 </Project>

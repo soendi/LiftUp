@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using LiftUp.Core.Data;
+using LiftUp.Core.Documents;
 using LiftUp.Core.Domain;
 using LiftUp.Core.Repositories;
 using LiftUp.Core.Security;
@@ -48,7 +49,11 @@ public sealed partial class UserService
         bool mustChangePassword,
         string? company = null,
         string? email = null,
-        string? phone = null)
+        string? phone = null,
+        string? companyStreet = null,
+        string? companyZip = null,
+        string? companyCity = null,
+        string? companyLogo = null)
     {
         _actor.Require(Permission.ManageUsers);
 
@@ -76,11 +81,18 @@ public sealed partial class UserService
         }
 
         var hash = PasswordHasher.Hash(password);
+        var newId = Guid.NewGuid();
+        var logo = PrepareCompanyLogo(companyLogo, newId, null);
         var user = new User
         {
+            Id = newId,
             UserName = userName,
             DisplayName = displayName,
             Company = Normalize(company),
+            CompanyStreet = Normalize(companyStreet),
+            CompanyZip = Normalize(companyZip),
+            CompanyCity = Normalize(companyCity),
+            CompanyLogo = logo,
             Email = Normalize(email),
             Phone = Normalize(phone),
             RoleId = roleId,
@@ -98,6 +110,8 @@ public sealed partial class UserService
             new { user.UserName, user.DisplayName, RoleId = roleId.ToString("D"), user.IsActive, user.MustChangePassword },
             user.RowVersion);
         transaction.Commit();
+
+        CopyCompanyLogo(user.Id, companyLogo, user.CompanyLogo);
         return user;
     }
 
@@ -108,7 +122,11 @@ public sealed partial class UserService
         bool isActive,
         string? company = null,
         string? email = null,
-        string? phone = null)
+        string? phone = null,
+        string? companyStreet = null,
+        string? companyZip = null,
+        string? companyCity = null,
+        string? companyLogo = null)
     {
         _actor.Require(Permission.ManageUsers);
 
@@ -140,12 +158,28 @@ public sealed partial class UserService
             EnsureAnotherAdministratorExists(connection, transaction, id);
         }
 
-        var rowVersion = _users.Update(connection, transaction, id, displayName, roleId, isActive,
-            Normalize(company), Normalize(email), Normalize(phone));
+        // Ein bereits gespeichertes Logo bleibt gültig, auch wenn die Datei gerade fehlt.
+        var logo = PrepareCompanyLogo(companyLogo, id, existing.CompanyLogo);
+        var rowVersion = _users.Update(
+            connection,
+            transaction,
+            id,
+            displayName,
+            roleId,
+            isActive,
+            Normalize(company),
+            Normalize(email),
+            Normalize(phone),
+            Normalize(companyStreet),
+            Normalize(companyZip),
+            Normalize(companyCity),
+            logo);
         _changes.Record(connection, transaction, "User", id.ToString("D"), "Update",
             new { existing.UserName, DisplayName = displayName, RoleId = roleId.ToString("D"), IsActive = isActive },
             rowVersion);
         transaction.Commit();
+
+        CopyCompanyLogo(id, companyLogo, logo);
     }
 
     public void ResetPassword(Guid id, string newPassword, bool mustChangePassword)
@@ -188,6 +222,111 @@ public sealed partial class UserService
         _changes.Record(connection, transaction, "User", id.ToString("D"), "Delete",
             new { existing.UserName }, rowVersion);
         transaction.Commit();
+    }
+
+    /// <summary>Ordner der Firmenlogos; liegt neben der Datenbank und gehört zum Arbeitsplatz.</summary>
+    private string LogoFolder =>
+        Path.Combine(Path.GetDirectoryName(_database.FilePath) ?? Path.GetTempPath(), "logos");
+
+    /// <summary>
+    /// Prüft das gewählte Firmenlogo und bestimmt seinen Platz im Logoordner. Die Datei wird
+    /// beim Speichern dorthin kopiert, damit sie unabhängig von der Originaldatei bleibt.
+    /// </summary>
+    private string? PrepareCompanyLogo(string? path, Guid userId, string? currentLogo)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return null;
+        }
+
+        string fullPath;
+        try
+        {
+            fullPath = Path.GetFullPath(path.Trim());
+        }
+        catch (Exception exception) when (exception is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            throw new ValidationException("Der Pfad zum Firmenlogo ist ungültig.");
+        }
+
+        if (!File.Exists(fullPath))
+        {
+            // Das bisherige Logo bleibt eingetragen, auch wenn die Datei gerade fehlt.
+            if (currentLogo is not null
+                && string.Equals(fullPath, currentLogo, StringComparison.OrdinalIgnoreCase))
+            {
+                return fullPath;
+            }
+
+            throw new ValidationException("Die gewählte Logodatei wurde nicht gefunden.");
+        }
+
+        if (ImageEmbedding.ContentTypeFor(fullPath) is null)
+        {
+            throw new ValidationException(
+                $"Der Dateityp \"{Path.GetExtension(fullPath)}\" wird für das Firmenlogo nicht unterstützt. " +
+                "Möglich sind PNG, JPG, GIF, WebP, BMP, SVG und TIFF.");
+        }
+
+        var folder = LogoFolder;
+        if (!folder.EndsWith(Path.DirectorySeparatorChar))
+        {
+            folder += Path.DirectorySeparatorChar;
+        }
+
+        if (fullPath.StartsWith(folder, StringComparison.OrdinalIgnoreCase))
+        {
+            return fullPath;
+        }
+
+        return Path.Combine(LogoFolder, userId.ToString("D") + Path.GetExtension(fullPath).ToLowerInvariant());
+    }
+
+    /// <summary>
+    /// Kopiert das Logo nach dem Speichern in den Logoordner. Eine ältere Datei mit anderer
+    /// Endung wird dabei entfernt, damit kein Rest liegen bleibt.
+    /// </summary>
+    private void CopyCompanyLogo(Guid userId, string? sourcePath, string? targetPath)
+    {
+        if (string.IsNullOrWhiteSpace(sourcePath) || string.IsNullOrWhiteSpace(targetPath))
+        {
+            return;
+        }
+
+        string source;
+        try
+        {
+            source = Path.GetFullPath(sourcePath.Trim());
+        }
+        catch (Exception exception) when (exception is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return;
+        }
+
+        if (string.Equals(source, targetPath, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        try
+        {
+            Directory.CreateDirectory(LogoFolder);
+            File.Copy(source, targetPath, overwrite: true);
+
+            foreach (var file in Directory.GetFiles(LogoFolder, userId.ToString("D") + ".*"))
+            {
+                if (!string.Equals(file, targetPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    File.Delete(file);
+                }
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            throw new LiftUpException(
+                "Der Benutzer wurde gespeichert, das Firmenlogo konnte aber nicht kopiert werden: "
+                + exception.Message);
+        }
     }
 
     private void EnsureAnotherAdministratorExists(

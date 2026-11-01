@@ -1,4 +1,5 @@
 using LiftUp.Core.Data;
+using LiftUp.Core.Documents;
 using LiftUp.Core.Domain;
 using LiftUp.Core.Repositories;
 using Microsoft.Data.Sqlite;
@@ -53,7 +54,10 @@ public sealed class ProjectService
         using var connection = _database.Open();
         var project = _projects.GetById(connection, null, id)
                ?? throw new ValidationException("Das Projekt wurde nicht gefunden.");
-        project.Contacts = _projects.GetContacts(connection, null, id);
+        var contacts = _projects.GetContacts(connection, null, id);
+        project.Contacts = contacts.Where(contact => contact.Kind == ProjectContactKind.Customer).ToList();
+        project.ClientContacts = contacts.Where(contact => contact.Kind == ProjectContactKind.Client).ToList();
+        project.Milestones = _projects.GetMilestones(connection, null, id);
         return project;
     }
 
@@ -62,7 +66,7 @@ public sealed class ProjectService
         _actor.Require(Permission.CreateProjects);
         ArgumentNullException.ThrowIfNull(input);
 
-        var prepared = Prepare(input);
+        var (prepared, imageSource) = Prepare(input);
         var now = DateTime.UtcNow;
 
         using var connection = _database.Open();
@@ -94,6 +98,7 @@ public sealed class ProjectService
             ResponsibleUserId = prepared.ResponsibleUserId,
             ResponsibleName = responsibleName,
             FolderPath = prepared.FolderPath,
+            ImagePath = prepared.ImagePath,
             Status = prepared.Status,
             CreatedUtc = now,
             CreatedBy = _actor.UserName,
@@ -108,8 +113,8 @@ public sealed class ProjectService
         }
 
         _projects.Insert(connection, transaction, project);
-        project.Contacts = _projects.ReplaceContacts(
-            connection, transaction, project.Id, prepared.Contacts, _actor.UserName);
+        SaveContacts(connection, transaction, project, prepared);
+        SaveMilestones(connection, transaction, project, prepared);
         _changes.Record(connection, transaction, "Project", project.Id.ToString("D"), "Create",
             new
             {
@@ -120,6 +125,8 @@ public sealed class ProjectService
                 CustomerCity = project.CustomerCity,
                 Contact = project.Contact,
                 Contacts = prepared.Contacts.Count,
+                ClientContacts = prepared.ClientContacts.Count,
+                Milestones = prepared.Milestones.Count,
                 project.ResponsibleName,
                 project.FolderPath,
                 Status = (int)project.Status,
@@ -134,6 +141,8 @@ public sealed class ProjectService
             FolderService.EnsureStandardStructure(project.FolderPath);
         }
 
+        CopyProjectImage(project, imageSource);
+
         return project;
     }
 
@@ -142,13 +151,14 @@ public sealed class ProjectService
         _actor.Require(Permission.EditProjects);
         ArgumentNullException.ThrowIfNull(input);
 
-        var prepared = Prepare(input);
-
         using var connection = _database.Open();
         using var transaction = connection.BeginTransaction();
 
         var project = _projects.GetById(connection, transaction, id)
                       ?? throw new ValidationException("Das Projekt wurde nicht gefunden.");
+
+        // Das bisherige Bild bleibt gültig, auch wenn die Datei gerade fehlt.
+        var (prepared, imageSource) = Prepare(input, project.ImagePath);
 
         var number = prepared.Number ?? project.Number
                      ?? _projects.NextNumber(connection, transaction, DateTime.UtcNow.Year);
@@ -172,13 +182,14 @@ public sealed class ProjectService
         project.ResponsibleUserId = prepared.ResponsibleUserId;
         project.ResponsibleName = ResolveResponsibleName(connection, transaction, prepared.ResponsibleUserId);
         project.FolderPath = prepared.FolderPath;
+        project.ImagePath = prepared.ImagePath;
         project.Status = prepared.Status;
         project.UpdatedUtc = DateTime.UtcNow;
         project.UpdatedBy = _actor.UserName;
 
         var rowVersion = _projects.Update(connection, transaction, project);
-        project.Contacts = _projects.ReplaceContacts(
-            connection, transaction, project.Id, prepared.Contacts, _actor.UserName);
+        SaveContacts(connection, transaction, project, prepared);
+        SaveMilestones(connection, transaction, project, prepared);
         _changes.Record(connection, transaction, "Project", project.Id.ToString("D"), "Update",
             new
             {
@@ -189,6 +200,8 @@ public sealed class ProjectService
                 CustomerCity = project.CustomerCity,
                 Contact = project.Contact,
                 Contacts = prepared.Contacts.Count,
+                ClientContacts = prepared.ClientContacts.Count,
+                Milestones = prepared.Milestones.Count,
                 project.ResponsibleName,
                 project.FolderPath,
                 Status = (int)project.Status,
@@ -200,6 +213,8 @@ public sealed class ProjectService
         {
             FolderService.EnsureStandardStructure(project.FolderPath);
         }
+
+        CopyProjectImage(project, imageSource);
 
         return project;
     }
@@ -284,7 +299,7 @@ public sealed class ProjectService
             : error ?? "Der Ordner konnte nicht in den Papierkorb verschoben werden.";
     }
 
-    private ProjectInput Prepare(ProjectInput input)
+    private (ProjectInput Prepared, string? ImageSource) Prepare(ProjectInput input, string? currentImagePath = null)
     {
         var name = (input.Name ?? string.Empty).Trim();
         if (name.Length == 0)
@@ -310,7 +325,10 @@ public sealed class ProjectService
             throw new ValidationException("Der Projektordner existiert nicht. Bitte Ordner anlegen lassen oder einen vorhandenen wählen.");
         }
 
-        return new ProjectInput
+        // Gewähltes Bild: Die Quelldatei wird gemerkt, im Eingabesatz steht der Zielpfad.
+        var imageSource = Trimmed(input.ImagePath);
+
+        var prepared = new ProjectInput
         {
             Name = name,
             Number = string.IsNullOrWhiteSpace(input.Number) ? null : input.Number.Trim(),
@@ -324,13 +342,18 @@ public sealed class ProjectService
             ClientLine2 = Trimmed(input.ClientLine2),
             ClientZip = Trimmed(input.ClientZip),
             ClientCity = Trimmed(input.ClientCity),
-            Contacts = PrepareContacts(input.Contacts),
+            Contacts = PrepareContacts(input.Contacts, ProjectContactKind.Customer),
+            ClientContacts = PrepareContacts(input.ClientContacts, ProjectContactKind.Client),
+            Milestones = PrepareMilestones(input.Milestones),
             Description = Trimmed(input.Description),
             ResponsibleUserId = input.ResponsibleUserId,
             FolderPath = folderPath,
+            ImagePath = PrepareProjectImage(imageSource, folderPath, currentImagePath),
             Status = input.Status,
             CreateFolderIfMissing = input.CreateFolderIfMissing,
         };
+
+        return (prepared, imageSource);
     }
 
     private static string? Trimmed(string? value) =>
@@ -340,7 +363,9 @@ public sealed class ProjectService
     /// Entfernt leere Zeilen und verlangt einen Namen je Ansprechperson: eine Zeile nur mit
     /// Telefonnummer wäre im Dokument niemandem zuzuordnen.
     /// </summary>
-    private static IReadOnlyList<ProjectContactInput> PrepareContacts(IReadOnlyList<ProjectContactInput>? contacts)
+    private static IReadOnlyList<ProjectContactInput> PrepareContacts(
+        IReadOnlyList<ProjectContactInput>? contacts,
+        ProjectContactKind kind)
     {
         var prepared = new List<ProjectContactInput>();
 
@@ -363,6 +388,7 @@ public sealed class ProjectService
 
             prepared.Add(new ProjectContactInput
             {
+                Kind = kind,
                 Name = name,
                 Email = email,
                 Phone = phone,
@@ -371,6 +397,203 @@ public sealed class ProjectService
         }
 
         return prepared;
+    }
+
+    /// <summary>
+    /// Schreibt Kunden- und Auftraggeber-Ansprechpersonen gemeinsam und verteilt sie danach
+    /// wieder auf die beiden Listen des Projekts.
+    /// </summary>
+    private void SaveContacts(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        Project project,
+        ProjectInput prepared)
+    {
+        var saved = _projects.ReplaceContacts(
+            connection,
+            transaction,
+            project.Id,
+            [.. prepared.Contacts, .. prepared.ClientContacts],
+            _actor.UserName);
+
+        project.Contacts = saved.Where(contact => contact.Kind == ProjectContactKind.Customer).ToList();
+        project.ClientContacts = saved.Where(contact => contact.Kind == ProjectContactKind.Client).ToList();
+    }
+
+    /// <summary>
+    /// Entfernt leere Zeilen und verlangt eine Bezeichnung je Meilenstein. Ein abgehakter
+    /// Meilenstein ohne Datum bekommt das heutige. Die Begehung ist fest: Sie fehlt nie und
+    /// behält ihren Namen, auch wenn ein anderer Titel oder gar keine Zeile ankommt.
+    /// </summary>
+    private static IReadOnlyList<ProjectMilestoneInput> PrepareMilestones(
+        IReadOnlyList<ProjectMilestoneInput>? milestones)
+    {
+        var prepared = new List<ProjectMilestoneInput>();
+        var hasInspection = false;
+
+        foreach (var milestone in milestones ?? [])
+        {
+            var title = (milestone.Title ?? string.Empty).Trim();
+            if (title.Length == 0 && !milestone.IsDone && milestone.DoneDate is null)
+            {
+                continue;
+            }
+
+            if (title.Length == 0)
+            {
+                throw new ValidationException("Bitte zu jedem Meilenstein eine Bezeichnung angeben.");
+            }
+
+            if (title.Contains(ProjectMilestoneCatalog.Inspection, StringComparison.OrdinalIgnoreCase))
+            {
+                title = ProjectMilestoneCatalog.Inspection;
+                hasInspection = true;
+            }
+
+            prepared.Add(new ProjectMilestoneInput
+            {
+                Title = title,
+                IsDone = milestone.IsDone,
+                DoneDate = milestone.DoneDate?.Date ?? (milestone.IsDone ? DateTime.Today : null),
+            });
+        }
+
+        if (!hasInspection)
+        {
+            prepared.Insert(0, new ProjectMilestoneInput { Title = ProjectMilestoneCatalog.Inspection });
+        }
+
+        return prepared;
+    }
+
+    /// <summary>Schreibt die Meilensteine des Projekts.</summary>
+    private void SaveMilestones(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        Project project,
+        ProjectInput prepared)
+    {
+        project.Milestones = _projects.ReplaceMilestones(
+            connection, transaction, project.Id, prepared.Milestones, _actor.UserName);
+    }
+
+    /// <summary>
+    /// Prüft das gewählte Projektbild und bestimmt seinen Platz im Projektordner. Liegt die
+    /// Datei bereits im Bilderordner, bleibt ihr Pfad; sonst wird sie beim Speichern dorthin
+    /// kopiert (siehe <see cref="CopyProjectImage"/>).
+    /// </summary>
+    private static string? PrepareProjectImage(string? path, string projectFolder, string? currentImagePath)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return null;
+        }
+
+        string fullPath;
+        try
+        {
+            fullPath = Path.GetFullPath(path.Trim());
+        }
+        catch (Exception exception) when (exception is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            throw new ValidationException("Der Pfad zum Projektbild ist ungültig.");
+        }
+
+        if (!File.Exists(fullPath))
+        {
+            // Ein schon gespeichertes Bild bleibt eingetragen, auch wenn die Datei gerade fehlt.
+            if (currentImagePath is not null
+                && string.Equals(fullPath, currentImagePath, StringComparison.OrdinalIgnoreCase))
+            {
+                return fullPath;
+            }
+
+            throw new ValidationException("Die gewählte Bilddatei wurde nicht gefunden.");
+        }
+
+        if (ImageEmbedding.ContentTypeFor(fullPath) is null)
+        {
+            throw new ValidationException(
+                $"Der Dateityp \"{Path.GetExtension(fullPath)}\" wird für das Projektbild nicht unterstützt. " +
+                "Möglich sind PNG, JPG, GIF, WebP, BMP, SVG und TIFF.");
+        }
+
+        var imageFolder = Path.Combine(projectFolder, ProjectFolders.Images);
+        return IsInsideFolder(fullPath, imageFolder)
+            ? fullPath
+            : UniqueImagePath(imageFolder, Path.GetFileName(fullPath));
+    }
+
+    /// <summary>Liegt die Datei schon im angegebenen Ordner?</summary>
+    private static bool IsInsideFolder(string filePath, string folder)
+    {
+        var fullFolder = Path.GetFullPath(folder);
+        if (!fullFolder.EndsWith(Path.DirectorySeparatorChar))
+        {
+            fullFolder += Path.DirectorySeparatorChar;
+        }
+
+        return filePath.StartsWith(fullFolder, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Freier Dateiname im Bilderordner: ein gleichnamiges Bild wird nicht überschrieben,
+    /// sondern bekommt „(2)“ angehängt.
+    /// </summary>
+    private static string UniqueImagePath(string folder, string fileName)
+    {
+        var target = Path.Combine(folder, fileName);
+        if (!File.Exists(target))
+        {
+            return target;
+        }
+
+        var stem = Path.GetFileNameWithoutExtension(fileName);
+        var extension = Path.GetExtension(fileName);
+        for (var index = 2; index < 1000; index++)
+        {
+            target = Path.Combine(folder, $"{stem} ({index}){extension}");
+            if (!File.Exists(target))
+            {
+                return target;
+            }
+        }
+
+        return Path.Combine(folder, $"{stem}-{Guid.NewGuid():N}{extension}");
+    }
+
+    /// <summary>
+    /// Kopiert das gewählte Bild nach dem Speichern in den Projektordner. Liegt es dort schon,
+    /// bleibt die Datei unangetastet.
+    /// </summary>
+    private static void CopyProjectImage(Project project, string? sourcePath)
+    {
+        if (string.IsNullOrWhiteSpace(sourcePath) || string.IsNullOrWhiteSpace(project.ImagePath))
+        {
+            return;
+        }
+
+        if (string.Equals(sourcePath, project.ImagePath, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        try
+        {
+            var folder = Path.GetDirectoryName(project.ImagePath);
+            if (!string.IsNullOrEmpty(folder))
+            {
+                Directory.CreateDirectory(folder);
+            }
+
+            File.Copy(sourcePath, project.ImagePath, overwrite: true);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            throw new LiftUpException(
+                "Das Projekt wurde gespeichert, das Bild konnte aber nicht in den Projektordner kopiert " +
+                $"werden: {exception.Message}");
+        }
     }
 
     private string? ResolveResponsibleName(SqliteConnection connection, SqliteTransaction? transaction, Guid? userId)
