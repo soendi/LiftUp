@@ -12,7 +12,7 @@ namespace LiftUp.Core.Data;
 /// </summary>
 public sealed class Database
 {
-    public const int CurrentSchemaVersion = 25;
+    public const int CurrentSchemaVersion = 26;
 
     private readonly string _connectionString;
 
@@ -196,6 +196,9 @@ public sealed class Database
 
         // Version 25 macht die Analysepunkte dynamisch: Untertitel und Reihenfolge je Punkt.
         MigrateProjectAnalysisSections(connection);
+
+        // Version 26 setzt das Datum der Begehung auf dem Deckblatt in normale Schrift.
+        UpgradeReportCoverInspectionDate(connection);
 
         using var command = Db.Command(connection, "UPDATE SchemaInfo SET Version = $version;");
         command.With("$version", CurrentSchemaVersion);
@@ -788,6 +791,50 @@ public sealed class Database
     }
 
     /// <summary>
+    /// Version 26: Das Datum der Begehung steht auf dem Deckblatt in normaler Schrift statt
+    /// fett. Ersetzt wird nur der vorgegebene Satz; eigene Formulierungen bleiben unverändert.
+    /// </summary>
+    private static void UpgradeReportCoverInspectionDate(SqliteConnection connection)
+    {
+        var templateId = FindTemplateId(connection, ReportTemplateName, onlyFirstVersion: false);
+        if (templateId is not { } id)
+        {
+            return;
+        }
+
+        int currentVersion;
+        string html;
+        using (var read = Db.Command(connection, """
+            SELECT t.CurrentVersion, v.Html
+            FROM Templates t
+            JOIN TemplateVersions v ON v.TemplateId = t.Id AND v.Version = t.CurrentVersion
+            WHERE t.Id = $id;
+            """))
+        {
+            read.With("$id", id.ToString("D"));
+            using var reader = read.ExecuteReader();
+            if (!reader.Read())
+            {
+                return;
+            }
+
+            currentVersion = reader.Int32(0);
+            html = reader.Text(1);
+        }
+
+        const string bold = "<strong>{{project.inspectiondate}}</strong>";
+        if (!html.Contains(bold, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var updated = html.Replace(bold, "{{project.inspectiondate}}", StringComparison.Ordinal);
+        var version = currentVersion + 1;
+        InsertTemplateVersion(connection, id, version, updated);
+        SetTemplateVersion(connection, id, version);
+    }
+
+    /// <summary>
     /// Version 12: Bilder lassen sich mit Schlagworten versehen. Sie ergänzen Name und
     /// Kategorie in der Bildsuche, ohne dass bestehende Bilder etwas verlieren.
     /// </summary>
@@ -1014,7 +1061,7 @@ public sealed class Database
 
           <div class="section">
             <span class="label">Begehung</span>
-            <div class="text">Die Daten wurden am <strong>{{project.inspectiondate}}</strong> vor Ort aufgenommen.</div>
+            <div class="text">Die Daten wurden am {{project.inspectiondate}} vor Ort aufgenommen.</div>
           </div>
 
           <div class="footer">{{date}}, {{company.city}}</div>

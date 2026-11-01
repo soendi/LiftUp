@@ -124,6 +124,42 @@ public sealed class DefaultTemplateTests
         Assert.Contains("{{project.address}}", html);
     }
 
+    [Fact]
+    public void Deckblatt_zeigt_das_datum_der_begehung_in_normaler_schrift()
+    {
+        using var fixture = new TestDatabase();
+        var html = CurrentTemplateHtml(fixture);
+
+        Assert.Contains("Die Daten wurden am {{project.inspectiondate}} vor Ort aufgenommen.", html);
+        Assert.DoesNotContain("<strong>{{project.inspectiondate}}</strong>", html);
+    }
+
+    [Fact]
+    public void Bestehendes_deckblatt_verliert_den_fetten_begehungstermin()
+    {
+        using var fixture = new TestDatabase();
+
+        // Bisheriges Deckblatt der Version 25: Datum der Begehung in Fettschrift.
+        using (var connection = fixture.Database.Open())
+        using (var command = connection.CreateCommand())
+        {
+            command.CommandText = """
+                UPDATE TemplateVersions
+                SET Html = replace(Html, '{{project.inspectiondate}}', '<strong>{{project.inspectiondate}}</strong>')
+                WHERE TemplateId IN (SELECT Id FROM Templates WHERE Name = 'Zustandsbericht Aufzugsanlagen')
+                  AND Version = 1;
+                UPDATE SchemaInfo SET Version = 25;
+                """;
+            command.ExecuteNonQuery();
+        }
+
+        fixture.Database.EnsureCreated();
+
+        var html = CurrentTemplateHtml(fixture);
+        Assert.DoesNotContain("<strong>{{project.inspectiondate}}</strong>", html);
+        Assert.Contains("Die Daten wurden am {{project.inspectiondate}} vor Ort aufgenommen.", html);
+    }
+
     /// <summary>Aktueller Inhalt der Vorlage „Zustandsbericht Aufzugsanlagen“.</summary>
     private static string CurrentTemplateHtml(TestDatabase fixture)
     {
