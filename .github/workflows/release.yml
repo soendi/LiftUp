@@ -197,6 +197,7 @@ jobs:
             artifacts/LiftUp-Setup-Server.exe
             artifacts/LiftUp-Setup-Server.msi
             artifacts/SHA256SUMS.txt
+            docs/LiftUp-Bedienungsanleitung.pdf
           generate_release_notes: true
           fail_on_unmatched_files: true
           draft: false
