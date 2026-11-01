@@ -12,7 +12,7 @@ namespace LiftUp.App.Views;
 /// per Punkt (2.1 Aggregat, 2.2 Hubzylinder / Tragmittel …). Die Texte hängen am Projekt,
 /// damit sie in mehreren Dokumenten wiederverwendet werden.
 /// </summary>
-public partial class AnalysisView : UserControl
+public partial class AnalysisView : UserControl, ITabFillSource
 {
     private sealed record ProjectOption(Guid Id, string DisplayText);
 
@@ -44,9 +44,37 @@ public partial class AnalysisView : UserControl
     /// <summary>Aufzüge, für die gerade ein Foto-Reiter steht.</summary>
     private IReadOnlyList<string> _photoLiftKeys = [];
 
-    /// <summary>Farbe der Reiter: hellrot ohne Inhalt, hellgrün mit Inhalt.</summary>
-    private static readonly SolidColorBrush MissingBrush = CreateBrush(0xF9, 0xD6, 0xD5);
-    private static readonly SolidColorBrush DoneBrush = CreateBrush(0xD7, 0xF0, 0xDA);
+    /// <summary>Die Haupttitel – Grundlage für die Farbe des Reiters „Analyse“ im Fenster.</summary>
+    private readonly List<TabStatus> _chapterStatuses = [];
+
+    /// <summary>Zuletzt gemeldeter Füllstand des ganzen Reiters; null vor dem ersten Lauf.</summary>
+    private TabFill? _lastFill;
+
+    /// <summary>
+    /// Füllstand des Reiters „Analyse“ für die Farbe im Fenster: rot, wenn alle Haupttitel rot
+    /// sind, grün, wenn alle grün sind – sonst gelb, auch wenn jeder Titel nur halb erfasst ist.
+    /// </summary>
+    public TabFill Fill
+    {
+        get
+        {
+            if (_chapterStatuses.Count == 0)
+            {
+                return TabFill.None;
+            }
+
+            var statuses = _chapterStatuses.Select(status => status.IsFilled()).ToArray();
+            if (statuses.All(status => status == TabFill.Full))
+            {
+                return TabFill.Full;
+            }
+
+            return statuses.All(status => status == TabFill.None) ? TabFill.None : TabFill.Partial;
+        }
+    }
+
+    /// <summary>Meldet, wenn sich der Füllstand ändert – für die Farbe des Haupt-Reiters.</summary>
+    public event EventHandler? FillChanged;
 
     /// <summary>Projekt, dessen Texte gerade in den Reitern stehen.</summary>
     private Guid? _loadedProjectId;
@@ -90,7 +118,7 @@ public partial class AnalysisView : UserControl
                 // die Zeilen aus der Zustandsanalyse. Das Projekt wählt die Auswahl oben.
                 _stateTable = new ProjectTableView(_services, ProjectTableCatalog.Anlagedaten,
                     _selection, showProjectSelector: false, draftRows: CreateAnlagedatenRows);
-                AddChapterTab(chapter.Heading, _stateTable, () => _stateTable?.HasRows == true);
+                AddChapterTab(chapter.Heading, _stateTable, () => _stateTable?.Fill ?? TabFill.None);
                 continue;
             }
 
@@ -99,7 +127,8 @@ public partial class AnalysisView : UserControl
             if (chapter.Sections.Count == 1)
             {
                 var single = CreateDraft(chapter.Sections[0]);
-                AddChapterTab(chapter.Heading, single.Editor, () => single.Filled);
+                AddChapterTab(chapter.Heading, single.Editor,
+                    () => single.Filled ? TabFill.Full : TabFill.None);
                 continue;
             }
 
@@ -110,7 +139,8 @@ public partial class AnalysisView : UserControl
                 var draft = CreateDraft(section);
 
                 var tab = new TabItem { Content = draft.Editor };
-                var status = new TabStatus(tab, section.Heading, () => draft.Filled);
+                var status = new TabStatus(tab, section.Heading,
+                    () => draft.Filled ? TabFill.Full : TabFill.None);
 
                 sectionTabs.Add(status);
                 _tabStatuses.Add(status);
@@ -118,12 +148,11 @@ public partial class AnalysisView : UserControl
             }
 
             sections.SelectedIndex = sections.Items.Count > 0 ? 0 : -1;
-            AddChapterTab(chapter.Heading, sections, () => sectionTabs.Any(tab => tab.IsFilled()));
+            AddChapterTab(chapter.Heading, sections, () => Combine(sectionTabs));
         }
 
         // „4. Fotos“: je Aufzug aus der Zustandsanalyse ein Unter-Reiter mit Bildern.
-        AddChapterTab(ProjectAnalysisPhotoCatalog.Heading, _photoTabs,
-            () => _photoTabStatuses.Any(tab => tab.IsFilled()));
+        AddChapterTab(ProjectAnalysisPhotoCatalog.Heading, _photoTabs, () => Combine(_photoTabStatuses));
 
         // Der Inhalt der Anlagedaten ändert sich erst beim Speichern; die Farbe wird
         // deshalb beim Wechsel auf einen anderen Haupttitel neu bestimmt.
@@ -134,10 +163,12 @@ public partial class AnalysisView : UserControl
     }
 
     /// <summary>Hängt einen Haupttitel mit seiner Farbe an.</summary>
-    private void AddChapterTab(string header, object content, Func<bool> isFilled)
+    private void AddChapterTab(string header, object content, Func<TabFill> fill)
     {
         var tab = new TabItem { Content = content };
-        _tabStatuses.Add(new TabStatus(tab, header, isFilled));
+        var status = new TabStatus(tab, header, fill);
+        _tabStatuses.Add(status);
+        _chapterStatuses.Add(status);
         ChapterTabs.Items.Add(tab);
     }
 
@@ -305,7 +336,7 @@ public partial class AnalysisView : UserControl
             var status = new TabStatus(
                 tab,
                 ProjectAnalysisPhotoCatalog.LiftHeading(index, lifts[index].Name, lifts[index].Location),
-                () => panel.PhotoCount > 0,
+                () => panel.PhotoCount > 0 ? TabFill.Full : TabFill.None,
                 isPhoto: true);
 
             _photoTabStatuses.Add(status);
@@ -369,18 +400,18 @@ public partial class AnalysisView : UserControl
         UpdateTabColors();
     }
 
-    /// <summary>Ein Reiter mit Beschriftung und der Frage, ob etwas erfasst ist.</summary>
+    /// <summary>Ein Reiter mit Beschriftung und seinem Füllstand für die Farbe.</summary>
     private sealed class TabStatus
     {
-        private readonly Func<bool> _isFilled;
+        private readonly Func<TabFill> _status;
         private bool _painted;
 
-        public TabStatus(TabItem tab, string header, Func<bool> isFilled, bool isPhoto = false)
+        public TabStatus(TabItem tab, string header, Func<TabFill> status, bool isPhoto = false)
         {
             Tab = tab;
             Header = header;
             IsPhoto = isPhoto;
-            _isFilled = isFilled;
+            _status = status;
         }
 
         public TabItem Tab { get; }
@@ -389,29 +420,47 @@ public partial class AnalysisView : UserControl
 
         public bool IsPhoto { get; }
 
-        public bool Filled { get; private set; }
+        public TabFill Filled { get; private set; }
 
         /// <summary>Der Inhalt, ohne den gemerkten Stand zu verändern.</summary>
-        public bool IsFilled() => _isFilled();
+        public TabFill IsFilled() => _status();
 
         /// <summary>Prüft den Inhalt neu und meldet, ob die Farbe nachgezogen werden muss.</summary>
         public bool Refresh()
         {
-            var filled = _isFilled();
-            if (_painted && filled == Filled)
+            var status = _status();
+            if (_painted && status == Filled)
             {
                 return false;
             }
 
-            Filled = filled;
+            Filled = status;
             _painted = true;
             return true;
         }
     }
 
     /// <summary>
-    /// Färbt die Reiter nach ihrem Inhalt: hellrot, solange nichts erfasst ist, hellgrün,
-    /// sobald etwas da ist – so sieht man auf einen Blick, was noch fehlt.
+    /// Füllstand eines Haupttitels aus seinen Unter-Reitern: rot, wenn keiner erfasst ist,
+    /// gelb, wenn einige fehlen, grün, wenn alle erfasst sind.
+    /// </summary>
+    private static TabFill Combine(IReadOnlyList<TabStatus> tabs)
+    {
+        if (tabs.Count == 0)
+        {
+            return TabFill.None;
+        }
+
+        var full = tabs.Count(tab => tab.IsFilled() == TabFill.Full);
+        return full == 0
+            ? TabFill.None
+            : full == tabs.Count ? TabFill.Full : TabFill.Partial;
+    }
+
+    /// <summary>
+    /// Färbt die Reiter nach ihrem Inhalt: hellrot, solange nichts erfasst ist, hellgelb,
+    /// solange etwas fehlt, hellgrün, sobald alles erfasst ist – so sieht man auf einen Blick,
+    /// was noch fehlt.
     /// </summary>
     private void UpdateTabColors()
     {
@@ -422,31 +471,16 @@ public partial class AnalysisView : UserControl
         {
             if (changed[index])
             {
-                SetTabHeader(_tabStatuses[index].Tab, _tabStatuses[index].Header, _tabStatuses[index].Filled);
+                TabHeaderStyle.Apply(_tabStatuses[index].Tab, _tabStatuses[index].Header, _tabStatuses[index].Filled);
             }
         }
-    }
 
-    private static void SetTabHeader(TabItem tab, string header, bool filled)
-    {
-        tab.Header = new Border
+        // Der Haupt-Reiter im Fenster folgt dem Füllstand der ganzen Analyse.
+        if (_lastFill != Fill)
         {
-            Background = filled ? DoneBrush : MissingBrush,
-            CornerRadius = new CornerRadius(3),
-            Padding = new Thickness(7, 1, 7, 1),
-            Child = new TextBlock
-            {
-                Text = header,
-                VerticalAlignment = VerticalAlignment.Center,
-            },
-        };
-    }
-
-    private static SolidColorBrush CreateBrush(byte red, byte green, byte blue)
-    {
-        var brush = new SolidColorBrush(Color.FromRgb(red, green, blue));
-        brush.Freeze();
-        return brush;
+            _lastFill = Fill;
+            FillChanged?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     private void OnProjectChanged(object sender, SelectionChangedEventArgs e)

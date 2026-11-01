@@ -153,7 +153,7 @@ public sealed class ProjectAnalysisPhotoTests
 
         var html = ProjectPhotoSheet.Render(
             photos,
-            liftLocations: new Dictionary<string, string> { ["8609861"] = "Messligfeldstrasse 1" });
+            lifts: [new ProjectAnalysisLift("8609861", "Messligfeldstrasse 1")]);
 
         Assert.Contains("4. Fotos", html);
         Assert.Contains("4.1 8609861 Messligfeldstrasse 1", html);
@@ -173,6 +173,7 @@ public sealed class ProjectAnalysisPhotoTests
         var projects = new ProjectService(fixture.Database, session);
         var templates = new TemplateService(fixture.Database, session);
         var analysis = new ProjectAnalysisService(fixture.Database, session);
+        var tables = new ProjectTableService(fixture.Database, session);
         var documents = new DocumentService(fixture.Database, session, new FakeRenderer());
 
         var project = projects.Create(Input(Path.Combine(fixture.Root, "p1")));
@@ -183,6 +184,15 @@ public sealed class ProjectAnalysisPhotoTests
             Html = "<h1>{{project.name}}</h1>",
         });
 
+        tables.Save(project.Id, ProjectTableCatalog.ZustandsanalyseKey,
+        [
+            new ProjectTableRowInput(new Dictionary<string, string>
+            {
+                ["AssetName"] = "8609861",
+                ["Location"] = "Messligfeldstrasse 1",
+            }),
+        ]);
+
         analysis.SavePhotos(project.Id, "8609861",
             [new ProjectAnalysisPhotoInput(photo, "Türe", [Circle()], 400, 300)]);
 
@@ -191,6 +201,69 @@ public sealed class ProjectAnalysisPhotoTests
         Assert.Contains("4.1 8609861", html);
         Assert.Contains("page-break-before: always", html);
         Assert.Contains("Türe", html);
+    }
+
+    [Fact]
+    public void Aufzug_ohne_fotos_zaehlt_in_der_nummerierung_mit()
+    {
+        ProjectAnalysisPhoto photo = new()
+        {
+            LiftKey = "8609862",
+            FilePath = "C:\\bilder\\foto.png",
+        };
+
+        var html = ProjectPhotoSheet.Render(
+            [photo],
+            pageBreak: false,
+            lifts:
+            [
+                new ProjectAnalysisLift("8609861", "Messligfeldstrasse 1"),
+                new ProjectAnalysisLift("8609862", "Messligfeldstrasse 3"),
+            ]);
+
+        // Der erste Aufzug hat keine Fotos, der zweite behält seine Nummer 4.2.
+        Assert.Contains("4.2 8609862 Messligfeldstrasse 3", html);
+        Assert.DoesNotContain("4.1", html);
+    }
+
+    [Fact]
+    public void Fotos_ohne_aufzug_bleiben_aus_dem_dokument()
+    {
+        using var fixture = new TestDatabase();
+        var session = fixture.LoginAsAdmin();
+        var projects = new ProjectService(fixture.Database, session);
+        var templates = new TemplateService(fixture.Database, session);
+        var tables = new ProjectTableService(fixture.Database, session);
+        var analysis = new ProjectAnalysisService(fixture.Database, session);
+        var documents = new DocumentService(fixture.Database, session, new FakeRenderer());
+
+        var project = projects.Create(Input(Path.Combine(fixture.Root, "p1")));
+        var photo = WritePhoto(project);
+        var template = templates.Create(new TemplateInput
+        {
+            Name = "Gutachten",
+            Html = "<h1>{{project.name}}</h1>",
+        });
+
+        // Foto eines früheren Aufzugs, der in der Zustandsanalyse nicht mehr steht.
+        analysis.SavePhotos(project.Id, "8609861",
+            [new ProjectAnalysisPhotoInput(photo, "Altes Foto", [], 400, 300)]);
+
+        Assert.DoesNotContain("4. Fotos", documents.RenderHtml(project.Id, template.Id));
+
+        // Ein anderer Aufzug bekommt einen Reiter, das alte Foto bleibt trotzdem weg.
+        tables.Save(project.Id, ProjectTableCatalog.ZustandsanalyseKey,
+        [
+            new ProjectTableRowInput(new Dictionary<string, string>
+            {
+                ["AssetName"] = "8609862",
+                ["Location"] = "Messligfeldstrasse 3",
+            }),
+        ]);
+
+        var html = documents.RenderHtml(project.Id, template.Id);
+        Assert.DoesNotContain("4. Fotos", html);
+        Assert.DoesNotContain("Altes Foto", html);
     }
 
     [Fact]

@@ -102,12 +102,16 @@ Zwei projektbezogene Tabellen, die direkt hinter dem Reiter "Projekte" liegen:
 
 Alle projektbezogenen Tabellen führen dieselben Aufzüge: **Speichern der Zustandsanalyse legt je
 Zeile die passende Zeile der Investitionsplanung und der Anlagedaten („1. Anlagedaten“ der
-Analyse) an.** Die Investitionsplanung übernimmt Baujahr, Anlagebezeichnung, Servicefirma, Standort
-und Art des Aufzugs, die Anlagedaten Anlagebezeichnung, Aufzugstyp, Jahrgang und Nutzlast. Zugeordnet
+Analyse) an.** Die Investitionsplanung übernimmt Anlagebezeichnung, Servicefirma, Standort und Art
+des Aufzugs – das Investitionsjahr bleibt leer, denn es ist nicht das Baujahr des Aufzugs; die
+Anlagedaten übernehmen Anlagebezeichnung, Aufzugstyp, Jahrgang und Nutzlast. Zugeordnet
 wird über die Anlagebezeichnung, bei einer Umbenennung über die Position. Eigene Angaben (Massnahme
 und Kosten in der Investitionsplanung, Antrieb, Fabrikat, Abmessungen in den Anlagedaten) bleiben
-dabei stehen; Zeilen zu Aufzügen, die es in der Zustandsanalyse nicht mehr gibt, bleiben mit ihren
-Angaben erhalten.
+dabei stehen. Wird ein Aufzug in der Zustandsanalyse gelöscht, entfallen mit dem Speichern seine
+Zeilen in der Investitionsplanung und den Anlagedaten; der zugehörige Reiter „4.x“ verschwindet mit
+dem nächsten Öffnen des Analyse-Reiters (die Fotodateien bleiben im Projektordner). Vorher fragt
+LiftUp nach und nennt die Aufzüge sowie die Tabellen, in denen Daten gelöscht werden – ohne
+Bestätigung wird nichts gespeichert.
 
 Bewertungen, ja/nein und die Aufzugsart werden aus einer Auswahlliste gewählt (Spaltenkopf zeigt die
 möglichen Werte). Im PDF zeigen die Bewertungszellen nur die Farbe, der Text steht in der Legende:
@@ -116,7 +120,9 @@ nicht verfügbar. Damit die vorderen Spalten mehr Platz haben, stehen im PDF all
 gedreht, und der Gruppenkopf heisst dort „Ersatzteilverfgbk.“. Das Blatt übernimmt auch die
 Gruppenköpfe und den Hinweistext der Vorlage.
 
-Beide Reiter haben oben die Projektauswahl. In Textfeldern öffnet ein eingetipptes `/` die
+Beide Reiter haben oben die Projektauswahl; beim Wechsel auf einen Reiter werden die Zeilen neu
+gelesen (ungespeicherte Eingaben bleiben stehen), „Aktualisieren“ liest sie jederzeit neu. In
+Textfeldern öffnet ein eingetipptes `/` die
 Textbausteine; weitere Buchstaben filtern die Liste (Pfeiltasten wählen, Eingabe übernimmt,
 Escape schließt). In einer Tabellenzelle wird ein Textbaustein als reiner Text eingesetzt, weil die
 Zelle keine Formatierung kennt.
@@ -312,10 +318,16 @@ Dokuments neu zu tippen. Der Reiter folgt dem Bericht:
   Haupttitel nur einen Punkt hat.
 - **4. Fotos** – Fotos je Aufzug (siehe unten).
 
-Die Reiter zeigen auf einen Blick, wo noch etwas fehlt: Sie sind **hellrot**, solange nichts
-erfasst ist, und **hellgrün**, sobald etwas da ist – ein Haupttitel wird grün, sobald einer seiner
-Unter-Reiter Inhalt hat. Die Farbe folgt dem Text beim Tippen, den Fotos beim Hinzufügen und bei
-„1. Anlagedaten“ den Zeilen der Tabelle.
+Die Reiter zeigen auf einen Blick, wo noch etwas fehlt: **hellrot**, solange nichts erfasst ist,
+**hellgelb**, solange nicht alles erfasst ist, und **hellgrün**, sobald alles da ist. Ein Haupttitel
+zählt dafür seine Unter-Reiter: rot bei keinem, gelb bei einigen, grün bei allen erfassten; bei
+„1. Anlagedaten“ zählen die gefüllten Zellen der Tabelle. Die Farbe folgt dem Text beim Tippen,
+den Fotos beim Hinzufügen und bei „1. Anlagedaten“ den Zeilen der Tabelle.
+
+Dieselben Farben tragen die Haupt-Reiter im Fenster: „Zustandsanalyse“ und
+„Investitionsplanung“ sind rot ohne Zeilen, gelb solange Zeilen unvollständig oder ungespeichert
+sind, und grün, wenn alle Zeilen vollständig gefüllt und gespeichert sind. „Analyse“ ist rot,
+wenn kein Haupttitel etwas erfasst hat, grün wenn alle erfasst sind, sonst gelb.
 
 Die Texte gehören zum Projekt: „Speichern“ gilt für alle Unterpunkte, leere bleiben im Dokument
 weg. In jedem dieser Textfelder sucht `/` nach Textbausteinen, `&` nach den Bildern des Projekts,
@@ -340,6 +352,9 @@ Bilderordner des Projekts kopiert – und mit Bildunterschrift versehen. Der kle
 legt Kreise und Pfeile über das Foto, um den Kunden auf eine Stelle hinzuweisen; gespeichert
 werden Bildpixel, damit die Markierung im PDF exakt sitzt. Die Fotos erscheinen als eigene
 Seiten hinter den Tabellen: zwei Bilder pro Zeile in einem Raster, je Aufzug eine Überschrift.
+Gezeigt werden nur Fotos zu Aufzügen, die in der Zustandsanalyse noch stehen – Fotos eines
+gelöschten oder umbenannten Aufzugs bleiben weg, und die Nummerierung folgt den Reitern
+(auch ein Aufzug ohne Fotos zählt mit).
 
 **Versionierung:** Jedes Speichern erzeugt eine neue, unveränderliche Vorlagenversion. Erzeugte
 PDFs merken sich die verwendete Version; wird die Vorlage später geändert, bleiben alte PDFs

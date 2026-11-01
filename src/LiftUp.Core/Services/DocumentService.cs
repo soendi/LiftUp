@@ -289,33 +289,39 @@ public sealed class DocumentService
         // Die Fotos der Analyse folgen als eigene Seiten nach den Tabellen.
         builder.Append(ProjectPhotoSheet.Render(
             _photos.Get(connection, transaction, projectId),
-            liftLocations: CollectLiftLocations(connection, transaction, projectId)));
+            lifts: CollectLifts(connection, transaction, projectId)));
 
         return builder.ToString();
     }
 
     /// <summary>
-    /// Standorte der Aufzüge aus der Zustandsanalyse; sie stehen in der Überschrift der
-    /// Fotoseiten („4.1 8609861, Messligfeldstrasse 1“).
+    /// Aufzüge aus der Zustandsanalyse für die Fotoseiten („4.1 8609861 Messligfeldstrasse 1“).
+    /// Nur sie bekommen eine Überschrift – Fotos zu einem Aufzug, den es nicht mehr gibt,
+    /// bleiben im PDF weg.
     /// </summary>
-    private Dictionary<string, string> CollectLiftLocations(
+    private List<ProjectAnalysisLift> CollectLifts(
         Microsoft.Data.Sqlite.SqliteConnection connection,
         Microsoft.Data.Sqlite.SqliteTransaction? transaction,
         Guid projectId)
     {
-        var locations = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var lifts = new List<ProjectAnalysisLift>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         foreach (var row in _tables.GetRows(connection, transaction, projectId, ProjectTableCatalog.ZustandsanalyseKey))
         {
             var name = row.Values.TryGetValue("AssetName", out var assetName) ? assetName.Trim() : string.Empty;
-            if (name.Length == 0)
+            var location = row.Values.TryGetValue("Location", out var place) ? place.Trim() : string.Empty;
+
+            // Wie im Reiter „4. Fotos“: ohne Anlagebezeichnung und Standort kein Reiter.
+            if (name.Length == 0 || location.Length == 0 || !seen.Add(name))
             {
                 continue;
             }
 
-            locations[name] = row.Values.TryGetValue("Location", out var place) ? place.Trim() : string.Empty;
+            lifts.Add(new ProjectAnalysisLift(name, location));
         }
 
-        return locations;
+        return lifts;
     }
 
     /// <summary>Tabellen mit Zeilen, in der Reihenfolge der Blätter im PDF.</summary>
@@ -373,7 +379,7 @@ public sealed class DocumentService
 
         // Die Fotoseiten im Format des Berichts; sie beginnen auf einer neuen Seite.
         var photoHtml = ProjectPhotoSheet.RenderDocument(
-            photos, settings, CollectLiftLocations(connection, transaction, projectId));
+            photos, settings, CollectLifts(connection, transaction, projectId));
         if (photoHtml.Length > 0)
         {
             parts.Add(await _renderer.RenderAsync(photoHtml, settings, cancellationToken).ConfigureAwait(false));

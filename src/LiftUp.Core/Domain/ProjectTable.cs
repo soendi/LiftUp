@@ -176,10 +176,12 @@ public static class ProjectTableCatalog
 
     /// <summary>
     /// Spalten, die in beiden Tabellen vorkommen. Eine Zeile der Zustandsanalyse legt die
-    /// passende Zeile der Investitionsplanung an und füllt diese Angaben von dort.
+    /// passende Zeile der Investitionsplanung an und füllt diese Angaben von dort. Das Jahr
+    /// fehlt bewusst: Das Investitionsjahr ist nicht das Baujahr des Aufzugs und wird im
+    /// Reiter „Investitionsplanung“ selbst erfasst.
     /// </summary>
     public static IReadOnlyList<string> SharedWithInvestitionsplanung { get; } =
-        ["Year", "AssetName", "Service", "Location", "Type"];
+        ["AssetName", "Service", "Location", "Type"];
 
     /// <summary>
     /// Spalten der Anlagedaten, die aus der Zustandsanalyse stammen (links die Anlagedaten,
@@ -218,6 +220,22 @@ public static class ProjectTableCatalog
             Group = group,
             Options = options,
         };
+}
+
+/// <summary>
+/// Was ein Speichern der Zustandsanalyse in den abhängigen Tabellen löschen würde: die
+/// Aufzüge, die nicht mehr in den Zeilen stehen, und die Zahl der betroffenen Zeilen.
+/// </summary>
+public sealed record ProjectTableLoss(
+    IReadOnlyList<string> Lifts,
+    int Investitionsplanung,
+    int Anlagedaten)
+{
+    /// <summary>Nichts zu löschen – das Speichern braucht keine Rückfrage.</summary>
+    public static ProjectTableLoss Empty { get; } = new([], 0, 0);
+
+    /// <summary>Ob dabei Daten in einer anderen Tabelle gelöscht würden.</summary>
+    public bool Any => Investitionsplanung > 0 || Anlagedaten > 0;
 }
 
 /// <summary>Eine gespeicherte Zeile. Die Werte hängen an den Schlüsseln der Spalten.</summary>

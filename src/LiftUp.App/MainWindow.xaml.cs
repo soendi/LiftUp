@@ -32,6 +32,10 @@ public partial class MainWindow : Window
         // Zustandsanalyse, Investitionsplanung, Analyse und PDF teilen die Projektauswahl.
         var selection = new ProjectSelection();
 
+        // Die Haupt-Reiter tragen dieselben Farben wie ihr Inhalt: rot, solange nichts erfasst
+        // ist, gelb wenn noch etwas fehlt oder ungespeichert ist, grün wenn alles da ist.
+        var colored = new List<(TabItem Tab, string Header, ITabFillSource Source)>();
+
         var overview = new List<TabItem>();
         if (session.Can(Permission.ViewProjects))
         {
@@ -42,11 +46,22 @@ public partial class MainWindow : Window
         {
             // Die beiden Tabellen erscheinen direkt hinter den Projekten; die Zustandsanalyse
             // wird zusätzlich als zweites Blatt ins PDF übernommen.
-            overview.Add(CreateTab("Zustandsanalyse", new ProjectTableView(_services, ProjectTableCatalog.Zustandsanalyse, selection)));
-            overview.Add(CreateTab("Investitionsplanung", new ProjectTableView(_services, ProjectTableCatalog.Investitionsplanung, selection)));
+            var stateView = new ProjectTableView(_services, ProjectTableCatalog.Zustandsanalyse, selection);
+            var stateTab = CreateTab("Zustandsanalyse", stateView);
+            overview.Add(stateTab);
+
+            var investmentView = new ProjectTableView(_services, ProjectTableCatalog.Investitionsplanung, selection);
+            var investmentTab = CreateTab("Investitionsplanung", investmentView);
+            overview.Add(investmentTab);
 
             // Die Analyse wird je Projekt einmal erfasst und fließt in jedes Dokument ein.
-            overview.Add(CreateTab("Analyse", new AnalysisView(_services, selection)));
+            var analysisView = new AnalysisView(_services, selection);
+            var analysisTab = CreateTab("Analyse", analysisView);
+            overview.Add(analysisTab);
+
+            colored.Add((stateTab, "Zustandsanalyse", stateView));
+            colored.Add((investmentTab, "Investitionsplanung", investmentView));
+            colored.Add((analysisTab, "Analyse", analysisView));
         }
 
         if (session.Can(Permission.CreateDocuments) || session.Can(Permission.ManageTemplates))
@@ -121,6 +136,14 @@ public partial class MainWindow : Window
             {
                 Tabs.Items.Add(tab);
             }
+        }
+
+        // Farbe der Haupt-Reiter: Sie folgt dem Inhalt und dem gewählten Projekt.
+        foreach (var (tab, header, source) in colored)
+        {
+            source.FillChanged += (_, _) => TabHeaderStyle.Apply(tab, header, source.Fill);
+            selection.Changed += (_, _) => TabHeaderStyle.Apply(tab, header, source.Fill);
+            TabHeaderStyle.Apply(tab, header, source.Fill);
         }
 
         // Geöffnet ist immer der erste echte Reiter; Trennstriche sind nicht wählbar.

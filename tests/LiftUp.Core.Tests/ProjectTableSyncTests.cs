@@ -51,8 +51,10 @@ public sealed class ProjectTableSyncTests
         Assert.Equal("8609861", investment[0].Values["AssetName"]);
         Assert.Equal("Messligfeldstrasse 1", investment[0].Values["Location"]);
         Assert.Equal("Schindler", investment[0].Values["Service"]);
-        Assert.Equal("1994", investment[0].Values["Year"]);
         Assert.Equal("PA", investment[0].Values["Type"]);
+
+        // Das Investitionsjahr bleibt leer: es ist nicht das Baujahr des Aufzugs.
+        Assert.Equal(string.Empty, investment[0].Values["Year"]);
         Assert.Equal("8609862", investment[1].Values["AssetName"]);
 
         // Eigene Angaben der Investitionsplanung starten leer.
@@ -222,6 +224,131 @@ public sealed class ProjectTableSyncTests
         Assert.Equal("8609861-N (Messligfeldstrasse 1)", details[0].Values["AssetName"]);
         Assert.Equal("Schindler", details[0].Values["Make"]);
         Assert.Equal("Otis", details[1].Values["Make"]);
+    }
+
+    [Fact]
+    public void Eigenes_investitionsjahr_bleibt_erhalten()
+    {
+        using var fixture = new TestDatabase();
+        var session = fixture.LoginAsAdmin();
+        var projects = new ProjectService(fixture.Database, session);
+        var tables = new ProjectTableService(fixture.Database, session);
+        var project = projects.Create(Input(Path.Combine(fixture.Root, "p1")));
+
+        tables.Save(project.Id, ProjectTableCatalog.ZustandsanalyseKey,
+            [Lift("8609861", "Messligfeldstrasse 1", "1994", "PA")]);
+
+        tables.Save(project.Id, ProjectTableCatalog.InvestitionsplanungKey,
+        [
+            Row(("AssetName", "8609861"), ("Location", "Messligfeldstrasse 1"), ("Year", "2026")),
+        ]);
+
+        // Ein weiteres Speichern der Zustandsanalyse lässt das Investitionsjahr stehen.
+        tables.Save(project.Id, ProjectTableCatalog.ZustandsanalyseKey,
+            [Lift("8609861", "Messligfeldstrasse 1", "1994", "PA")]);
+
+        var investment = Assert.Single(tables.Get(project.Id, ProjectTableCatalog.InvestitionsplanungKey));
+        Assert.Equal("2026", investment.Values["Year"]);
+    }
+
+    [Fact]
+    public void Geloeschter_aufzug_verschwindet_aus_allen_tabellen()
+    {
+        using var fixture = new TestDatabase();
+        var session = fixture.LoginAsAdmin();
+        var projects = new ProjectService(fixture.Database, session);
+        var tables = new ProjectTableService(fixture.Database, session);
+        var project = projects.Create(Input(Path.Combine(fixture.Root, "p1")));
+
+        tables.Save(project.Id, ProjectTableCatalog.ZustandsanalyseKey,
+        [
+            Lift("8609861", "Messligfeldstrasse 1", "1994", "PA"),
+            Lift("8609862", "Messligfeldstrasse 3", "2001", "WA"),
+        ]);
+
+        tables.Save(project.Id, ProjectTableCatalog.InvestitionsplanungKey,
+        [
+            Row(("AssetName", "8609861"), ("ModernMeasure", "Steuerung ersetzen")),
+            Row(("AssetName", "8609862"), ("ModernMeasure", "Türen ersetzen")),
+        ]);
+
+        tables.Save(project.Id, ProjectTableCatalog.AnlagedatenKey,
+        [
+            Row(("AssetName", "8609861 (Messligfeldstrasse 1)"), ("Make", "Schindler")),
+            Row(("AssetName", "8609862 (Messligfeldstrasse 3)"), ("Make", "Otis")),
+        ]);
+
+        // Der zweite Aufzug wird gelöscht.
+        tables.Save(project.Id, ProjectTableCatalog.ZustandsanalyseKey,
+            [Lift("8609861", "Messligfeldstrasse 1", "1994", "PA")]);
+
+        var investment = Assert.Single(tables.Get(project.Id, ProjectTableCatalog.InvestitionsplanungKey));
+        Assert.Equal("Steuerung ersetzen", investment.Values["ModernMeasure"]);
+
+        var details = Assert.Single(tables.Get(project.Id, ProjectTableCatalog.AnlagedatenKey));
+        Assert.Equal("Schindler", details.Values["Make"]);
+    }
+
+    [Fact]
+    public void Rueckfrage_kennt_die_zeilen_der_geloeschten_aufzuege()
+    {
+        using var fixture = new TestDatabase();
+        var session = fixture.LoginAsAdmin();
+        var projects = new ProjectService(fixture.Database, session);
+        var tables = new ProjectTableService(fixture.Database, session);
+        var project = projects.Create(Input(Path.Combine(fixture.Root, "p1")));
+
+        tables.Save(project.Id, ProjectTableCatalog.ZustandsanalyseKey,
+        [
+            Lift("8609861", "Messligfeldstrasse 1", "1994", "PA"),
+            Lift("8609862", "Messligfeldstrasse 3", "2001", "WA"),
+        ]);
+
+        tables.Save(project.Id, ProjectTableCatalog.InvestitionsplanungKey,
+        [
+            Row(("AssetName", "8609861"), ("ModernMeasure", "Steuerung ersetzen")),
+            Row(("AssetName", "8609862"), ("ModernMeasure", "Türen ersetzen")),
+        ]);
+
+        tables.Save(project.Id, ProjectTableCatalog.AnlagedatenKey,
+        [
+            Row(("AssetName", "8609861 (Messligfeldstrasse 1)"), ("Make", "Schindler")),
+            Row(("AssetName", "8609862 (Messligfeldstrasse 3)"), ("Make", "Otis")),
+        ]);
+
+        var loss = tables.FindLoss(project.Id,
+            [Lift("8609861", "Messligfeldstrasse 1", "1994", "PA")]);
+
+        Assert.True(loss.Any);
+        Assert.Contains("8609862", loss.Lifts);
+        Assert.Equal(1, loss.Investitionsplanung);
+        Assert.Equal(1, loss.Anlagedaten);
+    }
+
+    [Fact]
+    public void Umbenennen_loescht_keine_daten()
+    {
+        using var fixture = new TestDatabase();
+        var session = fixture.LoginAsAdmin();
+        var projects = new ProjectService(fixture.Database, session);
+        var tables = new ProjectTableService(fixture.Database, session);
+        var project = projects.Create(Input(Path.Combine(fixture.Root, "p1")));
+
+        tables.Save(project.Id, ProjectTableCatalog.ZustandsanalyseKey,
+        [
+            Lift("8609861", "Messligfeldstrasse 1", "1994", "PA"),
+            Lift("8609862", "Messligfeldstrasse 3", "2001", "WA"),
+        ]);
+
+        // Nur die erste Anlage wird umbenannt: Nichts wird gelöscht, es kommt keine Rückfrage.
+        var loss = tables.FindLoss(project.Id,
+        [
+            Lift("8609861-N", "Messligfeldstrasse 1", "1994", "PA"),
+            Lift("8609862", "Messligfeldstrasse 3", "2001", "WA"),
+        ]);
+
+        Assert.False(loss.Any);
+        Assert.Empty(loss.Lifts);
     }
 
     [Fact]

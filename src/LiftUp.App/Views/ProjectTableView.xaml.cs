@@ -16,7 +16,7 @@ namespace LiftUp.App.Views;
 /// Eine projektbezogene Tabelle (Zustandsanalyse oder Investitionsplanung). Die Spalten
 /// stammen aus <see cref="ProjectTableCatalog"/>; in Textfeldern liefert „/“ die Textbausteine.
 /// </summary>
-public partial class ProjectTableView : UserControl
+public partial class ProjectTableView : UserControl, ITabFillSource
 {
     private sealed record ProjectOption(Guid Id, string DisplayText);
 
@@ -39,6 +39,9 @@ public partial class ProjectTableView : UserControl
     private TextBox? _editingBox;
     private int _slashIndex = -1;
     private int _selectedMatch = -1;
+
+    /// <summary>Ob seit dem letzten Lesen etwas geändert wurde – dann bleibt der Reiter stehen.</summary>
+    private bool _dirty;
 
     /// <param name="showProjectSelector">
     /// <c>false</c>, wenn die Tabelle in einem Reiter mit eigener Projektauswahl steht
@@ -79,6 +82,16 @@ public partial class ProjectTableView : UserControl
         RowsGrid.PreparingCellForEdit += OnPreparingCellForEdit;
         RowsGrid.CellEditEnding += OnCellEditEnding;
         Unloaded += (_, _) => HideSnippets();
+
+        // Die Zustandsanalyse kann in einem anderen Reiter Aufzüge anlegen: Beim Wechsel auf
+        // diesen Reiter stehen die Zeilen deshalb sofort da, ohne „Aktualisieren“.
+        IsVisibleChanged += (_, args) =>
+        {
+            if (args.NewValue is true)
+            {
+                RefreshIfUnmodified();
+            }
+        };
     }
 
     /// <summary>
@@ -132,8 +145,60 @@ public partial class ProjectTableView : UserControl
     /// <summary>Ob die Tabelle Zeilen hat – die Analyse färbt damit den Reiter „1. Anlagedaten“.</summary>
     public bool HasRows => _rows.Count > 0;
 
+    /// <summary>Meldet, wenn sich der Füllstand ändert – für die Farbe des Haupt-Reiters.</summary>
+    public event EventHandler? FillChanged;
+
     /// <summary>Liest die Zeilen neu – etwa nachdem die Zustandsanalyse einen Aufzug erhielt.</summary>
     public void Reload() => LoadRows();
+
+    /// <summary>
+    /// Füllstand der Tabelle für die Farbe des Reiters: rot ohne Angaben, gelb, solange Zellen
+    /// fehlen, grün, sobald alle Zellen der Zeilen gefüllt sind.
+    /// </summary>
+    public TabFill Fill
+    {
+        get
+        {
+            if (_rows.Count == 0 || _definition.Columns.Count == 0)
+            {
+                return TabFill.None;
+            }
+
+            // Ungespeicherte Zeilen zählen wie unvollständige: Der Reiter bleibt gelb.
+            if (_dirty)
+            {
+                return TabFill.Partial;
+            }
+
+            var filled = 0;
+            foreach (var row in _rows)
+            {
+                foreach (var column in _definition.Columns)
+                {
+                    if (!string.IsNullOrWhiteSpace(row[column.Key]))
+                    {
+                        filled++;
+                    }
+                }
+            }
+
+            return filled == 0
+                ? TabFill.None
+                : filled == _rows.Count * _definition.Columns.Count ? TabFill.Full : TabFill.Partial;
+        }
+    }
+
+    /// <summary>
+    /// Liest die Zeilen neu, sobald der Reiter sichtbar wird. Ungespeicherte Eingaben
+    /// bleiben stehen, damit ein Reiterwechsel nichts verwirft.
+    /// </summary>
+    private void RefreshIfUnmodified()
+    {
+        if (!_dirty)
+        {
+            LoadRows();
+        }
+    }
 
     private void LoadSnippets()
     {
@@ -205,6 +270,8 @@ public partial class ProjectTableView : UserControl
             InfoText.Text = _rows.Count == 1
                 ? $"{_definition.Title}: 1 Zeile"
                 : $"{_definition.Title}: {_rows.Count} Zeilen";
+            _dirty = false;
+            FillChanged?.Invoke(this, EventArgs.Empty);
         }
         catch (LiftUpException exception)
         {
@@ -254,6 +321,8 @@ public partial class ProjectTableView : UserControl
     {
         var model = new ProjectTableRowModel();
         _rows.Add(model);
+        _dirty = true;
+        FillChanged?.Invoke(this, EventArgs.Empty);
         RowsGrid.SelectedItem = model;
         RowsGrid.ScrollIntoView(model);
         InfoText.Text = "Zeile angelegt – bitte ausfüllen und speichern.";
@@ -268,6 +337,8 @@ public partial class ProjectTableView : UserControl
         }
 
         _rows.Remove(model);
+        _dirty = true;
+        FillChanged?.Invoke(this, EventArgs.Empty);
         InfoText.Text = "Zeile entfernt – bitte speichern.";
     }
 
@@ -290,6 +361,18 @@ public partial class ProjectTableView : UserControl
                 .Select(row => new ProjectTableRowInput(row.ToValues()))
                 .ToArray();
 
+            // Ein gelöschter Aufzug verschwindet auch aus den anderen Tabellen – das soll der
+            // Benutzer bestätigen, bevor Daten weg sind.
+            if (string.Equals(_definition.Key, ProjectTableCatalog.ZustandsanalyseKey, StringComparison.OrdinalIgnoreCase))
+            {
+                var loss = _services.ProjectTables.FindLoss(project.Id, inputs);
+                if (loss.Any && !ConfirmLoss(loss))
+                {
+                    InfoText.Text = "Speichern abgebrochen.";
+                    return;
+                }
+            }
+
             var saved = _services.ProjectTables.Save(project.Id, _definition.Key, inputs);
 
             _rows.Clear();
@@ -298,14 +381,50 @@ public partial class ProjectTableView : UserControl
                 _rows.Add(new ProjectTableRowModel(row));
             }
 
+            _dirty = false;
             InfoText.Text = saved.Count == 1
                 ? "Gespeichert: 1 Zeile."
                 : $"Gespeichert: {saved.Count} Zeilen.";
+            FillChanged?.Invoke(this, EventArgs.Empty);
         }
         catch (LiftUpException exception)
         {
             InfoText.Text = exception.Message;
         }
+    }
+
+    /// <summary>
+    /// Rückfrage vor dem Löschen: Nennt die Aufzüge und die Tabellen, in denen ihre Daten
+    /// mitgelöscht werden.
+    /// </summary>
+    private bool ConfirmLoss(ProjectTableLoss loss)
+    {
+        var parts = new List<string>(2);
+        if (loss.Investitionsplanung > 0)
+        {
+            parts.Add($"Investitionsplanung: {loss.Investitionsplanung} Zeile(n)");
+        }
+
+        if (loss.Anlagedaten > 0)
+        {
+            parts.Add($"Anlagedaten: {loss.Anlagedaten} Zeile(n)");
+        }
+
+        var message =
+            "Diese Aufzüge stehen nicht mehr in der Zustandsanalyse: " +
+            string.Join(", ", loss.Lifts) + ".\n\n" +
+            "Beim Speichern werden ihre Daten auch hier gelöscht:\n- " +
+            string.Join("\n- ", parts) + ".\n\n" +
+            "Der zugehörige Reiter unter „4. Fotos“ entfällt; die Fotodateien bleiben im " +
+            "Projektordner.\n\nWirklich löschen?";
+
+        return MessageBox.Show(
+            Window.GetWindow(this),
+            message,
+            "Aufzug löschen",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning,
+            MessageBoxResult.No) == MessageBoxResult.Yes;
     }
 
     private void OnPreparingCellForEdit(object? sender, DataGridPreparingCellForEditEventArgs e)
@@ -325,6 +444,14 @@ public partial class ProjectTableView : UserControl
     {
         DetachEditingBox();
         HideSnippets();
+
+        // Eine geänderte Zelle hält den Reiter beim Wechsel stehen – bis zum Speichern.
+        // Ein abgebrochener Edit zählt nicht.
+        if (e.EditAction == DataGridEditAction.Commit)
+        {
+            _dirty = true;
+            FillChanged?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     private void DetachEditingBox()

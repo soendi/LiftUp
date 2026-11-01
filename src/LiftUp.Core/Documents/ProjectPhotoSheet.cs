@@ -16,14 +16,44 @@ public static class ProjectPhotoSheet
 
     /// <summary>HTML der Fotoseiten; leer, wenn es keine Fotos gibt.</summary>
     /// <param name="pageBreak">Beim Anhängen an das Dokument <c>true</c>, als eigenes Blatt <c>false</c>.</param>
-    /// <param name="liftLocations">Standorte der Aufzüge aus der Zustandsanalyse (Anlagebezeichnung → Standort).</param>
+    /// <param name="lifts">
+    /// Aufzüge der Zustandsanalyse in ihrer Reihenfolge. Ist die Liste gesetzt, erscheinen nur
+    /// Fotos zu diesen Aufzügen – Fotos zu einem gelöschten oder umbenannten Aufzug bleiben weg.
+    /// </param>
     public static string Render(
         IReadOnlyList<ProjectAnalysisPhoto> photos,
         bool pageBreak = true,
-        IReadOnlyDictionary<string, string>? liftLocations = null)
+        IReadOnlyList<ProjectAnalysisLift>? lifts = null)
     {
         ArgumentNullException.ThrowIfNull(photos);
         if (photos.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        // Die Nummer folgt der Reihenfolge der Reiter: Ein Aufzug ohne Fotos wird übersprungen,
+        // der nächste behält aber seine Nummer („4.2“ statt „4.1“).
+        var groups = lifts is null
+            ? photos
+                .GroupBy(photo => photo.LiftKey, StringComparer.OrdinalIgnoreCase)
+                .Select((group, number) => (
+                    Number: number,
+                    Name: group.Key,
+                    Location: string.Empty,
+                    Photos: (IReadOnlyList<ProjectAnalysisPhoto>)group.ToArray()))
+                .ToArray()
+            : lifts
+                .Select((lift, number) => (
+                    Number: number,
+                    Name: lift.Name,
+                    Location: lift.Location,
+                    Photos: (IReadOnlyList<ProjectAnalysisPhoto>)photos
+                        .Where(photo => string.Equals(photo.LiftKey, lift.Key, StringComparison.OrdinalIgnoreCase))
+                        .ToArray()))
+                .Where(group => group.Photos.Count > 0)
+                .ToArray();
+
+        if (groups.Length == 0)
         {
             return string.Empty;
         }
@@ -34,25 +64,19 @@ public static class ProjectPhotoSheet
             .Append(Encode(ProjectAnalysisPhotoCatalog.Heading))
             .Append("</h2>");
 
-        var index = 0;
-        foreach (var group in photos.GroupBy(photo => photo.LiftKey, StringComparer.OrdinalIgnoreCase))
+        foreach (var group in groups)
         {
-            var location = liftLocations is not null && liftLocations.TryGetValue(group.Key, out var found)
-                ? found
-                : string.Empty;
-
             builder.Append("<h3 style=\"font-size:12pt;margin:4mm 0 2mm 0;break-after:avoid;page-break-after:avoid;\">")
-                .Append(Encode(ProjectAnalysisPhotoCatalog.LiftHeading(index, group.Key, location)))
+                .Append(Encode(ProjectAnalysisPhotoCatalog.LiftHeading(group.Number, group.Name, group.Location)))
                 .Append("</h3>");
 
             builder.Append("<div style=\"display:grid;grid-template-columns:1fr 1fr;gap:4mm;\">");
-            foreach (var photo in group)
+            foreach (var photo in group.Photos)
             {
                 AppendPhoto(builder, photo);
             }
 
             builder.Append("</div>");
-            index++;
         }
 
         builder.Append("</div>");
@@ -63,9 +87,9 @@ public static class ProjectPhotoSheet
     public static string RenderDocument(
         IReadOnlyList<ProjectAnalysisPhoto> photos,
         PdfPageSettings? settings = null,
-        IReadOnlyDictionary<string, string>? liftLocations = null)
+        IReadOnlyList<ProjectAnalysisLift>? lifts = null)
     {
-        var body = Render(photos, pageBreak: false, liftLocations);
+        var body = Render(photos, pageBreak: false, lifts);
         if (body.Length == 0)
         {
             return string.Empty;
@@ -96,7 +120,7 @@ public static class ProjectPhotoSheet
         builder.Append("<figure>");
         builder.Append("<div style=\"height:")
             .Append(CellHeightMm.ToString("0.##", CultureInfo.InvariantCulture))
-            .Append("mm;display:flex;align-items:center;justify-content:center;background:#f5f7fa;")
+            .Append("mm;display:flex;align-items:center;justify-content:center;background:#ffffff;")
             .Append("border:1px solid #d9e2ec;border-radius:2mm;overflow:hidden;\">");
 
         if (image is null)

@@ -90,6 +90,7 @@ public sealed class ProjectTableService
     /// Hält die Investitionsplanung bei den Aufzügen der Zustandsanalyse: gemeinsame Spalten
     /// werden übernommen, eigene Angaben (Massnahme, Kosten, Erläuterung) bleiben stehen.
     /// Zugeordnet wird über die Anlagebezeichnung, bei einer Umbenennung über die Position.
+    /// Zeilen zu einem gelöschten Aufzug fallen weg.
     /// </summary>
     private void SyncInvestitionsplanung(
         SqliteConnection connection,
@@ -98,9 +99,23 @@ public sealed class ProjectTableService
         IReadOnlyList<ProjectTableRow> lifts)
     {
         var definition = ProjectTableCatalog.Investitionsplanung;
-        var remaining = new List<ProjectTableRow>(
-            _tables.GetRows(connection, transaction, projectId, definition.Key));
-        var merged = new List<ProjectTableRowInput>(lifts.Count + remaining.Count);
+        var existing = _tables.GetRows(connection, transaction, projectId, definition.Key);
+        var merged = MergeInvestitionsplanung(lifts, existing).Rows;
+
+        _tables.ReplaceRows(connection, transaction, projectId, definition.Key, merged, _actor.UserName);
+    }
+
+    /// <summary>
+    /// Zeilen der Investitionsplanung zu den Aufzügen der Zustandsanalyse. Was übrig bleibt,
+    /// gehört zu einem gelöschten Aufzug – der Aufrufer wirft es weg.
+    /// </summary>
+    private static (List<ProjectTableRowInput> Rows, List<ProjectTableRow> Removed) MergeInvestitionsplanung(
+        IReadOnlyList<ProjectTableRow> lifts,
+        IReadOnlyList<ProjectTableRow> existing)
+    {
+        var definition = ProjectTableCatalog.Investitionsplanung;
+        var remaining = new List<ProjectTableRow>(existing);
+        var merged = new List<ProjectTableRowInput>(lifts.Count);
 
         for (var index = 0; index < lifts.Count; index++)
         {
@@ -147,21 +162,15 @@ public sealed class ProjectTableService
             merged.Add(new ProjectTableRowInput(values));
         }
 
-        // Zeilen ohne Aufzug in der Zustandsanalyse bleiben mit ihren Angaben erhalten.
-        foreach (var row in remaining)
-        {
-            merged.Add(new ProjectTableRowInput(
-                new Dictionary<string, string>(row.Values, StringComparer.OrdinalIgnoreCase)));
-        }
-
-        _tables.ReplaceRows(connection, transaction, projectId, definition.Key, merged, _actor.UserName);
+        return (merged, remaining);
     }
 
     /// <summary>
     /// Hält die Anlagedaten („1. Anlagedaten“ der Analyse) bei den Aufzügen der
     /// Zustandsanalyse: Anlagebezeichnung, Aufzugstyp, Jahrgang und Nutzlast werden
     /// übernommen, die übrigen Angaben bleiben stehen. Zugeordnet wird über die
-    /// Anlagebezeichnung, bei einer Umbenennung über die Position.
+    /// Anlagebezeichnung, bei einer Umbenennung über die Position; Zeilen zu einem gelöschten
+    /// Aufzug fallen weg.
     /// </summary>
     private void SyncAnlagedaten(
         SqliteConnection connection,
@@ -170,9 +179,23 @@ public sealed class ProjectTableService
         IReadOnlyList<ProjectTableRow> lifts)
     {
         var definition = ProjectTableCatalog.Anlagedaten;
-        var remaining = new List<ProjectTableRow>(
-            _tables.GetRows(connection, transaction, projectId, definition.Key));
-        var merged = new List<ProjectTableRowInput>(lifts.Count + remaining.Count);
+        var existing = _tables.GetRows(connection, transaction, projectId, definition.Key);
+        var merged = MergeAnlagedaten(lifts, existing).Rows;
+
+        _tables.ReplaceRows(connection, transaction, projectId, definition.Key, merged, _actor.UserName);
+    }
+
+    /// <summary>
+    /// Zeilen der Anlagedaten zu den Aufzügen der Zustandsanalyse. Was übrig bleibt, gehört zu
+    /// einem gelöschten Aufzug – der Aufrufer wirft es weg.
+    /// </summary>
+    private static (List<ProjectTableRowInput> Rows, List<ProjectTableRow> Removed) MergeAnlagedaten(
+        IReadOnlyList<ProjectTableRow> lifts,
+        IReadOnlyList<ProjectTableRow> existing)
+    {
+        var definition = ProjectTableCatalog.Anlagedaten;
+        var remaining = new List<ProjectTableRow>(existing);
+        var merged = new List<ProjectTableRowInput>(lifts.Count);
 
         // Einen Standort kennen die Anlagedaten nicht: Bei mehreren Standorten trägt die
         // Anlagebezeichnung den Standort mit – wie in der Vorbelegung des Reiters.
@@ -246,14 +269,48 @@ public sealed class ProjectTableService
             }
         }
 
-        // Zeilen ohne Aufzug in der Zustandsanalyse bleiben mit ihren Angaben erhalten.
-        foreach (var row in remaining)
+        return (merged, remaining);
+    }
+
+    /// <summary>
+    /// Prüft vor dem Speichern der Zustandsanalyse, ob dabei Zeilen anderer Tabellen gelöscht
+    /// würden – Aufzüge, die in den neuen Zeilen nicht mehr stehen. Grundlage für die Rückfrage.
+    /// </summary>
+    public ProjectTableLoss FindLoss(Guid projectId, IReadOnlyList<ProjectTableRowInput> rows)
+    {
+        _actor.Require(Permission.EditProjects);
+        ArgumentNullException.ThrowIfNull(rows);
+
+        // Wie beim Speichern: Vollständig leere Zeilen entstehen gar nicht erst.
+        var lifts = rows
+            .Where(row => row.Values.Values.Any(value => !string.IsNullOrWhiteSpace(value)))
+            .Select(row => new ProjectTableRow
+            {
+                ProjectId = projectId,
+                TableKey = ProjectTableCatalog.ZustandsanalyseKey,
+                Values = new Dictionary<string, string>(row.Values, StringComparer.OrdinalIgnoreCase),
+            })
+            .ToArray();
+
+        using var connection = _database.Open();
+
+        var investment = MergeInvestitionsplanung(lifts,
+            _tables.GetRows(connection, null, projectId, ProjectTableCatalog.InvestitionsplanungKey)).Removed;
+        var details = MergeAnlagedaten(lifts,
+            _tables.GetRows(connection, null, projectId, ProjectTableCatalog.AnlagedatenKey)).Removed;
+
+        if (investment.Count == 0 && details.Count == 0)
         {
-            merged.Add(new ProjectTableRowInput(
-                new Dictionary<string, string>(row.Values, StringComparer.OrdinalIgnoreCase)));
+            return ProjectTableLoss.Empty;
         }
 
-        _tables.ReplaceRows(connection, transaction, projectId, definition.Key, merged, _actor.UserName);
+        var names = investment.Concat(details)
+            .Select(row => Value(row, "AssetName"))
+            .Select(name => name.Length > 0 ? name : "ohne Anlagebezeichnung")
+            .Distinct(StringComparer.CurrentCultureIgnoreCase)
+            .ToArray();
+
+        return new ProjectTableLoss(names, investment.Count, details.Count);
     }
 
     /// <summary>Anlagebezeichnung der Anlagedaten; bei mehreren Standorten mit Standort.</summary>
