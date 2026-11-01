@@ -1,3 +1,4 @@
+using System.IO;
 using System.Reflection;
 using System.Windows;
 using LiftUp.Core.Backup;
@@ -15,10 +16,65 @@ public partial class App : System.Windows.Application
 {
     public static AppServices Services { get; private set; } = null!;
 
+    /// <summary>Protokoll der unbehandelten Fehler – liegt neben der Datenbank im Benutzerprofil.</summary>
+    public static string CrashLogPath { get; } =
+        Path.Combine(AppPaths.GetApplicationDirectory(), "fehler.log");
+
+    private static readonly object LogLock = new();
+
+    /// <summary>
+    /// Schreibt einen Fehler ins Protokoll. Ohne Protokoll beendet sich die Anwendung nach
+    /// einem Fehler still, und niemand weiss, woran es lag.
+    /// </summary>
+    public static void LogException(string context, Exception exception)
+    {
+        try
+        {
+            lock (LogLock)
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(CrashLogPath)!);
+                File.AppendAllText(
+                    CrashLogPath,
+                    $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} · {context}{Environment.NewLine}"
+                    + exception + Environment.NewLine + Environment.NewLine);
+            }
+        }
+        catch (Exception)
+        {
+            // Ein fehlendes Protokoll darf den Fehler nicht verdecken.
+        }
+    }
+
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
+
+        // Ein unbehandelter Fehler soll die Anwendung nicht still beenden: Er landet im
+        // Protokoll, wird gemeldet, und LiftUp läuft weiter.
+        DispatcherUnhandledException += (_, args) =>
+        {
+            LogException("Oberfläche", args.Exception);
+            MessageBox.Show(
+                "LiftUp ist ein Fehler unterlaufen. Die Anwendung läuft weiter.\n\n"
+                + args.Exception.Message + "\n\nProtokoll: " + CrashLogPath,
+                "LiftUp", MessageBoxButton.OK, MessageBoxImage.Error);
+            args.Handled = true;
+        };
+
+        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+        {
+            if (args.ExceptionObject is Exception exception)
+            {
+                LogException("Hintergrund", exception);
+            }
+        };
+
+        TaskScheduler.UnobservedTaskException += (_, args) =>
+        {
+            LogException("Aufgabe", args.Exception);
+            args.SetObserved();
+        };
 
         try
         {
@@ -43,10 +99,22 @@ public partial class App : System.Windows.Application
             return;
         }
 
-        var mainWindow = new MainWindow(Services);
-        MainWindow = mainWindow;
-        ShutdownMode = ShutdownMode.OnMainWindowClose;
-        mainWindow.Show();
+        try
+        {
+            var mainWindow = new MainWindow(Services);
+            MainWindow = mainWindow;
+            ShutdownMode = ShutdownMode.OnMainWindowClose;
+            mainWindow.Show();
+        }
+        catch (Exception exception)
+        {
+            LogException("Start", exception);
+            MessageBox.Show(
+                "Das Hauptfenster konnte nicht geöffnet werden.\n\n"
+                + exception.Message + "\n\nProtokoll: " + CrashLogPath,
+                "LiftUp", MessageBoxButton.OK, MessageBoxImage.Error);
+            Shutdown();
+        }
     }
 }
 

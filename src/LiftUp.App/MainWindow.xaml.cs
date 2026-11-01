@@ -177,13 +177,26 @@ public partial class MainWindow : Window
         // Stille Update-Prüfung beim Start; abschaltbar über LIFTUP_DISABLE_AUTOUPDATE=1.
         Loaded += async (_, _) =>
         {
-            if (UpdateService.AutoUpdateAllowed)
+            // Update-Prüfung und Abgleich dürfen den Start nicht beenden: Ein Netzwerk- oder
+            // Datenbankfehler landet im Protokoll, die Anwendung bleibt offen.
+            try
             {
-                await RunUpdateAsync(userInitiated: false);
-            }
+                if (UpdateService.AutoUpdateAllowed)
+                {
+                    await RunUpdateAsync(userInitiated: false);
+                }
 
-            await TrySyncAsync();
-            _syncTimer.Start();
+                await TrySyncAsync();
+            }
+            catch (Exception exception)
+            {
+                App.LogException("Start", exception);
+                StatusText.Text = "Startprüfung fehlgeschlagen – Details im Protokoll.";
+            }
+            finally
+            {
+                _syncTimer.Start();
+            }
         };
     }
 
@@ -213,6 +226,12 @@ public partial class MainWindow : Window
             SyncText.Text = result.Succeeded
                 ? $"Synchronisation: {result.Message}"
                 : "Synchronisation: nicht möglich";
+        }
+        catch (Exception exception)
+        {
+            // Ohne erreichbaren Server läuft die Anwendung lokal weiter.
+            App.LogException("Synchronisation", exception);
+            SyncText.Text = "Synchronisation: nicht möglich";
         }
         finally
         {
