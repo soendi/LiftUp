@@ -55,6 +55,16 @@ public partial class ProjectTableView : UserControl, ITabFillSource
     /// </summary>
     private const double MultilineRowHeight = 5 * 16;
 
+    /// <summary>Spalten der Investitionsplanung, die der Rechner füllt.</summary>
+    private const string ModernMeasureKey = "ModernMeasure";
+    private const string ModernCostKey = "ModernCost";
+    private const string ReplaceMeasureKey = "ReplaceMeasure";
+    private const string ReplaceCostKey = "ReplaceCost";
+
+    /// <summary>Preise je Massnahme aus dem Rechner; sie haben keine eigene Spalte.</summary>
+    private const string ModernBreakdownKey = "ModernBreakdown";
+    private const string ReplaceBreakdownKey = "ReplaceBreakdown";
+
     /// <param name="showProjectSelector">
     /// <c>false</c>, wenn die Tabelle in einem Reiter mit eigener Projektauswahl steht
     /// (etwa „1. Anlagedaten“ der Analyse); das Projekt kommt dann über <see cref="SelectProject"/>.
@@ -135,6 +145,8 @@ public partial class ProjectTableView : UserControl, ITabFillSource
     /// </summary>
     private void BuildColumns()
     {
+        AddCalculatorColumn();
+
         foreach (var column in _definition.Columns)
         {
             var binding = new Binding($"[{column.Key}]")
@@ -190,6 +202,77 @@ public partial class ProjectTableView : UserControl, ITabFillSource
             });
         }
     }
+
+    /// <summary>
+    /// Erste Spalte der Investitionsplanung: ein kleiner Rechner je Zeile. Er teilt die
+    /// Massnahmen auf und schreibt die Summe in „Kosten“; die Spalte ist nicht bearbeitbar.
+    /// </summary>
+    private void AddCalculatorColumn()
+    {
+        if (!string.Equals(_definition.Key, ProjectTableCatalog.InvestitionsplanungKey, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        var button = new FrameworkElementFactory(typeof(Button));
+        button.SetValue(ContentControl.ContentProperty, "🧮");
+        button.SetValue(Control.FontSizeProperty, 14.0);
+        button.SetValue(Control.PaddingProperty, new Thickness(0));
+        button.SetValue(FrameworkElement.MarginProperty, new Thickness(2));
+        button.SetValue(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+        button.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
+        button.SetValue(FrameworkElement.CursorProperty, Cursors.Hand);
+        button.SetValue(FrameworkElement.ToolTipProperty, "Massnahmen aufteilen und Kosten zusammenzählen");
+        button.AddHandler(ButtonBase.ClickEvent, new RoutedEventHandler(OnCalculatorClick));
+
+        RowsGrid.Columns.Add(new DataGridTemplateColumn
+        {
+            Header = new TextBlock { Text = "∑", ToolTip = "Massnahmen und Kosten berechnen" },
+            CellTemplate = new DataTemplate { VisualTree = button },
+            Width = new DataGridLength(40),
+            IsReadOnly = true,
+            CanUserSort = false,
+        });
+    }
+
+    /// <summary>Öffnet den Rechner zur Zeile und übernimmt Massnahmen und Kosten zurück.</summary>
+    private void OnCalculatorClick(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not ProjectTableRowModel model)
+        {
+            return;
+        }
+
+        var dialog = new InvestmentCalculatorWindow(
+            GroupLabel(ModernMeasureKey), model[ModernMeasureKey], model[ModernBreakdownKey],
+            GroupLabel(ReplaceMeasureKey), model[ReplaceMeasureKey], model[ReplaceBreakdownKey])
+        {
+            Owner = Window.GetWindow(this),
+        };
+
+        if (dialog.ShowDialog() != true)
+        {
+            return;
+        }
+
+        model[ModernMeasureKey] = dialog.LeftMeasures;
+        model[ModernCostKey] = dialog.LeftCost;
+        model[ModernBreakdownKey] = dialog.LeftBreakdown;
+        model[ReplaceMeasureKey] = dialog.RightMeasures;
+        model[ReplaceCostKey] = dialog.RightCost;
+        model[ReplaceBreakdownKey] = dialog.RightBreakdown;
+
+        _dirty = true;
+        FillChanged?.Invoke(this, EventArgs.Empty);
+        InfoText.Text = "Massnahmen und Kosten aus dem Rechner übernommen – bitte speichern.";
+    }
+
+    /// <summary>Titel im Rechner: der Gruppenkopf der Spalte, sonst „Massnahme“.</summary>
+    private string GroupLabel(string columnKey) =>
+        _definition.Columns.FirstOrDefault(column =>
+            string.Equals(column.Key, columnKey, StringComparison.OrdinalIgnoreCase)) is { Group.Length: > 0 } column
+            ? column.Group
+            : "Massnahme";
 
     /// <summary>
     /// Zelle für ein mehrzeiliges Feld: Enter und Shift+Enter setzen einen Umbruch, der Text

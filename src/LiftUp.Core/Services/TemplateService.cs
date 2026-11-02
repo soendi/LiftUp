@@ -218,6 +218,32 @@ public sealed class TemplateService
         return _sections.GetByTemplate(connection, null, templateId);
     }
 
+    /// <summary>
+    /// Ersetzt die Blätter der Vorlage samt ihrem Startinhalt (HTML). Leere Titel werden
+    /// verworfen; der Startinhalt bleibt auch beim Umbenennen erhalten.
+    /// </summary>
+    public void SaveSections(Guid templateId, IReadOnlyList<(string Title, string DefaultHtml)> sections)
+    {
+        _actor.Require(Permission.ManageTemplates);
+        ArgumentNullException.ThrowIfNull(sections);
+
+        var cleaned = sections
+            .Select(section => (Title: (section.Title ?? string.Empty).Trim(), DefaultHtml: section.DefaultHtml ?? string.Empty))
+            .Where(section => section.Title.Length > 0)
+            .ToList();
+
+        using var connection = _database.Open();
+        using var transaction = connection.BeginTransaction();
+
+        var template = _templates.GetById(connection, transaction, templateId)
+                       ?? throw new ValidationException("Die Vorlage wurde nicht gefunden.");
+
+        _sections.ReplaceAll(connection, transaction, templateId, cleaned, _actor.UserName);
+        _changes.Record(connection, transaction, "Template", templateId.ToString("D"), "Sections",
+            new { Count = cleaned.Count }, template.RowVersion);
+        transaction.Commit();
+    }
+
     /// <summary>Ersetzt die Abschnitte der Vorlage; leere Titel werden verworfen.</summary>
     public void SaveSections(Guid templateId, IReadOnlyList<string> titles)
     {

@@ -52,6 +52,22 @@ public sealed class DocumentSectionTests
     }
 
     [Fact]
+    public void Blaetter_behalten_ihren_startinhalt()
+    {
+        using var fixture = new TestDatabase();
+        var session = fixture.LoginAsAdmin();
+        var templates = new TemplateService(fixture.Database, session);
+        var template = templates.Create(new TemplateInput { Name = "Bericht", Html = "<html><body></body></html>" });
+
+        templates.SaveSections(template.Id, [("1. Anlagedaten", "<table></table>"), ("2. Analyse", "")]);
+
+        var sections = templates.GetSections(template.Id);
+        Assert.Equal(["1. Anlagedaten", "2. Analyse"], sections.Select(section => section.Title));
+        Assert.Equal("<table></table>", sections[0].DefaultHtml);
+        Assert.Equal(string.Empty, sections[1].DefaultHtml);
+    }
+
+    [Fact]
     public void Dokument_verbindet_Titelseite_und_Abschnitte()
     {
         using var fixture = new TestDatabase();

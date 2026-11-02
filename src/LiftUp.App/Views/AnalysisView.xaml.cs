@@ -63,6 +63,21 @@ public partial class AnalysisView : UserControl, ITabFillSource
     private Point _dragStart;
     private SectionDraft? _dragDraft;
 
+    /// <summary>Reiter „+“ am Ende der Unter-Reiter; er legt einen Punkt an.</summary>
+    private TabItem? _addTab;
+
+    /// <summary>Roter Reiter „−“ ganz rechts; er löscht den zuletzt gewählten Punkt.</summary>
+    private TabItem? _deleteTab;
+
+    /// <summary>Zuletzt gewählter Punkt – Ziel für „−“ und das Kontextmenü.</summary>
+    private SectionDraft? _lastSectionDraft;
+
+    /// <summary>Beim Aufbau der Reiter gelten Wechsel nicht als Klick auf „+“ oder „−“.</summary>
+    private bool _buildingAnalysisTabs;
+
+    /// <summary>Umschalten im Code (nach Löschen, Anlegen) löst keine Aktion aus.</summary>
+    private bool _switchingAnalysisTab;
+
     /// <summary>Füllstand der Analysepunkte für die Farbe von „2. Analyse“.</summary>
     private readonly List<TabStatus> _analysisStatuses = [];
 
@@ -272,43 +287,196 @@ public partial class AnalysisView : UserControl, ITabFillSource
         return draft;
     }
 
-    /// <summary>Reiter „2. Analyse“: Knöpfe für neue und gelöschte Punkte über den Unter-Reitern.</summary>
+    /// <summary>
+    /// Reiter „2. Analyse“: Am Ende der Unter-Reiter steht „+“ für einen neuen Punkt, ganz
+    /// rechts abgesetzt das rote „−“ für den zuletzt gewählten Punkt.
+    /// </summary>
     private FrameworkElement BuildAnalysisPanel(TabControl tabs)
     {
-        var toolbar = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Margin = new Thickness(0, 0, 0, 8),
-        };
-
-        var add = new Button { Content = "Punkt hinzufügen" };
-        add.Click += (_, _) => AddSection();
-
-        var remove = new Button
-        {
-            Content = "Punkt löschen",
-            Style = (Style)FindResource("LiftUpDangerButton"),
-        };
-        remove.Click += (_, _) => RemoveSelectedSection();
-
-        toolbar.Children.Add(add);
-        toolbar.Children.Add(remove);
-
         // Reihenfolge ändern: einen Reiter greifen und auf einen anderen fallen lassen.
         tabs.AllowDrop = true;
         tabs.PreviewMouseLeftButtonDown += OnAnalysisTabMouseDown;
         tabs.PreviewMouseMove += OnAnalysisTabMouseMove;
         tabs.DragOver += OnAnalysisTabDragOver;
         tabs.Drop += OnAnalysisTabDrop;
+        tabs.SelectionChanged += OnAnalysisTabSelected;
+        return tabs;
+    }
 
-        var grid = new Grid();
-        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-        Grid.SetRow(toolbar, 0);
-        Grid.SetRow(tabs, 1);
-        grid.Children.Add(toolbar);
-        grid.Children.Add(tabs);
-        return grid;
+    /// <summary>Legt „+“ und „−“ als letzte Reiter an.</summary>
+    private void AddActionTabs()
+    {
+        if (_analysisTabs is null)
+        {
+            return;
+        }
+
+        _addTab = new TabItem
+        {
+            Header = new TextBlock
+            {
+                Text = "+",
+                FontSize = 15,
+                FontWeight = FontWeights.SemiBold,
+                Margin = new Thickness(2, 0, 2, 0),
+            },
+            ToolTip = "Neuen Unterpunkt anlegen",
+        };
+
+        _deleteTab = new TabItem
+        {
+            Header = new Border
+            {
+                Background = new SolidColorBrush(Color.FromRgb(0xB7, 0x1C, 0x1C)),
+                CornerRadius = new CornerRadius(3),
+                Padding = new Thickness(8, 1, 8, 1),
+                Child = new TextBlock
+                {
+                    Text = "−",
+                    Foreground = Brushes.White,
+                    FontWeight = FontWeights.Bold,
+                    FontSize = 14,
+                },
+            },
+            ToolTip = "Diesen Unterpunkt löschen",
+            // Abstand zum „+“: der Lösch-Reiter steht ganz rechts für sich.
+            Margin = new Thickness(28, 0, 0, 0),
+        };
+
+        _analysisTabs.Items.Add(_addTab);
+        _analysisTabs.Items.Add(_deleteTab);
+    }
+
+    /// <summary>Klick auf „+“ oder „−“ – die übrigen Reiter merken sich den zuletzt gewählten Punkt.</summary>
+    private void OnAnalysisTabSelected(object sender, SelectionChangedEventArgs e)
+    {
+        if (_analysisTabs is null || _buildingAnalysisTabs || _switchingAnalysisTab)
+        {
+            return;
+        }
+
+        if (ReferenceEquals(_analysisTabs.SelectedItem, _addTab))
+        {
+            AddSectionFromAddTab();
+            return;
+        }
+
+        if (ReferenceEquals(_analysisTabs.SelectedItem, _deleteTab))
+        {
+            DeleteLastSection();
+            return;
+        }
+
+        if (_analysisTabs.SelectedItem is TabItem { Tag: SectionDraft draft })
+        {
+            _lastSectionDraft = draft;
+        }
+    }
+
+    /// <summary>Der „+“-Reiter legt zwischen dem letzten Punkt und „+“ einen Punkt an.</summary>
+    private void AddSectionFromAddTab()
+    {
+        var draft = AddSectionTab(NewSectionKey(), string.Empty, string.Empty);
+        SelectSection(draft);
+        FocusSectionTitle(draft);
+    }
+
+    /// <summary>Der rote „−“-Reiter löscht den zuvor gewählten Punkt – nach Rückfrage.</summary>
+    private void DeleteLastSection()
+    {
+        var draft = _lastSectionDraft is { } last && _sections.Contains(last)
+            ? last
+            : _sections.FirstOrDefault();
+
+        if (draft is null)
+        {
+            SelectSection(null);
+            return;
+        }
+
+        if (!ConfirmDeleteSection(draft))
+        {
+            SelectSection(draft);
+            return;
+        }
+
+        RemoveSection(draft);
+    }
+
+    /// <summary>Wählt einen Punkt, ohne einen Klick auf „+“ oder „−“ auszulösen.</summary>
+    private void SelectSection(SectionDraft? draft)
+    {
+        if (_analysisTabs is null)
+        {
+            return;
+        }
+
+        _switchingAnalysisTab = true;
+        try
+        {
+            _analysisTabs.SelectedItem = draft?.Status?.Tab ?? _sections.FirstOrDefault()?.Status?.Tab;
+        }
+        finally
+        {
+            _switchingAnalysisTab = false;
+        }
+
+        if (draft is not null)
+        {
+            _lastSectionDraft = draft;
+        }
+    }
+
+    /// <summary>Rückfrage vor dem Löschen eines Tabs.</summary>
+    private bool ConfirmDeleteSection(SectionDraft draft)
+    {
+        var index = Math.Max(_sections.IndexOf(draft), 0);
+        var number = $"2.{index + 1}";
+        var name = draft.Title.Length == 0 ? number : $"{number} {draft.Title}";
+
+        return MessageBox.Show(
+            Window.GetWindow(this),
+            $"Tab „{name}“ löschen?\n\nDer Text des Punkts wird entfernt; übernommen wird das beim "
+            + "Verlassen des Reiters oder mit „Speichern“.",
+            "Tab löschen",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning,
+            MessageBoxResult.No) == MessageBoxResult.Yes;
+    }
+
+    /// <summary>Rechtsklick auf einen Reiter: „Diesen Tab löschen …“ mit derselben Rückfrage.</summary>
+    private ContextMenu BuildSectionMenu(SectionDraft draft)
+    {
+        var menu = new ContextMenu();
+        var item = new MenuItem { Header = "Diesen Tab löschen …" };
+        item.Click += (_, _) =>
+        {
+            if (ConfirmDeleteSection(draft))
+            {
+                RemoveSection(draft);
+            }
+        };
+
+        menu.Items.Add(item);
+        return menu;
+    }
+
+    /// <summary>Neue Punkte stehen vor dem „+“; die beiden Aktions-Reiter bleiben am Ende.</summary>
+    private void InsertSectionTab(TabItem tab)
+    {
+        if (_analysisTabs is null)
+        {
+            return;
+        }
+
+        if (_addTab is not null && _deleteTab is not null
+            && _analysisTabs.Items.Contains(_addTab) && _analysisTabs.Items.Contains(_deleteTab))
+        {
+            _analysisTabs.Items.Insert(_analysisTabs.Items.Count - 2, tab);
+            return;
+        }
+
+        _analysisTabs.Items.Add(tab);
     }
 
     /// <summary>
@@ -333,8 +501,12 @@ public partial class AnalysisView : UserControl, ITabFillSource
             _analysisStatuses.Remove(status);
         }
 
+        _buildingAnalysisTabs = true;
+
         _sections.Clear();
         _analysisTabs.Items.Clear();
+        _addTab = null;
+        _deleteTab = null;
 
         var points = texts.Where(text => !ProjectAnalysisCatalog.IsFazit(text.SectionKey)).ToArray();
         if (points.Length == 0)
@@ -349,12 +521,15 @@ public partial class AnalysisView : UserControl, ITabFillSource
             }
         }
 
+        AddActionTabs();
         _analysisTabs.SelectedIndex = 0;
+        _lastSectionDraft = _sections.FirstOrDefault();
         NumberSections();
+        _buildingAnalysisTabs = false;
     }
 
     /// <summary>Hängt einen Analysepunkte-Reiter mit Untertitel-Feld und Text an.</summary>
-    private void AddSectionTab(string key, string title, string html)
+    private SectionDraft AddSectionTab(string key, string title, string html)
     {
         var draft = CreateDraft(key, withTitle: true);
         draft.TitleBox!.Text = title;
@@ -363,14 +538,20 @@ public partial class AnalysisView : UserControl, ITabFillSource
 
         _sections.Add(draft);
 
-        var tab = new TabItem { Content = SectionContent(draft), Tag = draft };
+        var tab = new TabItem
+        {
+            Content = SectionContent(draft),
+            Tag = draft,
+            ContextMenu = BuildSectionMenu(draft),
+        };
         var status = new TabStatus(tab, string.Empty, () => draft.Filled ? TabFill.Full : TabFill.None);
         draft.Status = status;
 
         _tabStatuses.Add(status);
         _analysisStatuses.Add(status);
-        _analysisTabs!.Items.Add(tab);
+        InsertSectionTab(tab);
         NumberSections();
+        return draft;
     }
 
     /// <summary>Untertitel-Feld über dem Text des Punkts.</summary>
@@ -560,17 +741,6 @@ public partial class AnalysisView : UserControl, ITabFillSource
     /// <summary>Schlüssel eines neuen Punkts; er bleibt beim Speichern und Umbenennen gleich.</summary>
     private static string NewSectionKey() => "P" + Guid.NewGuid().ToString("N");
 
-    private void AddSection()
-    {
-        AddSectionTab(NewSectionKey(), string.Empty, string.Empty);
-        if (_analysisTabs is not null)
-        {
-            _analysisTabs.SelectedIndex = _analysisTabs.Items.Count - 1;
-        }
-
-        FocusSectionTitle(_sections[^1]);
-    }
-
     /// <summary>
     /// Setzt den Fokus in das Untertitel-Feld eines Punkts. Der Reiterinhalt entsteht erst
     /// beim nächsten Layoutlauf – ein sofortiges Fokussieren ginge deshalb ins Leere.
@@ -592,24 +762,27 @@ public partial class AnalysisView : UserControl, ITabFillSource
             }));
     }
 
-    /// <summary>Entfernt den gewählten Punkt; ohne Punkte bleibt „2.1“ stehen.</summary>
-    private void RemoveSelectedSection()
+    /// <summary>Entfernt einen Punkt; ohne Punkte bleibt „2.1“ stehen.</summary>
+    private void RemoveSection(SectionDraft draft)
     {
-        if (_analysisTabs is null || _sections.Count == 0)
+        if (_analysisTabs is null)
         {
             return;
         }
 
-        var index = Math.Clamp(_analysisTabs.SelectedIndex, 0, _sections.Count - 1);
-        var draft = _sections[index];
+        var index = _sections.IndexOf(draft);
+        if (index < 0)
+        {
+            return;
+        }
 
         if (draft.Status is { } status)
         {
             _tabStatuses.Remove(status);
             _analysisStatuses.Remove(status);
+            _analysisTabs.Items.Remove(status.Tab);
         }
 
-        _analysisTabs.Items.RemoveAt(index);
         _sections.RemoveAt(index);
 
         if (_sections.Count == 0)
@@ -617,8 +790,11 @@ public partial class AnalysisView : UserControl, ITabFillSource
             AddSectionTab(NewSectionKey(), string.Empty, string.Empty);
         }
 
-        _analysisTabs.SelectedIndex = Math.Min(index, _sections.Count - 1);
+        _textsDirty = true;
         NumberSections();
+
+        var next = _sections.Count == 0 ? null : _sections[Math.Min(index, _sections.Count - 1)];
+        SelectSection(next);
     }
 
     private void LoadProjects(bool keepSelection = false)

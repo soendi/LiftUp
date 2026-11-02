@@ -1,9 +1,12 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.IO;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using LiftUp.App.Documents;
@@ -15,10 +18,49 @@ namespace LiftUp.App.Views;
 
 public partial class TemplatesView : UserControl
 {
-    /// <summary>Bearbeitbare Zeile der Abschnittsliste.</summary>
-    private sealed class SectionRow
+    /// <summary>Ein Blatt der Vorlage: Untertitel und Startinhalt (HTML) in einem eigenen Reiter.</summary>
+    private sealed class SectionRow : INotifyPropertyChanged
     {
-        public string Title { get; set; } = string.Empty;
+        private string _title = string.Empty;
+        private string _html = string.Empty;
+
+        public string Title
+        {
+            get => _title;
+            set
+            {
+                if (_title == value)
+                {
+                    return;
+                }
+
+                _title = value ?? string.Empty;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Title)));
+            }
+        }
+
+        public string Html
+        {
+            get => _html;
+            set
+            {
+                if (_html == value)
+                {
+                    return;
+                }
+
+                _html = value ?? string.Empty;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Html)));
+            }
+        }
+
+        /// <summary>Reiter des Blatts; entsteht beim Aufbau der Reiterleiste.</summary>
+        public TabItem? Tab { get; set; }
+
+        /// <summary>Codefeld des Blatts – Ziel für Platzhalter aus der Liste.</summary>
+        public TextBox? Editor { get; set; }
+
+        public event PropertyChangedEventHandler? PropertyChanged;
     }
 
     /// <summary>Ein Treffer der „&amp;“-Suche im Vorlagentext.</summary>
@@ -46,8 +88,6 @@ public partial class TemplatesView : UserControl
         PlaceholderList.ItemsSource = PlaceholderRenderer.Known
             .Select(entry => new { entry.Token, entry.Description })
             .ToArray();
-
-        SectionsList.ItemsSource = _sectionRows;
 
         // Die Bildsuche hängt am Textfeld: Nach „&“ erscheint eine Liste mit Vorschau.
         HtmlBox.TextChanged += OnHtmlBoxTextChanged;
@@ -144,8 +184,10 @@ public partial class TemplatesView : UserControl
             _sectionRows.Clear();
             foreach (var section in _services.Templates.GetSections(templateId))
             {
-                _sectionRows.Add(new SectionRow { Title = section.Title });
+                _sectionRows.Add(new SectionRow { Title = section.Title, Html = section.DefaultHtml });
             }
+
+            RebuildSectionTabs();
 
             InfoText.Text = $"Vorlage \"{template.Name}\", aktuelle Version {template.CurrentVersion}";
         }
@@ -257,6 +299,7 @@ public partial class TemplatesView : UserControl
         ToggleActiveButton.IsEnabled = false;
         DeleteButton.IsEnabled = false;
         _sectionRows.Clear();
+        RebuildSectionTabs();
     }
 
     private void OnSaveClick(object sender, RoutedEventArgs e)
@@ -340,7 +383,7 @@ public partial class TemplatesView : UserControl
             FolderPath = @"D:\Projekte\Beispielprojekt",
         };
 
-        var html = PlaceholderRenderer.Render(HtmlBox.Text, new PlaceholderContext
+        var html = PlaceholderRenderer.Render(ActiveEditor.Text, new PlaceholderContext
         {
             Project = sample,
             UserName = _services.CurrentSession.DisplayName,
@@ -350,7 +393,7 @@ public partial class TemplatesView : UserControl
         {
             await PreviewBrowser.EnsureCoreWebView2Async();
             PreviewBrowser.NavigateToString(html);
-            InfoText.Text = "Vorschau mit Beispieldaten.";
+            InfoText.Text = $"Vorschau von „{ActiveSheetName}“ mit Beispieldaten.";
         }
         catch (Exception exception)
         {
@@ -358,18 +401,200 @@ public partial class TemplatesView : UserControl
         }
     }
 
+    /// <summary>Das gewählte Blatt: Deckblatt oder ein Blatt mit eigenem Code.</summary>
+    private SectionRow? SelectedSection =>
+        SheetTabs.SelectedItem is TabItem { Tag: SectionRow row } ? row : null;
+
+    /// <summary>Codefeld, in das Platzhalter und Vorschau gehen: das gerade gewählte Blatt.</summary>
+    private TextBox ActiveEditor => SelectedSection?.Editor ?? HtmlBox;
+
+    private string ActiveSheetName => SelectedSection is { Title.Length: > 0 } row ? row.Title : "Deckblatt";
+
+    /// <summary>Legt je Blatt einen Reiter an; „Deckblatt“ bleibt der erste Reiter.</summary>
+    private void RebuildSectionTabs()
+    {
+        foreach (var row in _sectionRows)
+        {
+            if (row.Tab is not null)
+            {
+                SheetTabs.Items.Remove(row.Tab);
+                row.Tab = null;
+                row.Editor = null;
+            }
+        }
+
+        foreach (var row in _sectionRows)
+        {
+            AddSectionTab(row);
+        }
+
+        UpdateSheetHeaders();
+        UpdateSheetButtons();
+    }
+
+    /// <summary>Reiter eines Blatts: Untertitel und HTML, beides direkt an die Zeile gebunden.</summary>
+    private void AddSectionTab(SectionRow row)
+    {
+        var grid = new Grid();
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+
+        var header = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 6) };
+        header.Children.Add(new TextBlock
+        {
+            Text = "Untertitel",
+            Style = (Style)FindResource("LiftUpFieldLabel"),
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 8, 0),
+        });
+
+        var titleBox = new TextBox
+        {
+            Width = 420,
+            ToolTip = "Titel des Blatts, etwa „1. Anlagedaten“",
+        };
+        titleBox.SetBinding(TextBox.TextProperty, new Binding(nameof(SectionRow.Title))
+        {
+            Source = row,
+            UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged,
+        });
+        titleBox.TextChanged += (_, _) => UpdateSheetHeaders();
+        header.Children.Add(titleBox);
+        Grid.SetRow(header, 0);
+        grid.Children.Add(header);
+
+        var editor = new TextBox
+        {
+            AcceptsReturn = true,
+            AcceptsTab = true,
+            TextWrapping = TextWrapping.NoWrap,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+            FontFamily = new FontFamily("Consolas"),
+            FontSize = 12,
+            MinHeight = 240,
+            Margin = new Thickness(2),
+        };
+        editor.SetBinding(TextBox.TextProperty, new Binding(nameof(SectionRow.Html))
+        {
+            Source = row,
+            UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged,
+        });
+        Grid.SetRow(editor, 1);
+        grid.Children.Add(editor);
+
+        var tab = new TabItem { Content = grid, Tag = row };
+        row.Tab = tab;
+        row.Editor = editor;
+        SheetTabs.Items.Add(tab);
+    }
+
+    /// <summary>Der Reiter trägt den Untertitel des Blatts; ohne Untertitel „Blatt n“.</summary>
+    private void UpdateSheetHeaders()
+    {
+        for (var index = 0; index < _sectionRows.Count; index++)
+        {
+            var row = _sectionRows[index];
+            if (row.Tab is null)
+            {
+                continue;
+            }
+
+            var header = row.Title.Length > 0 ? row.Title : $"Blatt {index + 1}";
+            row.Tab.Header = header;
+            row.Tab.ToolTip = header;
+        }
+    }
+
+    private void OnSheetTabChanged(object sender, SelectionChangedEventArgs e) => UpdateSheetButtons();
+
+    /// <summary>„Entfernen“ und Verschieben gilt nur für Blätter, nicht fürs Deckblatt.</summary>
+    private void UpdateSheetButtons()
+    {
+        var row = SelectedSection;
+        var index = row is null ? -1 : _sectionRows.IndexOf(row);
+        RemoveSectionButton.IsEnabled = index >= 0;
+        MoveUpButton.IsEnabled = index > 0;
+        MoveDownButton.IsEnabled = index >= 0 && index < _sectionRows.Count - 1;
+    }
+
     private void OnAddSectionClick(object sender, RoutedEventArgs e)
     {
-        _sectionRows.Add(new SectionRow());
-        SectionsList.SelectedIndex = _sectionRows.Count - 1;
+        var row = new SectionRow();
+        _sectionRows.Add(row);
+        AddSectionTab(row);
+        UpdateSheetHeaders();
+        SheetTabs.SelectedItem = row.Tab;
+        UpdateSheetButtons();
+
+        // Der Reiterinhalt entsteht erst beim nächsten Layoutlauf – Fokus deshalb später setzen.
+        Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() =>
+        {
+            if (row.Tab?.Content is Grid { Children.Count: > 0 } content
+                && content.Children[0] is StackPanel { Children.Count: > 1 } panel
+                && panel.Children[1] is TextBox box)
+            {
+                box.Focus();
+                box.SelectAll();
+            }
+        }));
+
+        InfoText.Text = "Blatt angelegt – Untertitel und Inhalt erfassen, dann „Blätter speichern“.";
     }
 
     private void OnRemoveSectionClick(object sender, RoutedEventArgs e)
     {
-        if (SectionsList.SelectedItem is SectionRow row)
+        if (SelectedSection is not { } row)
         {
-            _sectionRows.Remove(row);
+            return;
         }
+
+        var index = _sectionRows.IndexOf(row);
+        var name = row.Title.Length > 0 ? row.Title : $"Blatt {index + 1}";
+        var answer = MessageBox.Show(
+            $"Blatt „{name}“ entfernen?\n\nÜbernommen wird das mit „Blätter speichern“; "
+            + "bereits erzeugte PDFs bleiben unverändert.",
+            "Blatt entfernen", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No);
+
+        if (answer != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        RemoveSection(row);
+    }
+
+    private void RemoveSection(SectionRow row)
+    {
+        var index = _sectionRows.IndexOf(row);
+        if (index < 0)
+        {
+            return;
+        }
+
+        _sectionRows.RemoveAt(index);
+        if (row.Tab is not null)
+        {
+            SheetTabs.Items.Remove(row.Tab);
+        }
+
+        UpdateSheetHeaders();
+
+        var next = _sectionRows.Count == 0
+            ? null
+            : _sectionRows[Math.Min(index, _sectionRows.Count - 1)];
+
+        if (next?.Tab is { } tab)
+        {
+            SheetTabs.SelectedItem = tab;
+        }
+        else
+        {
+            SheetTabs.SelectedItem = CoverTab;
+        }
+
+        UpdateSheetButtons();
+        InfoText.Text = "Blatt entfernt – noch „Blätter speichern“.";
     }
 
     private void OnMoveSectionUpClick(object sender, RoutedEventArgs e) => MoveSection(-1);
@@ -378,34 +603,38 @@ public partial class TemplatesView : UserControl
 
     private void MoveSection(int offset)
     {
-        if (SectionsList.SelectedItem is not SectionRow row)
+        if (SelectedSection is not { } row)
         {
             return;
         }
 
         var index = _sectionRows.IndexOf(row);
         var target = index + offset;
-        if (target < 0 || target >= _sectionRows.Count)
+        if (index < 0 || target < 0 || target >= _sectionRows.Count)
         {
             return;
         }
 
         _sectionRows.Move(index, target);
-        SectionsList.SelectedItem = row;
+        RebuildSectionTabs();
+        SheetTabs.SelectedItem = row.Tab;
+        UpdateSheetButtons();
     }
 
     private void OnSaveSectionsClick(object sender, RoutedEventArgs e)
     {
         if (_templateId is null)
         {
-            InfoText.Text = "Bitte zuerst die Vorlage speichern, dann Abschnitte festlegen.";
+            InfoText.Text = "Bitte zuerst die Vorlage speichern, dann Blätter festlegen.";
             return;
         }
 
         try
         {
-            _services.Templates.SaveSections(_templateId.Value, _sectionRows.Select(row => row.Title).ToArray());
-            InfoText.Text = $"Abschnitte gespeichert ({_sectionRows.Count(row => !string.IsNullOrWhiteSpace(row.Title))}).";
+            _services.Templates.SaveSections(
+                _templateId.Value,
+                _sectionRows.Select(row => (row.Title, row.Html)).ToArray());
+            InfoText.Text = $"Blätter gespeichert ({_sectionRows.Count(row => !string.IsNullOrWhiteSpace(row.Title))}).";
             LoadTemplate(_templateId.Value);
         }
         catch (LiftUpException exception)
@@ -740,9 +969,10 @@ public partial class TemplatesView : UserControl
             return;
         }
 
-        var index = HtmlBox.CaretIndex;
-        HtmlBox.Text = HtmlBox.Text.Insert(index, token);
-        HtmlBox.CaretIndex = index + token.Length;
-        HtmlBox.Focus();
+        var editor = ActiveEditor;
+        var index = editor.CaretIndex;
+        editor.Text = editor.Text.Insert(index, token);
+        editor.CaretIndex = index + token.Length;
+        editor.Focus();
     }
 }

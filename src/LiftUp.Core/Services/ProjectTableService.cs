@@ -53,6 +53,16 @@ public sealed class ProjectTableService
                 values[column.Key] = (value ?? string.Empty).Trim();
             }
 
+            // Angaben ohne eigene Spalte – etwa die Preise je Massnahme aus dem Rechner –
+            // bleiben im Datensatz; im PDF erscheinen nur die Spalten.
+            foreach (var (key, value) in row.Values)
+            {
+                if (!values.ContainsKey(key))
+                {
+                    values[key] = (value ?? string.Empty).Trim();
+                }
+            }
+
             if (values.Values.All(string.IsNullOrEmpty))
             {
                 continue;

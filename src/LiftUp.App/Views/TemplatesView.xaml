@@ -42,111 +42,104 @@
             </Border>
 
             <Border Grid.Column="1" Style="{StaticResource LiftUpCard}" Padding="10">
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
 
-                    <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
-                        <TextBlock Text="Name" VerticalAlignment="Center" Margin="0,0,6,0" Style="{StaticResource LiftUpFieldLabel}" />
-                        <TextBox x:Name="NameBox" Width="220" Margin="0,0,14,0" />
+                        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
+                            <TextBlock Text="Name" VerticalAlignment="Center" Margin="0,0,6,0" Style="{StaticResource LiftUpFieldLabel}" />
+                            <TextBox x:Name="NameBox" Width="220" Margin="0,0,14,0" />
 
-                        <TextBlock Text="Dokumenttyp" VerticalAlignment="Center" Margin="0,0,6,0" Style="{StaticResource LiftUpFieldLabel}" />
-                        <ComboBox x:Name="TypeBox" Width="150" Margin="0,0,6,0" DisplayMemberPath="Name" />
-                        <Button Content="Typen …" Margin="0,0,14,0" Click="OnManageTypesClick" />
+                            <TextBlock Text="Dokumenttyp" VerticalAlignment="Center" Margin="0,0,6,0" Style="{StaticResource LiftUpFieldLabel}" />
+                            <ComboBox x:Name="TypeBox" Width="150" Margin="0,0,6,0" DisplayMemberPath="Name" />
+                            <Button Content="Typen …" Margin="0,0,14,0" Click="OnManageTypesClick" />
 
-                        <TextBlock Text="Version" VerticalAlignment="Center" Margin="0,0,6,0" Style="{StaticResource LiftUpFieldLabel}" />
-                        <ComboBox x:Name="VersionBox" Width="120" DisplayMemberPath="VersionText" SelectionChanged="OnVersionSelected" />
-                    </StackPanel>
+                            <TextBlock Text="Version" VerticalAlignment="Center" Margin="0,0,6,0" Style="{StaticResource LiftUpFieldLabel}" />
+                            <ComboBox x:Name="VersionBox" Width="120" DisplayMemberPath="VersionText" SelectionChanged="OnVersionSelected" />
+                        </StackPanel>
 
-                    <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,8">
-                        <Button Content="Vorschau" Click="OnPreviewClick" />
-                        <Button Content="Datei importieren …" Click="OnImportClick" ToolTip="Excel, CSV, HTML, Text oder Word als Vorlage übernehmen" />
-                        <Button Content="Als neue Version speichern" Style="{StaticResource LiftUpPrimaryButton}" Margin="0" Click="OnSaveClick" />
-                    </StackPanel>
+                        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,8">
+                            <Button Content="Vorschau" Click="OnPreviewClick" />
+                            <Button Content="Datei importieren …" Click="OnImportClick" ToolTip="Excel, CSV, HTML, Text oder Word als Vorlage übernehmen" />
+                            <Button Content="Als neue Version speichern" Style="{StaticResource LiftUpPrimaryButton}" Margin="0" Click="OnSaveClick" />
+                        </StackPanel>
 
-                    <Border x:Name="MissingBorder" Grid.Row="2" Style="{StaticResource LiftUpCard}"
-                            Padding="10" Margin="0,0,0,8" Visibility="Collapsed">
-                        <Grid>
+                        <Border x:Name="MissingBorder" Grid.Row="2" Style="{StaticResource LiftUpCard}"
+                                Padding="10" Margin="0,0,0,8" Visibility="Collapsed">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel>
+                                    <TextBlock x:Name="MissingTitle" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                    <TextBlock x:Name="MissingText" Style="{StaticResource LiftUpMutedText}" TextWrapping="Wrap"
+                                               Margin="0,4,0,0" />
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"
+                                            Margin="10,0,0,0">
+                                    <Button x:Name="ReplaceImagesButton" Content="Bilder ersetzen …"
+                                            Click="OnReplaceImagesClick" />
+                                    <Button Content="Platzhalter entfernen" Click="OnRemoveMissingClick" Margin="0" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <!-- Je Blatt ein Reiter: „Deckblatt“ ist die Vorlagenversion, die übrigen Reiter
+                             sind die Blätter mit Untertitel und HTML. Der Codebereich scrollt selbst. -->
+                        <Grid Grid.Row="3" Height="380">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="300" />
                             </Grid.ColumnDefinitions>
 
-                            <StackPanel>
-                                <TextBlock x:Name="MissingTitle" FontWeight="SemiBold" TextWrapping="Wrap" />
-                                <TextBlock x:Name="MissingText" Style="{StaticResource LiftUpMutedText}" TextWrapping="Wrap"
-                                           Margin="0,4,0,0" />
-                            </StackPanel>
+                            <TabControl x:Name="SheetTabs" Grid.Column="0" Margin="0,0,10,0"
+                                        SelectionChanged="OnSheetTabChanged">
+                                <TabItem x:Name="CoverTab" Header="Deckblatt">
+                                    <TextBox x:Name="HtmlBox" Margin="2"
+                                             AcceptsReturn="True" AcceptsTab="True" TextWrapping="NoWrap"
+                                             VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                                             FontFamily="Consolas" FontSize="12" MinHeight="240" />
+                                </TabItem>
+                            </TabControl>
 
-                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"
-                                        Margin="10,0,0,0">
-                                <Button x:Name="ReplaceImagesButton" Content="Bilder ersetzen …"
-                                        Click="OnReplaceImagesClick" />
-                                <Button Content="Platzhalter entfernen" Click="OnRemoveMissingClick" Margin="0" />
-                            </StackPanel>
+                            <Border Grid.Column="1" BorderBrush="{StaticResource LiftUpBorder}" BorderThickness="1">
+                                <wv2:WebView2 x:Name="PreviewBrowser" />
+                            </Border>
                         </Grid>
-                    </Border>
 
-                    <Grid Grid.Row="3">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="300" />
-                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Row="4" Orientation="Horizontal" Margin="0,8,0,0">
+                            <Button Content="Blatt hinzufügen" Click="OnAddSectionClick" />
+                            <Button x:Name="RemoveSectionButton" Content="Blatt entfernen" Click="OnRemoveSectionClick" />
+                            <Button x:Name="MoveUpButton" Content="Nach oben" Click="OnMoveSectionUpClick" />
+                            <Button x:Name="MoveDownButton" Content="Nach unten" Click="OnMoveSectionDownClick" />
+                            <Button Content="Blätter speichern" Style="{StaticResource LiftUpPrimaryButton}" Margin="0" Click="OnSaveSectionsClick" />
+                        </StackPanel>
 
-                        <TextBox x:Name="HtmlBox" Grid.Column="0" Margin="0,0,10,0"
-                                 AcceptsReturn="True" AcceptsTab="True" TextWrapping="NoWrap"
-                                 VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
-                                 FontFamily="Consolas" FontSize="12" />
-
-                        <Border Grid.Column="1" BorderBrush="{StaticResource LiftUpBorder}" BorderThickness="1">
-                            <wv2:WebView2 x:Name="PreviewBrowser" />
-                        </Border>
-                    </Grid>
-
-                    <Expander Grid.Row="5" Header="Abschnitte (Untertitel) – beim Dokument als Tabs" Margin="0,8,0,0" IsExpanded="False">
-                        <Grid Margin="0,6,0,0">
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                            </Grid.RowDefinitions>
-
-                            <ListBox x:Name="SectionsList" Grid.Row="0" Height="110">
+                        <Expander Grid.Row="5" Header="Platzhalter (Doppelklick fügt ins gewählte Blatt ein)"
+                                  Margin="0,8,0,0" IsExpanded="False">
+                            <ListBox x:Name="PlaceholderList" Height="120" MouseDoubleClick="OnPlaceholderDoubleClick">
                                 <ListBox.ItemTemplate>
                                     <DataTemplate>
-                                        <TextBox Text="{Binding Title, UpdateSourceTrigger=PropertyChanged}" Width="420" HorizontalAlignment="Left" />
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="{Binding Token}" FontFamily="Consolas" Width="220" />
+                                            <TextBlock Text="{Binding Description}" Style="{StaticResource LiftUpMutedText}" />
+                                        </StackPanel>
                                     </DataTemplate>
                                 </ListBox.ItemTemplate>
                             </ListBox>
-
-                            <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,6,0,0">
-                                <Button Content="Abschnitt hinzufügen" Click="OnAddSectionClick" />
-                                <Button Content="Nach oben" Click="OnMoveSectionUpClick" />
-                                <Button Content="Nach unten" Click="OnMoveSectionDownClick" />
-                                <Button Content="Entfernen" Click="OnRemoveSectionClick" />
-                                <Button Content="Abschnitte speichern" Style="{StaticResource LiftUpPrimaryButton}" Margin="0" Click="OnSaveSectionsClick" />
-                            </StackPanel>
-                        </Grid>
-                    </Expander>
-
-                    <Expander Grid.Row="4" Header="Platzhalter (Doppelklick fügt ein)" Margin="0,8,0,0" IsExpanded="True">
-                        <ListBox x:Name="PlaceholderList" Height="120" MouseDoubleClick="OnPlaceholderDoubleClick">
-                            <ListBox.ItemTemplate>
-                                <DataTemplate>
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="{Binding Token}" FontFamily="Consolas" Width="220" />
-                                        <TextBlock Text="{Binding Description}" Style="{StaticResource LiftUpMutedText}" />
-                                    </StackPanel>
-                                </DataTemplate>
-                            </ListBox.ItemTemplate>
-                        </ListBox>
-                    </Expander>
-                </Grid>
+                        </Expander>
+                    </Grid>
+                </ScrollViewer>
             </Border>
         </Grid>
 
