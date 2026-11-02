@@ -208,6 +208,55 @@ public sealed class DefaultTemplateTests
         Assert.Contains("Die Daten wurden am {{project.inspectiondate}} vor Ort aufgenommen.", html);
     }
 
+    [Fact]
+    public void Deckblatt_rueckt_den_fuss_bei_langem_text_nach_oben()
+    {
+        using var fixture = new TestDatabase();
+        var html = CurrentTemplateHtml(fixture);
+
+        // Das Deckblatt ist ein Block in voller Seitenhöhe; der Fuss (Datum und Ort) sitzt unten und
+        // rückt bei umbrechenden Adressen nach oben, statt eine zweite Seite zu beginnen.
+        Assert.Contains("<body><div class=\"cover\">", html);
+        Assert.Contains(".cover { min-height: calc(100vh - 2mm); display: flex; flex-direction: column; }", html);
+        Assert.Contains(".cover > * { flex: 0 0 auto; }", html);
+        Assert.Contains(".footer { margin-top: auto;", html);
+        Assert.DoesNotContain(".footer { margin-top: 12mm;", html);
+    }
+
+    [Fact]
+    public void Bestehendes_deckblatt_bekommt_den_flexiblen_fuss()
+    {
+        using var fixture = new TestDatabase();
+
+        // Bisheriges Deckblatt der Version 27: fester Abstand von 12 mm über dem Datum.
+        using (var connection = fixture.Database.Open())
+        using (var command = connection.CreateCommand())
+        {
+            command.CommandText = """
+                UPDATE TemplateVersions
+                SET Html = replace(replace(replace(replace(replace(Html,
+                        '<div class="cover">', ''),
+                        '</div></body>', '</body>'),
+                        '.cover { min-height: calc(100vh - 2mm); display: flex; flex-direction: column; }', ''),
+                        '.cover > * { flex: 0 0 auto; }', ''),
+                        'margin-top: auto;', 'margin-top: 12mm;')
+                WHERE TemplateId IN (SELECT Id FROM Templates WHERE Name = 'Zustandsbericht Aufzugsanlagen')
+                  AND Version = 1;
+                UPDATE SchemaInfo SET Version = 27;
+                """;
+            command.ExecuteNonQuery();
+        }
+
+        fixture.Database.EnsureCreated();
+
+        var html = CurrentTemplateHtml(fixture);
+        Assert.Contains("<body><div class=\"cover\">", html);
+        Assert.Contains(".cover { min-height: calc(100vh - 2mm); display: flex; flex-direction: column; }", html);
+        Assert.Contains(".cover > * { flex: 0 0 auto; }", html);
+        Assert.Contains(".footer { margin-top: auto;", html);
+        Assert.DoesNotContain(".footer { margin-top: 12mm;", html);
+    }
+
     /// <summary>Aktueller Inhalt der Vorlage „Zustandsbericht Aufzugsanlagen“.</summary>
     private static string CurrentTemplateHtml(TestDatabase fixture)
     {

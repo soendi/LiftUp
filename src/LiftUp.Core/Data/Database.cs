@@ -12,7 +12,7 @@ namespace LiftUp.Core.Data;
 /// </summary>
 public sealed class Database
 {
-    public const int CurrentSchemaVersion = 27;
+    public const int CurrentSchemaVersion = 28;
 
     private readonly string _connectionString;
 
@@ -202,6 +202,9 @@ public sealed class Database
 
         // Version 27 stellt die drei Adressen des Deckblatts zeilenweise ohne Komma dar.
         UpgradeReportCoverAddressBlocks(connection);
+
+        // Version 28 hält das Deckblatt auf einer Seite; der Fuss rückt bei langem Text nach oben.
+        UpgradeReportCoverFooter(connection);
 
         using var command = Db.Command(connection, "UPDATE SchemaInfo SET Version = $version;");
         command.With("$version", CurrentSchemaVersion);
@@ -889,6 +892,69 @@ public sealed class Database
     }
 
     /// <summary>
+    /// Version 28: Das Deckblatt bleibt auf einer Seite. Statt eines festen Abstands von 12 mm
+    /// über dem Fuss füllt der Inhalt die Seite; wird er länger (etwa durch umbrechende Adressen),
+    /// rückt der Fuss nach oben. Ersetzt wird nur die unberührte Fassung der Vorlage.
+    /// </summary>
+    private static void UpgradeReportCoverFooter(SqliteConnection connection)
+    {
+        var templateId = FindTemplateId(connection, ReportTemplateName, onlyFirstVersion: false);
+        if (templateId is not { } id)
+        {
+            return;
+        }
+
+        int currentVersion;
+        string html;
+        using (var read = Db.Command(connection, """
+            SELECT t.CurrentVersion, v.Html
+            FROM Templates t
+            JOIN TemplateVersions v ON v.TemplateId = t.Id AND v.Version = t.CurrentVersion
+            WHERE t.Id = $id;
+            """))
+        {
+            read.With("$id", id.ToString("D"));
+            using var reader = read.ExecuteReader();
+            if (!reader.Read())
+            {
+                return;
+            }
+
+            currentVersion = reader.Int32(0);
+            html = reader.Text(1);
+        }
+
+        const string previousBody =
+            "body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 10.5pt; color: #1f2933; margin: 0; }";
+        const string previousFooter = ".footer { margin-top: 12mm;";
+        if (!html.Contains(previousBody, StringComparison.Ordinal)
+            || !html.Contains(previousFooter, StringComparison.Ordinal)
+            || !html.Contains("<body>", StringComparison.Ordinal)
+            || !html.Contains("</body>", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        // Das Deckblatt wird ein eigener Block und füllt die Seite; Abschnitte dahinter
+        // bleiben davon unberührt.
+        const string coverRules =
+            "\n            /* Das Deckblatt steht immer auf einer Seite: Reicht der Platz für die Adressen nicht,\n"
+            + "               rückt der Fuss (Datum und Ort) nach oben, statt auf eine zweite Seite zu laufen. */\n"
+            + "            .cover { min-height: calc(100vh - 2mm); display: flex; flex-direction: column; }\n"
+            + "            .cover > * { flex: 0 0 auto; }";
+
+        var updated = html
+            .Replace(previousBody, previousBody + coverRules, StringComparison.Ordinal)
+            .Replace(previousFooter, ".footer { margin-top: auto;", StringComparison.Ordinal)
+            .Replace("<body>", "<body><div class=\"cover\">", StringComparison.Ordinal)
+            .Replace("</body>", "</div></body>", StringComparison.Ordinal);
+
+        var version = currentVersion + 1;
+        InsertTemplateVersion(connection, id, version, updated);
+        SetTemplateVersion(connection, id, version);
+    }
+
+    /// <summary>
     /// Version 12: Bilder lassen sich mit Schlagworten versehen. Sie ergänzen Name und
     /// Kategorie in der Bildsuche, ohne dass bestehende Bilder etwas verlieren.
     /// </summary>
@@ -1056,6 +1122,10 @@ public sealed class Database
           <style>
             @page { size: A4; margin: 18mm 16mm; }
             body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 10.5pt; color: #1f2933; margin: 0; }
+            /* Das Deckblatt steht immer auf einer Seite: Reicht der Platz für die Adressen nicht,
+               rückt der Fuss (Datum und Ort) nach oben, statt auf eine zweite Seite zu laufen. */
+            .cover { min-height: calc(100vh - 2mm); display: flex; flex-direction: column; }
+            .cover > * { flex: 0 0 auto; }
             .kicker { font-size: 8pt; letter-spacing: .22em; text-transform: uppercase; color: #0f5fa6; font-weight: 600; }
             h1 { font-size: 27pt; line-height: 1.1; margin: 1.5mm 0 0 0; color: #102a43; }
             .rule { height: 3px; width: 46mm; background: #0f5fa6; margin: 5mm 0 9mm 0; }
@@ -1072,10 +1142,10 @@ public sealed class Database
             .section { border-top: 1px solid #e1e7ee; padding-top: 3mm; margin-top: 4mm; }
             .section .label { display: block; margin-bottom: 1.2mm; }
             .text { font-size: 9.8pt; line-height: 1.55; color: #243b53; }
-            .footer { margin-top: 12mm; border-top: 2px solid #102a43; padding-top: 3mm; font-size: 9pt; color: #486581; }
+            .footer { margin-top: auto; border-top: 2px solid #102a43; padding-top: 3mm; font-size: 9pt; color: #486581; }
           </style>
         </head>
-        <body>
+        <body><div class="cover">
           <div class="brand">{{company.logo}}</div>
           <div class="kicker">Zustandsbericht</div>
           <h1>Aufzugsanlagen</h1>
@@ -1119,7 +1189,7 @@ public sealed class Database
           </div>
 
           <div class="footer">{{date}}, {{company.city}}</div>
-        </body>
+        </div></body>
         </html>
         """;
 
