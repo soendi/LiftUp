@@ -65,4 +65,15 @@ public sealed class AiProvidersTests
         Assert.Equal("Aus Stichworten Text erstellen", AiTextActions.Label(AiTextAction.FromKeywords));
         Assert.Contains("Stichworten", AiTextActions.Instruction(AiTextAction.FromKeywords), StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void Stichworte_werden_als_ganze_Saetze_im_professionellen_Ton_verlangt()
+    {
+        var instruction = AiTextActions.Instruction(AiTextAction.FromKeywords);
+
+        Assert.Contains("ganze Sätze", instruction, StringComparison.Ordinal);
+        Assert.Contains("professionellen Ton", instruction, StringComparison.Ordinal);
+        Assert.Contains("mindestens zwei Sätzen", instruction, StringComparison.Ordinal);
+        Assert.Contains("eigenen Absatz", instruction, StringComparison.Ordinal);
+    }
 }

@@ -48,9 +48,10 @@ public static class AiTextActions
             "Formuliere den Text ausführlicher und ergänze passende fachliche Wendungen. Erfinde keine " +
             "Fakten, Zahlen oder Normen und behalte den Stil bei.",
         AiTextAction.FromKeywords =>
-            "Formuliere aus den folgenden Stichworten einen zusammenhängenden Fachtext in ganzen Sätzen " +
-            "und sinnvoller Reihenfolge. Behalte alle Angaben, Zahlen und Bezeichnungen bei, ergänze " +
-            "nichts, was nicht in den Stichworten steht, und gliedere längere Texte in Absätze.",
+            "Erstelle aus den folgenden Stichworten einen Text. Formuliere ganze Sätze und wähle einen " +
+            "professionellen Ton. Jede Zeile mit Stichworten ergibt einen eigenen Absatz mit mindestens " +
+            "zwei Sätzen; die Reihenfolge der Zeilen bleibt erhalten. Behalte alle Angaben, Zahlen und " +
+            "Bezeichnungen bei und ergänze nichts, was nicht in den Stichworten steht.",
         _ => "Überarbeite den Text, ohne seinen Inhalt zu verändern.",
     };
 

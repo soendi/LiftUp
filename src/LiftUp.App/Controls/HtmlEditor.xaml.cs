@@ -67,6 +67,8 @@ public partial class HtmlEditor : UserControl
                 color: #9AA3AD;
             }
             p { margin: 0 0 8px 0; }
+            /* Zeilen aus eingefügtem HTML (etwa aus Word) sollen wie Absätze wirken. */
+            body > div { margin: 0 0 8px 0; }
             ul, ol { margin: 0 0 8px 0; padding-left: 26px; }
             h1, h2, h3 { margin: 0 0 8px 0; }
             table { border-collapse: collapse; }
@@ -925,6 +927,72 @@ public partial class HtmlEditor : UserControl
                 }
             }, true);
 
+            // Eine Zeile, die noch in keinem Absatz steht – etwa der erste Text in einem leeren
+            // Baustein – bekommt mit Enter nur einen Zeilenumbruch. Darum werden lose
+            // Textstücke zu einem <p>: erst dann setzt Enter einen Absatz mit Abstand.
+            window.liftupWrapLooseText = function () {
+                var body = document.body;
+                if (!body) {
+                    return false;
+                }
+
+                function hasContent(node) {
+                    if (node.nodeType === 3) {
+                        return node.nodeValue.replace(/\u00a0|\s/g, '').length > 0;
+                    }
+                    return node.nodeType === 1 && node.tagName !== 'BR';
+                }
+
+                var nodes = Array.prototype.slice.call(body.childNodes);
+                var group = [];
+
+                function flush() {
+                    var pending = group;
+                    group = [];
+                    if (!pending.some(hasContent)) {
+                        return;
+                    }
+                    var paragraph = document.createElement('p');
+                    body.insertBefore(paragraph, pending[0]);
+                    for (var position = 0; position < pending.length; position += 1) {
+                        paragraph.appendChild(pending[position]);
+                    }
+                }
+
+                for (var index = 0; index < nodes.length; index += 1) {
+                    var node = nodes[index];
+                    if (node.nodeType === 1 && window.liftupIsBlockNode(node)) {
+                        flush();
+                        continue;
+                    }
+                    if (node.nodeType === 8) {
+                        continue;
+                    }
+                    group.push(node);
+                }
+                flush();
+                return true;
+            };
+
+            // Enter vor dem Browser: die Zeile wird zuerst zum Absatz. Shift+Enter bleibt ein
+            // Umbruch, und die Baustein-Vorschläge behalten Enter für sich.
+            document.addEventListener('keydown', function (event) {
+                if (event.key !== 'Enter' || event.shiftKey || event.ctrlKey || event.altKey) {
+                    return;
+                }
+                if (window.liftupSnippetOpen) {
+                    return;
+                }
+                var selection = window.getSelection();
+                if (!selection || selection.rangeCount === 0) {
+                    return;
+                }
+                if (window.liftupTopBlock(selection.getRangeAt(0).startContainer)) {
+                    return;
+                }
+                window.liftupWrapLooseText();
+            }, true);
+
             window.liftupGetHtml = function () {
                 window.liftupCloseSnippets();
                 return document.body.innerHTML;
@@ -1627,7 +1695,8 @@ public partial class HtmlEditor : UserControl
 
         var script = "document.body.innerHTML = "
                      + JsonSerializer.Serialize(_pendingHtml)
-                     + "; window.liftupNormalizeFigures && window.liftupNormalizeFigures(); true";
+                     + "; window.liftupNormalizeFigures && window.liftupNormalizeFigures()"
+                     + "; window.liftupWrapLooseText && window.liftupWrapLooseText(); true";
 
         await Browser.CoreWebView2.ExecuteScriptAsync(script);
     }
