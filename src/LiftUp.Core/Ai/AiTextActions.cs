@@ -50,8 +50,11 @@ public static class AiTextActions
         AiTextAction.FromKeywords =>
             "Erstelle aus den folgenden Stichworten einen Text. Formuliere ganze Sätze und wähle einen " +
             "professionellen Ton. Jede Zeile mit Stichworten ergibt einen eigenen Absatz mit mindestens " +
-            "zwei Sätzen; die Reihenfolge der Zeilen bleibt erhalten. Behalte alle Angaben, Zahlen und " +
-            "Bezeichnungen bei und ergänze nichts, was nicht in den Stichworten steht.",
+            "zwei Sätzen; die Reihenfolge der Zeilen bleibt erhalten. Die Sätze sollen lang und " +
+            "ausführlich sein: Verbinde die Gedanken mit Konnektoren wie weil, damit, sodass oder " +
+            "nachdem, und schildere die Arbeiten im Zusammenhang. Keine kurzen, abgehackten Stichsätze " +
+            "und keine Aufzählung. Behalte alle Angaben, Zahlen und Bezeichnungen bei und ergänze " +
+            "nichts, was nicht in den Stichworten steht.",
         _ => "Überarbeite den Text, ohne seinen Inhalt zu verändern.",
     };
 

@@ -75,5 +75,10 @@ public sealed class AiProvidersTests
         Assert.Contains("professionellen Ton", instruction, StringComparison.Ordinal);
         Assert.Contains("mindestens zwei Sätzen", instruction, StringComparison.Ordinal);
         Assert.Contains("eigenen Absatz", instruction, StringComparison.Ordinal);
+
+        // Kurze, abgehackte Sätze waren der Grund, warum die Texte zu knapp ausfielen.
+        Assert.Contains("lang und ausführlich", instruction, StringComparison.Ordinal);
+        Assert.Contains("Konnektoren", instruction, StringComparison.Ordinal);
+        Assert.Contains("keine Aufzählung", instruction, StringComparison.Ordinal);
     }
 }
