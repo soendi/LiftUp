@@ -141,6 +141,12 @@ public sealed class Project
     /// </summary>
     public string? ImagePath { get; set; }
 
+    /// <summary>Benennung der ersten Variante der Investitionsplanung, etwa „Modernisierung 2026-2027“.</summary>
+    public string? Variant1Label { get; set; }
+
+    /// <summary>Benennung der zweiten Variante der Investitionsplanung, etwa „Ersatzanlage 2027-2028“.</summary>
+    public string? Variant2Label { get; set; }
+
     public ProjectStatus Status { get; set; } = ProjectStatus.Active;
 
     /// <summary>Zeitpunkt der Archivierung; bleibt beim Wiederherstellen erhalten? Nein: wird zurückgesetzt.</summary>
@@ -302,6 +308,35 @@ public enum ProjectSort
     Status,
     Updated,
     Responsible,
+}
+
+/// <summary>
+/// Benennung der beiden Varianten der Investitionsplanung. Der Kopf bleibt „Variante 1 – “ bzw.
+/// „Variante 2 – “; dahinter steht der Text aus dem Projekt.
+/// </summary>
+public static class ProjectVariantNames
+{
+    /// <summary>Ab dem 1. Juli zählt die Investition aufs folgende Jahr; bis dahin gilt das laufende.</summary>
+    public const int SwitchMonth = 6;
+    public const int SwitchDay = 30;
+
+    /// <summary>Bis und mit dem 30. Juni steht nur das laufende Jahr im Namen.</summary>
+    public static bool BeforeSwitch(DateOnly today) => today <= new DateOnly(today.Year, SwitchMonth, SwitchDay);
+
+    /// <summary>„Modernisierung 2026“ bis Ende Juni, danach „Modernisierung 2026-2027“.</summary>
+    public static string DefaultModernisierung(DateOnly today) => BeforeSwitch(today)
+        ? $"Modernisierung {today.Year}"
+        : $"Modernisierung {today.Year}-{today.Year + 1}";
+
+    /// <summary>„Ersatzanlage 2026-2027“ bis Ende Juni, danach „Ersatzanlage 2027-2028“.</summary>
+    public static string DefaultErsatzanlage(DateOnly today) => BeforeSwitch(today)
+        ? $"Ersatzanlage {today.Year}-{today.Year + 1}"
+        : $"Ersatzanlage {today.Year + 1}-{today.Year + 2}";
+
+    /// <summary>Der feste Kopf der Variante: „Variante 1 – “ und der eigene Text dahinter.</summary>
+    public static string Header(int number, string? label) => string.IsNullOrWhiteSpace(label)
+        ? $"Variante {number}"
+        : $"Variante {number} – {label.Trim()}";
 }
 
 /// <summary>Welche Projekte die Übersicht zeigt.</summary>

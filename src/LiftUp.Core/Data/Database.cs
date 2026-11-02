@@ -12,7 +12,7 @@ namespace LiftUp.Core.Data;
 /// </summary>
 public sealed class Database
 {
-    public const int CurrentSchemaVersion = 28;
+    public const int CurrentSchemaVersion = 29;
 
     private readonly string _connectionString;
 
@@ -205,6 +205,9 @@ public sealed class Database
 
         // Version 28 hält das Deckblatt auf einer Seite; der Fuss rückt bei langem Text nach oben.
         UpgradeReportCoverFooter(connection);
+
+        // Version 29 ergänzt die Benennung der beiden Varianten der Investitionsplanung.
+        MigrateProjectVariantLabels(connection);
 
         using var command = Db.Command(connection, "UPDATE SchemaInfo SET Version = $version;");
         command.With("$version", CurrentSchemaVersion);
@@ -1229,6 +1232,40 @@ public sealed class Database
     ];
 
     /// <summary>
+    /// Version 29: Benennung der beiden Varianten der Investitionsplanung am Projekt. Ohne
+    /// Eintrag gilt der Standard („Modernisierung 2026-2027“ und „Ersatzanlage 2027-2028“).
+    /// </summary>
+    private static void MigrateProjectVariantLabels(SqliteConnection connection)
+    {
+        var existing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using (var info = Db.Command(connection, "PRAGMA table_info(Projects);"))
+        using (var reader = info.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                existing.Add(reader.GetString(1));
+            }
+        }
+
+        (string Name, string Definition)[] additions =
+        [
+            ("Variant1Label", "TEXT NULL"),
+            ("Variant2Label", "TEXT NULL"),
+        ];
+
+        foreach (var (name, definition) in additions)
+        {
+            if (existing.Contains(name))
+            {
+                continue;
+            }
+
+            using var alter = Db.Command(connection, $"ALTER TABLE Projects ADD COLUMN {name} {definition};");
+            alter.ExecuteNonQuery();
+        }
+    }
+
+    /// <summary>
     /// Version 16: Abschnitte einer Vorlage dürfen einen Startinhalt mitbringen – so enthält
     /// der Tab „Anlagedaten“ des Zustandsberichts bereits die Tabelle.
     /// </summary>
@@ -1557,6 +1594,8 @@ public sealed class Database
             ResponsibleUserId TEXT NULL,
             ResponsibleName   TEXT NULL,
             ImagePath   TEXT NULL,
+            Variant1Label TEXT NULL,
+            Variant2Label TEXT NULL,
             FolderPath  TEXT NOT NULL COLLATE NOCASE,
             Status      INTEGER NOT NULL DEFAULT 0,
             ArchivedUtc TEXT NULL,

@@ -49,6 +49,13 @@ public partial class ProjectTableView : UserControl, ITabFillSource
     /// <summary>Ob seit dem letzten Lesen etwas geändert wurde – dann bleibt der Reiter stehen.</summary>
     private bool _dirty;
 
+    /// <summary>Beim Füllen der Variantenfelder keine Änderung annehmen.</summary>
+    private bool _loadingVariants;
+
+    /// <summary>Benennung der Varianten, wie sie im Projekt gespeichert ist.</summary>
+    private string _savedVariant1 = string.Empty;
+    private string _savedVariant2 = string.Empty;
+
     /// <summary>
     /// Höhe einer Zeile mit mehrzeiligen Feldern: fünf Textzeilen à 16 Pixel. So sind
     /// „Massnahme“ und „Erläuterung“ in der Investitionsplanung ohne Scrollen lesbar.
@@ -97,6 +104,12 @@ public partial class ProjectTableView : UserControl, ITabFillSource
         if (!showProjectSelector)
         {
             ProjectBar.Visibility = Visibility.Collapsed;
+        }
+
+        // Nur die Investitionsplanung führt zwei Varianten; ihre Benennung steht über der Tabelle.
+        if (string.Equals(_definition.Key, ProjectTableCatalog.InvestitionsplanungKey, StringComparison.OrdinalIgnoreCase))
+        {
+            VariantBar.Visibility = Visibility.Visible;
         }
 
         BuildColumns();
@@ -271,8 +284,16 @@ public partial class ProjectTableView : UserControl, ITabFillSource
     private string GroupLabel(string columnKey) =>
         _definition.Columns.FirstOrDefault(column =>
             string.Equals(column.Key, columnKey, StringComparison.OrdinalIgnoreCase)) is { Group.Length: > 0 } column
-            ? column.Group
+            ? VariantGroup(column.Group)
             : "Massnahme";
+
+    /// <summary>Der Variantenkopf mit der aktuellen Benennung aus den Feldern über der Tabelle.</summary>
+    private string VariantGroup(string group) =>
+        group.StartsWith("Variante 1", StringComparison.Ordinal)
+            ? ProjectVariantNames.Header(1, Variant1Box.Text)
+            : group.StartsWith("Variante 2", StringComparison.Ordinal)
+                ? ProjectVariantNames.Header(2, Variant2Box.Text)
+                : group;
 
     /// <summary>
     /// Zelle für ein mehrzeiliges Feld: Enter und Shift+Enter setzen einen Umbruch, der Text
@@ -439,6 +460,8 @@ public partial class ProjectTableView : UserControl, ITabFillSource
                 }
             }
 
+            LoadVariantLabels(project.Id);
+
             InfoText.Text = _rows.Count == 1
                 ? $"{_definition.Title}: 1 Zeile"
                 : $"{_definition.Title}: {_rows.Count} Zeilen";
@@ -449,6 +472,66 @@ public partial class ProjectTableView : UserControl, ITabFillSource
         {
             InfoText.Text = exception.Message;
         }
+    }
+
+    /// <summary>
+    /// Benennung der Varianten zu einem Projekt: gespeicherter Text oder der Standard zum
+    /// heutigen Datum („Modernisierung 2026-2027“, „Ersatzanlage 2027-2028“).
+    /// </summary>
+    private void LoadVariantLabels(Guid projectId)
+    {
+        if (VariantBar.Visibility != Visibility.Visible)
+        {
+            return;
+        }
+
+        var project = _services.Projects.GetProject(projectId);
+        var today = DateOnly.FromDateTime(DateTime.Today);
+
+        _loadingVariants = true;
+        Variant1Box.Text = string.IsNullOrWhiteSpace(project.Variant1Label)
+            ? ProjectVariantNames.DefaultModernisierung(today)
+            : project.Variant1Label;
+        Variant2Box.Text = string.IsNullOrWhiteSpace(project.Variant2Label)
+            ? ProjectVariantNames.DefaultErsatzanlage(today)
+            : project.Variant2Label;
+        _loadingVariants = false;
+
+        _savedVariant1 = Variant1Box.Text;
+        _savedVariant2 = Variant2Box.Text;
+    }
+
+    private void OnVariantTextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_loadingVariants)
+        {
+            return;
+        }
+
+        if (Variant1Box.Text != _savedVariant1 || Variant2Box.Text != _savedVariant2)
+        {
+            _dirty = true;
+        }
+    }
+
+    /// <summary>Schreibt die Benennung der Varianten, wenn sie sich geändert hat.</summary>
+    private void SaveVariantLabels(Guid projectId)
+    {
+        if (VariantBar.Visibility != Visibility.Visible)
+        {
+            return;
+        }
+
+        var variant1 = Variant1Box.Text.Trim();
+        var variant2 = Variant2Box.Text.Trim();
+        if (variant1 == _savedVariant1 && variant2 == _savedVariant2)
+        {
+            return;
+        }
+
+        _services.Projects.SaveVariantLabels(projectId, variant1, variant2);
+        _savedVariant1 = variant1;
+        _savedVariant2 = variant2;
     }
 
     private void OnProjectChanged(object sender, SelectionChangedEventArgs e)
@@ -574,6 +657,9 @@ public partial class ProjectTableView : UserControl, ITabFillSource
             }
 
             var saved = _services.ProjectTables.Save(projectId, _definition.Key, inputs);
+
+            // Die Benennung der Varianten gehört zum Projekt und wird mitgespeichert.
+            SaveVariantLabels(projectId);
 
             // Gehören die Zeilen zu einem anderen Projekt (Wechsel), bleibt die Anzeige stehen.
             if (_rowsProjectId == projectId)

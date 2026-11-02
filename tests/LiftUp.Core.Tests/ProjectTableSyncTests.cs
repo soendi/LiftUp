@@ -53,8 +53,9 @@ public sealed class ProjectTableSyncTests
         Assert.Equal("Schindler", investment[0].Values["Service"]);
         Assert.Equal("PA", investment[0].Values["Type"]);
 
-        // Das Investitionsjahr bleibt leer: es ist nicht das Baujahr des Aufzugs.
-        Assert.Equal(string.Empty, investment[0].Values["Year"]);
+        // Das Jahr der Anlage steht ohne zweite Eingabe auch in der Investitionsplanung.
+        Assert.Equal("1994", investment[0].Values["Year"]);
+        Assert.Equal("2001", investment[1].Values["Year"]);
         Assert.Equal("8609862", investment[1].Values["AssetName"]);
 
         // Eigene Angaben der Investitionsplanung starten leer.
@@ -227,7 +228,7 @@ public sealed class ProjectTableSyncTests
     }
 
     [Fact]
-    public void Eigenes_investitionsjahr_bleibt_erhalten()
+    public void Jahr_der_anlage_wird_in_die_investitionsplanung_uebernommen()
     {
         using var fixture = new TestDatabase();
         var session = fixture.LoginAsAdmin();
@@ -238,17 +239,20 @@ public sealed class ProjectTableSyncTests
         tables.Save(project.Id, ProjectTableCatalog.ZustandsanalyseKey,
             [Lift("8609861", "Messligfeldstrasse 1", "1994", "PA")]);
 
+        // Jahr in der Zustandsanalyse ändern: Die Investitionsplanung zieht nach, die übrigen
+        // eigenen Angaben (hier die Massnahme) bleiben stehen.
         tables.Save(project.Id, ProjectTableCatalog.InvestitionsplanungKey,
         [
-            Row(("AssetName", "8609861"), ("Location", "Messligfeldstrasse 1"), ("Year", "2026")),
+            Row(("AssetName", "8609861"), ("Location", "Messligfeldstrasse 1"), ("Year", "1994"),
+                ("ModernMeasure", "Steuerung ersetzen")),
         ]);
 
-        // Ein weiteres Speichern der Zustandsanalyse lässt das Investitionsjahr stehen.
         tables.Save(project.Id, ProjectTableCatalog.ZustandsanalyseKey,
-            [Lift("8609861", "Messligfeldstrasse 1", "1994", "PA")]);
+            [Lift("8609861", "Messligfeldstrasse 1", "2003", "PA")]);
 
         var investment = Assert.Single(tables.Get(project.Id, ProjectTableCatalog.InvestitionsplanungKey));
-        Assert.Equal("2026", investment.Values["Year"]);
+        Assert.Equal("2003", investment.Values["Year"]);
+        Assert.Equal("Steuerung ersetzen", investment.Values["ModernMeasure"]);
     }
 
     [Fact]

@@ -467,12 +467,16 @@ public sealed class DocumentService
         Guid projectId)
     {
         var sheets = new List<(ProjectTableDefinition, IReadOnlyList<ProjectTableRow>)>();
+        // Die Investitionsplanung trägt die Benennung der Varianten aus dem Projekt.
+        var project = _projects.GetById(connection, transaction, projectId);
+
         foreach (var definition in ProjectTableCatalog.All)
         {
             var rows = _tables.GetRows(connection, transaction, projectId, definition.Key);
             if (rows.Count > 0)
             {
-                sheets.Add((definition, rows));
+                sheets.Add((ProjectTableCatalog.WithVariantLabels(
+                    definition, project?.Variant1Label, project?.Variant2Label), rows));
             }
         }
 

@@ -57,8 +57,11 @@ public static class ProjectTableCatalog
     private const string Esba = "ESBA";
     /// <summary>Gekürzt, damit der Gruppenkopf im PDF die Spalten nicht breit macht.</summary>
     private const string Ersatzteile = "Ersatzteilverfgbk.";
-    private const string VarianteModernisierung = "Variante 1 – Modernisierung";
-    private const string VarianteErsatz = "Variante 2 – Ersatzanlage";
+    /// <summary>Kopf der ersten Variante; das Projekt kann den Text dahinter selbst benennen.</summary>
+    public const string VarianteModernisierung = "Variante 1 – Modernisierung";
+
+    /// <summary>Kopf der zweiten Variante; das Projekt kann den Text dahinter selbst benennen.</summary>
+    public const string VarianteErsatz = "Variante 2 – Ersatzanlage";
 
     /// <summary>Bewertung der Analysepunkte (Legende der Vorlage: grün gut, gelb mässig, rot schlecht).</summary>
     private static readonly string[] AnalyseWerte = ["gut", "mässig", "schlecht"];
@@ -182,13 +185,56 @@ public static class ProjectTableCatalog
         ]);
 
     /// <summary>
+    /// Ersetzt bei der Investitionsplanung die beiden Variantenköpfe durch die Benennung des
+    /// Projekts; ohne eigenen Text gilt der Standard zum heutigen Datum.
+    /// </summary>
+    public static ProjectTableDefinition WithVariantLabels(
+        ProjectTableDefinition definition,
+        string? modernisierung,
+        string? ersatzanlage) =>
+        WithVariantLabels(definition, modernisierung, ersatzanlage, DateOnly.FromDateTime(DateTime.Today));
+
+    /// <summary>Wie oben, mit festem Datum – für Tests und für Dokumente mit anderem Stichtag.</summary>
+    public static ProjectTableDefinition WithVariantLabels(
+        ProjectTableDefinition definition,
+        string? modernisierung,
+        string? ersatzanlage,
+        DateOnly today)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+
+        if (!string.Equals(definition.Key, InvestitionsplanungKey, StringComparison.OrdinalIgnoreCase))
+        {
+            return definition;
+        }
+
+        var labels = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [VarianteModernisierung] = ProjectVariantNames.Header(1, Own(modernisierung, ProjectVariantNames.DefaultModernisierung(today))),
+            [VarianteErsatz] = ProjectVariantNames.Header(2, Own(ersatzanlage, ProjectVariantNames.DefaultErsatzanlage(today))),
+        };
+
+        return definition with
+        {
+            Columns = definition.Columns
+                .Select(column => labels.TryGetValue(column.Group, out var label)
+                    ? column with { Group = label }
+                    : column)
+                .ToArray(),
+        };
+    }
+
+    /// <summary>Der eigene Text; ohne Eingabe bleibt der Standard.</summary>
+    private static string Own(string? value, string fallback) =>
+        string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
+
+    /// <summary>
     /// Spalten, die in beiden Tabellen vorkommen. Eine Zeile der Zustandsanalyse legt die
-    /// passende Zeile der Investitionsplanung an und füllt diese Angaben von dort. Das Jahr
-    /// fehlt bewusst: Das Investitionsjahr ist nicht das Baujahr des Aufzugs und wird im
-    /// Reiter „Investitionsplanung“ selbst erfasst.
+    /// passende Zeile der Investitionsplanung an und füllt diese Angaben von dort – auch das
+    /// Jahr, damit das Baujahr ohne zweite Eingabe in der Investitionsplanung steht.
     /// </summary>
     public static IReadOnlyList<string> SharedWithInvestitionsplanung { get; } =
-        ["AssetName", "Service", "Location", "Type"];
+        ["AssetName", "Service", "Location", "Type", "Year"];
 
     /// <summary>
     /// Spalten der Anlagedaten, die aus der Zustandsanalyse stammen (links die Anlagedaten,

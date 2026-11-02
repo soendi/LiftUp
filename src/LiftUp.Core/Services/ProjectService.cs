@@ -62,6 +62,32 @@ public sealed class ProjectService
     }
 
     /// <summary>
+    /// Schreibt nur die Benennung der beiden Varianten der Investitionsplanung. Sie erscheint
+    /// als Kopf „Variante 1 – …“ in der Tabelle und im PDF.
+    /// </summary>
+    public Project SaveVariantLabels(Guid projectId, string? modernisierung, string? ersatzanlage)
+    {
+        _actor.Require(Permission.EditProjects);
+
+        using var connection = _database.Open();
+        using var transaction = connection.BeginTransaction();
+
+        var project = _projects.GetById(connection, transaction, projectId)
+                      ?? throw new ValidationException("Das Projekt wurde nicht gefunden.");
+
+        project.Variant1Label = (modernisierung ?? string.Empty).Trim();
+        project.Variant2Label = (ersatzanlage ?? string.Empty).Trim();
+        project.RowVersion = _projects.UpdateVariantLabels(
+            connection, transaction, projectId, project.Variant1Label, project.Variant2Label, _actor.UserName);
+
+        _changes.Record(connection, transaction, "Project", projectId.ToString("D"), "Variants",
+            new { project.Variant1Label, project.Variant2Label }, project.RowVersion);
+        transaction.Commit();
+
+        return project;
+    }
+
+    /// <summary>
     /// Schreibt nur die Meilensteine eines Projekts – für die Projektübersicht, in der sie
     /// direkt gepflegt werden. Die Begehung bleibt dabei so fest wie im Projektdialog.
     /// </summary>

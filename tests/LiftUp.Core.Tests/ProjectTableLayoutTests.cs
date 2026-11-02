@@ -20,6 +20,38 @@ public sealed class ProjectTableLayoutTests
     };
 
     [Fact]
+    public void Investitionsplanung_druckt_ohne_rechnerspalte()
+    {
+        var rows = new[]
+        {
+            new ProjectTableRow
+            {
+                Values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Year"] = "2026",
+                    ["AssetName"] = "8609861",
+                },
+            },
+        };
+
+        var html = ProjectTableSheet.Render(
+            ProjectTableCatalog.Investitionsplanung, rows, pageBreak: false, availableWidthMm: 260);
+
+        // Der Rechner ist ein Bedienelement der Ansicht und hat im Druck nichts zu suchen:
+        // Das Blatt beginnt mit „Jahr“.
+        Assert.DoesNotContain("∑", html);
+
+        var headers = Regex.Matches(html, "<th(?=[ >])(?<attrs>[^>]*)>(?<label>.*?)</th>", RegexOptions.Singleline)
+            .Select(match => (Attrs: match.Groups["attrs"].Value, Label: match.Groups["label"].Value))
+            .ToArray();
+
+        var columns = headers.Where(header => !header.Attrs.Contains("colspan", StringComparison.Ordinal)).ToArray();
+        Assert.Equal(ProjectTableCatalog.Investitionsplanung.Columns.Count, columns.Length);
+        Assert.Contains("Jahr", columns[0].Label);
+        Assert.Contains("Anlagebezeichnung", columns[1].Label);
+    }
+
+    [Fact]
     public void Spaltenbreiten_fuellen_genau_die_seite()
     {
         var html = ProjectTableSheet.Render(ProjectTableCatalog.Zustandsanalyse, [Row()], pageBreak: false);

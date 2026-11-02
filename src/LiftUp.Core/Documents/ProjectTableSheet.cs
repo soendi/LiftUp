@@ -325,8 +325,9 @@ public static class ProjectTableSheet
         "Analysepunkte" => "#d5c6e0",
         "ESBA" => "#c5d9b0",
         "Ersatzteilverfgbk." => "#cfe0ea",
-        "Variante 1 – Modernisierung" => "#9dc3e6",
-        "Variante 2 – Ersatzanlage" => "#f0b7b7",
+        // Die Varianten tragen den Namen des Projekts; die Farbe hängt am festen Kopf.
+        _ when group.StartsWith("Variante 1", StringComparison.Ordinal) => "#9dc3e6",
+        _ when group.StartsWith("Variante 2", StringComparison.Ordinal) => "#f0b7b7",
         _ => "#eef1f4",
     };
 

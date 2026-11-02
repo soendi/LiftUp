@@ -1,9 +1,9 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
-using System.Globalization;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
+using LiftUp.Core.Domain;
 
 namespace LiftUp.App.Views;
 
@@ -111,19 +111,28 @@ public partial class InvestmentCalculatorWindow : Window
     /// <summary>Übernimmt die Preise in die Summenanzeige, sobald eine Zeile dazukommt oder sich ändert.</summary>
     private void Track(ObservableCollection<MeasureRow> rows)
     {
+        // Auch die aus der Tabelle übernommenen Zeilen melden jede Änderung – sonst bliebe
+        // die Summe stehen, bis die Zelle verlassen wird.
+        foreach (var row in rows)
+        {
+            row.PropertyChanged += OnMeasureChanged;
+        }
+
         rows.CollectionChanged += (_, args) =>
         {
             if (args.NewItems is not null)
             {
                 foreach (MeasureRow row in args.NewItems)
                 {
-                    row.PropertyChanged += (_, _) => UpdateSums();
+                    row.PropertyChanged += OnMeasureChanged;
                 }
             }
 
             UpdateSums();
         };
     }
+
+    private void OnMeasureChanged(object? sender, PropertyChangedEventArgs e) => UpdateSums();
 
     /// <summary>
     /// Füllt eine Seite aus der Tabelle: Die Massnahmen stammen aus der Spalte „Massnahme“,
@@ -195,45 +204,9 @@ public partial class InvestmentCalculatorWindow : Window
     }
 
     private static string FormatSum(IEnumerable<MeasureRow> rows) =>
-        Sum(rows).ToString("0.00", CultureInfo.InvariantCulture);
+        PriceText.Format(Sum(rows));
 
-    private static decimal Sum(IEnumerable<MeasureRow> rows) => rows.Sum(row => ParsePrice(row.Price));
-
-    /// <summary>
-    /// Liest „1250.50“, „1250,50“, „1'250.50“ und „1.250,50“. Unlesbare Eingaben zählen als
-    /// null, damit ein Tippfehler die Summe nicht verfälscht.
-    /// </summary>
-    private static decimal ParsePrice(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return 0m;
-        }
-
-        var text = value
-            .Replace("'", string.Empty)
-            .Replace("’", string.Empty)
-            .Replace(" ", string.Empty)
-            .Replace("\u00a0", string.Empty);
-
-        var lastComma = text.LastIndexOf(',');
-        var lastDot = text.LastIndexOf('.');
-        if (lastComma >= 0 && lastDot >= 0)
-        {
-            // Der letzte Trenner ist das Dezimalzeichen, der andere gehört zu den Tausender.
-            text = lastComma > lastDot
-                ? text.Replace(".", string.Empty).Replace(',', '.')
-                : text.Replace(",", string.Empty);
-        }
-        else
-        {
-            text = text.Replace(',', '.');
-        }
-
-        return decimal.TryParse(text, NumberStyles.Number, CultureInfo.InvariantCulture, out var parsed)
-            ? parsed
-            : 0m;
-    }
+    private static decimal Sum(IEnumerable<MeasureRow> rows) => rows.Sum(row => PriceText.Parse(row.Price));
 
     private void OnOkClick(object sender, RoutedEventArgs e)
     {
@@ -277,6 +250,6 @@ public partial class InvestmentCalculatorWindow : Window
     private static string FormatCost(IReadOnlyList<MeasureRow> rows)
     {
         var sum = Sum(rows);
-        return sum == 0m ? string.Empty : sum.ToString("0.00", CultureInfo.InvariantCulture);
+        return sum == 0m ? string.Empty : PriceText.Format(sum);
     }
 }

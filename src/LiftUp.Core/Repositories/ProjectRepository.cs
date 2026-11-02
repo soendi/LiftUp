@@ -11,7 +11,7 @@ public sealed class ProjectRepository
         "Id, Number, Name, Customer, CustomerStreet, CustomerZip, CustomerCity, Contact, Description, " +
         "ResponsibleUserId, ResponsibleName, FolderPath, Status, ArchivedUtc, ArchivedBy, CreatedUtc, " +
         "CreatedBy, UpdatedUtc, UpdatedBy, RowVersion, IsDeleted, CustomerLine2, Client, ClientStreet, " +
-        "ClientLine2, ClientZip, ClientCity, ImagePath";
+        "ClientLine2, ClientZip, ClientCity, ImagePath, Variant1Label, Variant2Label";
 
     public IReadOnlyList<ProjectListItem> Search(SqliteConnection connection, SqliteTransaction? transaction, ProjectQuery query)
     {
@@ -492,5 +492,34 @@ public sealed class ProjectRepository
         ClientZip = reader.TextOrNull(25),
         ClientCity = reader.TextOrNull(26),
         ImagePath = reader.TextOrNull(27),
+        Variant1Label = reader.TextOrNull(28),
+        Variant2Label = reader.TextOrNull(29),
     };
+
+    /// <summary>
+    /// Schreibt nur die Benennung der beiden Varianten der Investitionsplanung; die übrigen
+    /// Angaben des Projekts bleiben unangetastet.
+    /// </summary>
+    public long UpdateVariantLabels(
+        SqliteConnection connection,
+        SqliteTransaction? transaction,
+        Guid id,
+        string? variant1,
+        string? variant2,
+        string changedBy)
+    {
+        using var command = Db.Command(connection, """
+            UPDATE Projects
+            SET Variant1Label = $variant1, Variant2Label = $variant2,
+                UpdatedUtc = $updatedUtc, UpdatedBy = $updatedBy, RowVersion = RowVersion + 1
+            WHERE Id = $id
+            RETURNING RowVersion;
+            """, transaction);
+        command.With("$id", id.ToString("D"))
+            .With("$variant1", variant1)
+            .With("$variant2", variant2)
+            .With("$updatedUtc", DateTime.UtcNow.ToDb())
+            .With("$updatedBy", changedBy);
+        return Convert.ToInt64(command.ExecuteScalar());
+    }
 }

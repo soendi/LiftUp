@@ -44,8 +44,8 @@
                               MinHeight="180"
                               RowHeight="28">
                         <DataGrid.Columns>
-                            <DataGridTextColumn Header="Massnahme" Binding="{Binding Name}" Width="*" />
-                            <DataGridTextColumn Header="Preis" Binding="{Binding Price}" Width="110" />
+                            <DataGridTextColumn Header="Massnahme" Binding="{Binding Name, UpdateSourceTrigger=PropertyChanged}" Width="*" />
+                            <DataGridTextColumn Header="Preis" Binding="{Binding Price, UpdateSourceTrigger=PropertyChanged}" Width="110" />
                         </DataGrid.Columns>
                     </DataGrid>
                 </DockPanel>
@@ -71,8 +71,8 @@
                               MinHeight="180"
                               RowHeight="28">
                         <DataGrid.Columns>
-                            <DataGridTextColumn Header="Massnahme" Binding="{Binding Name}" Width="*" />
-                            <DataGridTextColumn Header="Preis" Binding="{Binding Price}" Width="110" />
+                            <DataGridTextColumn Header="Massnahme" Binding="{Binding Name, UpdateSourceTrigger=PropertyChanged}" Width="*" />
+                            <DataGridTextColumn Header="Preis" Binding="{Binding Price, UpdateSourceTrigger=PropertyChanged}" Width="110" />
                         </DataGrid.Columns>
                     </DataGrid>
                 </DockPanel>

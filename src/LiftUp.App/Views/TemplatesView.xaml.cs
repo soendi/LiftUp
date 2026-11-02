@@ -181,6 +181,9 @@ public partial class TemplatesView : UserControl
             VersionBox.SelectedIndex = 0;
             HtmlBox.Text = versions.Count > 0 ? versions[0].Html : string.Empty;
 
+            // Erst die alten Reiter entfernen, dann die Liste leeren: Sonst bleiben die Blätter
+            // der zuvor geöffneten Vorlage stehen und jedes Blatt erscheint doppelt.
+            RemoveSectionTabs();
             _sectionRows.Clear();
             foreach (var section in _services.Templates.GetSections(templateId))
             {
@@ -298,6 +301,7 @@ public partial class TemplatesView : UserControl
         VersionBox.ItemsSource = null;
         ToggleActiveButton.IsEnabled = false;
         DeleteButton.IsEnabled = false;
+        RemoveSectionTabs();
         _sectionRows.Clear();
         RebuildSectionTabs();
     }
@@ -410,8 +414,8 @@ public partial class TemplatesView : UserControl
 
     private string ActiveSheetName => SelectedSection is { Title.Length: > 0 } row ? row.Title : "Deckblatt";
 
-    /// <summary>Legt je Blatt einen Reiter an; „Deckblatt“ bleibt der erste Reiter.</summary>
-    private void RebuildSectionTabs()
+    /// <summary>Entfernt die Reiter der Blätter, die gerade in der Liste stehen.</summary>
+    private void RemoveSectionTabs()
     {
         foreach (var row in _sectionRows)
         {
@@ -422,6 +426,12 @@ public partial class TemplatesView : UserControl
                 row.Editor = null;
             }
         }
+    }
+
+    /// <summary>Legt je Blatt einen Reiter an; „Deckblatt“ bleibt der erste Reiter.</summary>
+    private void RebuildSectionTabs()
+    {
+        RemoveSectionTabs();
 
         foreach (var row in _sectionRows)
         {
