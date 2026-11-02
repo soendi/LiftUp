@@ -978,6 +978,16 @@ public partial class HtmlEditor : UserControl
         // Auswahlfeld über dem Text: korrigieren, professioneller, kürzen, verlängern.
         BuildAiActions();
 
+        // Die Verbindung lässt sich im Reiter „KI“ jederzeit einrichten oder entfernen; darum
+        // wird bei jedem Einblenden des Editors neu geprüft, ob eine KI verbunden ist.
+        IsVisibleChanged += (_, _) =>
+        {
+            if (IsVisible)
+            {
+                RefreshAiState();
+            }
+        };
+
         // Ein Klick auf ein Bild im Text öffnet die Bild-Eigenschaften: Größe,
         // Ausrichtung, Textfluss und Unterschrift. Jeder Editor bringt das Fenster mit;
         // eine Ansicht kann es über die Eigenschaft durch etwas anderes ersetzen.
@@ -991,6 +1001,19 @@ public partial class HtmlEditor : UserControl
 
             return dialog.ShowDialog() == true ? dialog.Format : null;
         };
+    }
+
+    /// <summary>
+    /// Fragt die gespeicherte Verbindung ab und beschriftet das KI-Feld danach. Die Einstellungen
+    /// werden bei jedem Aufruf neu gelesen – eine im Reiter „KI“ eingerichtete Verbindung wirkt
+    /// also sofort, ohne Neustart der Anwendung.
+    /// </summary>
+    private void RefreshAiState()
+    {
+        AiActionBox.IsEnabled = _snippetServices is not null;
+        AiHintText.Text = _snippetServices?.Ai.IsConfigured == true
+            ? "Vorschlag wird vor dem Übernehmen angezeigt"
+            : "Keine KI verbunden – im Reiter „KI“ einrichten";
     }
 
     /// <summary>Auswahlfeld über dem Text: Platzhalter und die vier Überarbeitungen der KI.</summary>
@@ -1378,6 +1401,9 @@ public partial class HtmlEditor : UserControl
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
+        // Beim Öffnen des Texteditors zählt der aktuelle Stand der Verbindung.
+        RefreshAiState();
+
         if (_initialization is not null)
         {
             return;
@@ -1641,12 +1667,7 @@ public partial class HtmlEditor : UserControl
         {
             _snippetServices = value;
             SaveSnippetButton.IsEnabled = value is not null;
-
-            // Die KI steht über jedem Editor bereit, der die Dienste kennt.
-            AiActionBox.IsEnabled = value is not null;
-            AiHintText.Text = value?.Ai.IsConfigured == true
-                ? "Vorschlag wird vor dem Übernehmen angezeigt"
-                : "Keine KI verbunden – im Reiter „KI“ einrichten";
+            RefreshAiState();
         }
     }
 

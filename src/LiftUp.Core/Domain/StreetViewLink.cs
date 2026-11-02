@@ -26,8 +26,9 @@ public static class StreetViewLink
     }
 
     /// <summary>
-    /// Kartenadresse zur Straßenansicht: Google sucht die Adresse und wechselt auf das
-    /// Straßenbild an dieser Stelle (<c>layer=c</c>).
+    /// Kartenadresse zur Straßenansicht: Google sucht die Adresse und springt mit
+    /// <c>map_action=pano</c> auf das Straßenbild an dieser Stelle. Die Adressteile sind mit
+    /// „+“ verbunden (z. B. <c>Hauptstrasse+56+9436+Balgach</c>), Kommas entfallen.
     /// </summary>
     public static string BuildUrl(string address)
     {
@@ -37,7 +38,14 @@ public static class StreetViewLink
             throw new ValidationException("Für die Straßenansicht fehlt die Adresse des Projekts.");
         }
 
-        return "https://www.google.com/maps?q=" + Uri.EscapeDataString(query) + "&layer=c&hl=de";
+        var parts = query
+            .Replace(",", " ", StringComparison.Ordinal)
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Select(Uri.EscapeDataString);
+
+        return "https://www.google.com/maps/search/?api=1&query="
+               + string.Join('+', parts)
+               + "&map_action=pano";
     }
 
     private static void AddPart(List<string> parts, string? value)
