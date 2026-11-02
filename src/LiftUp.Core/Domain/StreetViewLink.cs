@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace LiftUp.Core.Domain;
 
 /// <summary>
@@ -46,6 +48,24 @@ public static class StreetViewLink
         return "https://www.google.com/maps/search/?api=1&query="
                + string.Join('+', parts)
                + "&map_action=pano";
+    }
+
+    /// <summary>
+    /// Kartenadresse, die direkt die Straßenansicht zeigt. <c>map_action=pano</c> greift bei
+    /// Google nur zusammen mit einem Punkt – ohne <c>viewpoint</c> erscheint die Karte.
+    /// </summary>
+    public static string BuildPanoUrl(double latitude, double longitude)
+    {
+        if (latitude is < -90 or > 90 || longitude is < -180 or > 180)
+        {
+            throw new ValidationException("Die gefundenen Koordinaten liegen nicht auf der Erde.");
+        }
+
+        return "https://www.google.com/maps/@?api=1&map_action=pano&viewpoint="
+               + latitude.ToString("0.######", CultureInfo.InvariantCulture)
+               + ","
+               + longitude.ToString("0.######", CultureInfo.InvariantCulture)
+               + "&hl=de";
     }
 
     private static void AddPart(List<string> parts, string? value)

@@ -47,4 +47,20 @@ public class StreetViewLinkTests
     [Fact]
     public void Ohne_Adresse_gibt_es_keine_Kartenadresse() =>
         Assert.Throws<ValidationException>(() => StreetViewLink.BuildUrl("   "));
+
+    [Fact]
+    public void Mit_Koordinaten_wird_die_stra_enansicht_direkt_geoeffnet() =>
+        Assert.Equal(
+            "https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=47.408333,9.6&hl=de",
+            StreetViewLink.BuildPanoUrl(47.408333, 9.6));
+
+    [Fact]
+    public void Koordinaten_stehen_mit_Punkt_und_ohne_Rundungsreste() =>
+        Assert.Equal(
+            "https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=47.5,9.25&hl=de",
+            StreetViewLink.BuildPanoUrl(47.5000, 9.2500));
+
+    [Fact]
+    public void Punkte_ausserhalb_der_Erde_werden_abgelehnt() =>
+        Assert.Throws<ValidationException>(() => StreetViewLink.BuildPanoUrl(91, 9.6));
 }

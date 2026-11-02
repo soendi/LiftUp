@@ -2,18 +2,20 @@ using System.IO;
 using System.Windows;
 using System.Windows.Input;
 using LiftUp.Core.Domain;
+using LiftUp.Core.Services;
 using Microsoft.Web.WebView2.Core;
 
 namespace LiftUp.App.Views;
 
 /// <summary>
-/// Zeigt die Straßenansicht zur Adresse des Projekts im Vollbild. „Foto aufnehmen“ legt den
-/// sichtbaren Ausschnitt als PNG ab; danach schließt sich das Fenster, die Anwendung ist also
-/// wieder im Normalbild und der Browser samt Reiter ist zu.
+/// Zeigt die Straßenansicht zur Adresse des Projekts in einem maximierten Fenster. „Foto
+/// aufnehmen“ legt den sichtbaren Ausschnitt als PNG ab; danach schließt sich das Fenster,
+/// die Anwendung ist wieder im Normalbild und der Browser samt Reiter ist zu.
 /// </summary>
 public partial class StreetViewWindow : Window
 {
-    private readonly string _url;
+    private readonly string _address;
+    private readonly StreetViewService _streetView = new();
     private bool _started;
     private bool _capturing;
 
@@ -21,9 +23,9 @@ public partial class StreetViewWindow : Window
     {
         InitializeComponent();
 
+        _address = address;
         AddressText.Text = address;
         AddressText.ToolTip = address;
-        _url = StreetViewLink.BuildUrl(address);
 
         Loaded += OnLoaded;
         KeyDown += OnKeyDown;
@@ -46,8 +48,6 @@ public partial class StreetViewWindow : Window
         try
         {
             await Browser.EnsureCoreWebView2Async();
-            Browser.NavigationCompleted += OnNavigationCompleted;
-            Browser.CoreWebView2.Navigate(_url);
         }
         catch (Exception exception) when (
             exception is WebView2RuntimeNotFoundException
@@ -56,25 +56,38 @@ public partial class StreetViewWindow : Window
                 or DllNotFoundException)
         {
             ShowFailure(exception.Message);
+            return;
         }
+
+        Browser.NavigationCompleted += OnNavigationCompleted;
+
+        // Ohne Koordinaten zeigt Google nur die Karte; mit Punkt öffnet es das Straßenbild.
+        HintText.Text = "Adresse wird gesucht …";
+        var point = await _streetView.FindAsync(_address, CancellationToken.None);
+        if (point is null)
+        {
+            HintText.Text = "Keine Straßenansicht gefunden – bitte auf der Karte mit dem gelben " +
+                            "Männchen selbst hineinziehen, dann „Foto aufnehmen“.";
+            Browser.CoreWebView2.Navigate(StreetViewLink.BuildUrl(_address));
+            return;
+        }
+
+        HintText.Text = "Bildausschnitt mit der Maus verschieben und zoomen, dann „Foto aufnehmen“.";
+        Browser.CoreWebView2.Navigate(StreetViewLink.BuildPanoUrl(point.Latitude, point.Longitude));
     }
 
     private void OnNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
     {
-        if (e.IsSuccess)
+        if (!e.IsSuccess)
         {
-            WaitPanel.Visibility = Visibility.Collapsed;
-            return;
+            ShowFailure("Die Straßenansicht konnte nicht geladen werden. Bitte die Internetverbindung prüfen.");
         }
-
-        ShowFailure("Die Straßenansicht konnte nicht geladen werden. Bitte die Internetverbindung prüfen.");
     }
 
-    /// <summary>Fehler an der Stelle des Ladehinweises zeigen; aufnehmen lässt sich dann nichts.</summary>
+    /// <summary>Fehler in der Leiste zeigen; aufnehmen lässt sich dann nichts.</summary>
     private void ShowFailure(string message)
     {
-        WaitPanel.Visibility = Visibility.Visible;
-        WaitText.Text = "Die Straßenansicht ist nicht verfügbar.\r\n\r\n" + message;
+        HintText.Text = "Die Straßenansicht ist nicht verfügbar: " + message;
         CaptureButton.IsEnabled = false;
     }
 
@@ -89,11 +102,10 @@ public partial class StreetViewWindow : Window
         CaptureButton.IsEnabled = false;
         try
         {
-            // Leiste ausblenden und das Zeichnen abwarten, damit sie nicht mit auf dem Foto steht.
-            Bar.Visibility = Visibility.Collapsed;
-            WaitPanel.Visibility = Visibility.Visible;
-            WaitText.Text = "Foto wird aufgenommen …";
-            await Task.Delay(250);
+            HintText.Text = "Foto wird aufgenommen …";
+
+            // Der Browser zeichnet Bilder asynchron ab; das letzte Kachelende abwarten.
+            await Task.Delay(200);
 
             var path = Path.Combine(Path.GetTempPath(), $"StreetView-{DateTime.Now:yyyyMMdd-HHmmss}.png");
             using (var stream = File.Create(path))
@@ -110,8 +122,6 @@ public partial class StreetViewWindow : Window
                 or IOException
                 or UnauthorizedAccessException)
         {
-            Bar.Visibility = Visibility.Visible;
-            WaitPanel.Visibility = Visibility.Collapsed;
             HintText.Text = "Das Foto konnte nicht aufgenommen werden: " + exception.Message;
         }
         finally
@@ -128,9 +138,8 @@ public partial class StreetViewWindow : Window
             return;
         }
 
-        WaitPanel.Visibility = Visibility.Visible;
-        WaitText.Text = "Straßenansicht wird geladen …";
-        Browser.CoreWebView2.Navigate(_url);
+        HintText.Text = "Straßenansicht wird geladen …";
+        Browser.CoreWebView2.Reload();
     }
 
     private void OnCancelClick(object sender, RoutedEventArgs e) => Close();
