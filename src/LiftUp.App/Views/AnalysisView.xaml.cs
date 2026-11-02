@@ -685,9 +685,20 @@ public partial class AnalysisView : UserControl, ITabFillSource
         _sections.RemoveAt(from);
         _sections.Insert(to, draft);
 
-        _analysisTabs.Items.RemoveAt(from);
-        _analysisTabs.Items.Insert(to, draft.Status!.Tab);
-        _analysisTabs.SelectedItem = draft.Status.Tab;
+        // Beim Umsetzen wechselt die Auswahl kurz; ohne die Sperre würde der „+“-Reiter
+        // dabei einen neuen, leeren Punkt anlegen.
+        _buildingAnalysisTabs = true;
+        try
+        {
+            _analysisTabs.Items.RemoveAt(from);
+            _analysisTabs.Items.Insert(to, draft.Status!.Tab);
+            _analysisTabs.SelectedItem = draft.Status.Tab;
+        }
+        finally
+        {
+            _buildingAnalysisTabs = false;
+        }
+
         NumberSections();
     }
 
@@ -780,21 +791,90 @@ public partial class AnalysisView : UserControl, ITabFillSource
         {
             _tabStatuses.Remove(status);
             _analysisStatuses.Remove(status);
-            _analysisTabs.Items.Remove(status.Tab);
         }
 
         _sections.RemoveAt(index);
+        _textsDirty = true;
 
         if (_sections.Count == 0)
         {
             AddSectionTab(NewSectionKey(), string.Empty, string.Empty);
         }
 
-        _textsDirty = true;
-        NumberSections();
+        // Die Reiterleiste wird aus den verbliebenen Punkten neu aufgebaut: So bleibt kein
+        // Reiter stehen, dessen Punkt gelöscht wurde – auch wenn sein Feld beim Löschen leer war.
+        RebuildSectionTabs();
 
         var next = _sections.Count == 0 ? null : _sections[Math.Min(index, _sections.Count - 1)];
         SelectSection(next);
+    }
+
+    /// <summary>
+    /// Baut die Reiterleiste aus den Analysepunkten neu auf. Die Reiter selbst bleiben dieselben
+    /// – samt Inhalt und noch nicht gespeicherter Eingabe –, nur ihre Reihenfolge und die beiden
+    /// Aktions-Reiter „+“ und „−“ werden neu gesetzt.
+    /// </summary>
+    private void RebuildSectionTabs()
+    {
+        if (_analysisTabs is null)
+        {
+            return;
+        }
+
+        _buildingAnalysisTabs = true;
+        try
+        {
+            // Reiter entfernen, deren Punkt es nicht mehr gibt – samt einem Feld, das beim
+            // Löschen noch offen war.
+            foreach (var tab in _analysisTabs.Items.OfType<TabItem>().ToArray())
+            {
+                if (ReferenceEquals(tab, _addTab) || ReferenceEquals(tab, _deleteTab))
+                {
+                    continue;
+                }
+
+                if (tab.Tag is SectionDraft draft && _sections.Contains(draft))
+                {
+                    continue;
+                }
+
+                _analysisTabs.Items.Remove(tab);
+            }
+
+            // Punkte, deren Reiter noch fehlt, an ihre Stelle setzen.
+            for (var index = 0; index < _sections.Count; index++)
+            {
+                if (_sections[index].Status is not { } status)
+                {
+                    continue;
+                }
+
+                var position = _analysisTabs.Items.IndexOf(status.Tab);
+                if (position < 0)
+                {
+                    _analysisTabs.Items.Insert(Math.Min(index, _analysisTabs.Items.Count), status.Tab);
+                }
+            }
+
+            // „+“ und „−“ bleiben die letzten Reiter.
+            if (_addTab is not null && _deleteTab is not null)
+            {
+                _analysisTabs.Items.Remove(_addTab);
+                _analysisTabs.Items.Remove(_deleteTab);
+                _analysisTabs.Items.Add(_addTab);
+                _analysisTabs.Items.Add(_deleteTab);
+            }
+            else
+            {
+                AddActionTabs();
+            }
+
+            NumberSections();
+        }
+        finally
+        {
+            _buildingAnalysisTabs = false;
+        }
     }
 
     private void LoadProjects(bool keepSelection = false)
