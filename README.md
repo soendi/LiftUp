@@ -82,6 +82,10 @@ Benutzer verwalten, Rollen und Rechte verwalten. Die Prüfung passiert in der Co
 - **Projektbild** für das Deckblatt, direkt unter dem Projektordner über „Bild wählen …“ ausgewählt:
   Bei einem bestehenden Projekt startet die Auswahl im Bilderordner, bei einem neuen Projekt
   landet die Datei beim Speichern in `02_Bilder` des Projektordners.
+- **Google Street View** neben „Bild wählen …“: öffnet die Straßenansicht zur Projektadresse
+  (Kunde, sonst Auftraggeber) im Vollbild, nimmt auf Knopfdruck ein Foto auf, schließt den Browser
+  wieder und zeigt das Foto in einem Zuschnitt-Fenster. Der Ausschnitt wird beim Speichern als
+  `StreetView-<Datum>-<Zeit>.png` in `02_Bilder` übernommen.
 - **Meilensteine** im dritten Register des Dialogs: Bezeichnung, Häkchen „Erledigt“ und Datum.
   Ein abgehakter Meilenstein ohne Datum bekommt das heutige; das Datum des Meilensteins
   „Begehung“ steht auf dem Deckblatt.
@@ -139,6 +143,23 @@ als eigene Blätter hinter der Vorlage im PDF – immer im Querformat, unabhäng
 Ausrichtung des Berichts. Dafür wird der Bericht zuerst gedruckt, danach die beiden Blätter; die
 Teile fügt `PdfPageMerger` zu einer Datei zusammen. Die Legende der Datenaufnahme steht gegliedert
 unter dem Titel: Bewertung, ESBA, Ersatzteilverfügbarkeit, Art des Aufzugs und Notruftechnologie.
+
+### KI-Unterstützung
+
+Der Reiter **KI** (direkt vor „Datenbank“) verbindet LiftUp mit einem Sprachmodell:
+
+- **Anbieter** im Auswahlfeld: Groq (kostenlos starten), OpenAI, Anthropic, Google Gemini, Mistral,
+  OpenRouter, DeepSeek und Ollama (eigener Rechner, ohne Schlüssel).
+- **Anmeldung** als API-Schlüssel oder als OAuth2-Zugangstoken; Modell und Adresse sind je Anbieter
+  vorbelegt und bleiben änderbar (z. B. Ollama auf einem anderen Rechner im Netz).
+- „Verbindung testen“ schickt eine echte Mini-Anfrage, „Speichern“ legt die Verbindung ab,
+  „Schlüssel entfernen“ löscht sie wieder. Der Schlüssel liegt wie das Datenbankpasswort geschützt
+  in der Tabelle `Settings` (unter Windows DPAPI) – ohne Schemamigration.
+- Über jedem Text-Editor steht ein Feld **KI** mit fünf Aktionen: „Text korrigieren“,
+  „Professioneller“, „Text kürzen“, „Text verlängern“ und „Aus Stichworten Text erstellen“.
+  Der Text geht absatzweise an das Modell, das Ergebnis erscheint im Vergleichsfenster (links der
+  eigene Text, rechts der Vorschlag – dort noch editierbar). „Text übernehmen“ ersetzt den Inhalt,
+  „Abbrechen“ lässt ihn unverändert.
 
 ## Datenmodell
 

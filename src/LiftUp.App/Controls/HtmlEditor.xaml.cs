@@ -8,6 +8,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using LiftUp.Core.Ai;
 using LiftUp.Core.Documents;
 using LiftUp.Core.Domain;
 using Microsoft.Win32;
@@ -497,6 +498,24 @@ public partial class HtmlEditor : UserControl
                 window.liftupRenderSnippets();
             };
 
+            // Textbausteine ohne Leerzeichen am Schluss bekommen eines angehängt, damit das
+            // nächste Wort nicht am Baustein klebt. Bei einem Block am Schluss (Absatz, Zelle,
+            // Listeneintrag) wandert es in den Block, damit kein loser Textknoten entsteht;
+            // Listen und Tabellen selbst bleiben unverändert.
+            window.liftupSnippetWithSpace = function (html) {
+                var text = html || '';
+                if (!text || /[\s\u00a0]$/.test(text) || /(&nbsp;|&#160;|&#xa0;)$/i.test(text)) {
+                    return text;
+                }
+
+                var block = /<\/(p|div|h[1-6]|li|td|th|blockquote|pre)>$/i.exec(text);
+                if (block) {
+                    return text.slice(0, block.index) + '&nbsp;' + text.slice(block.index);
+                }
+
+                return text + '&nbsp;';
+            };
+
             window.liftupInsertSnippet = function (item) {
                 var token = window.liftupSnippetToken;
                 var selection = window.getSelection();
@@ -520,7 +539,7 @@ public partial class HtmlEditor : UserControl
                 range.deleteContents();
                 selection.removeAllRanges();
                 selection.addRange(range);
-                window.liftupInsertHtml(item.html || '');
+                window.liftupInsertHtml(window.liftupSnippetWithSpace(item.html));
             };
 
             document.addEventListener('keydown', function (event) {
@@ -927,6 +946,7 @@ public partial class HtmlEditor : UserControl
     private AppServices? _snippetServices;
     private AppServices? _imageServices;
     private Func<Guid?>? _imageProjectId;
+    private bool _aiRunning;
 
     /// <summary>Meldet jede Änderung im Text – die Analyse färbt damit ihre Reiter.</summary>
     public event EventHandler? ContentChanged;
@@ -955,6 +975,9 @@ public partial class HtmlEditor : UserControl
         // verschwindet mit ihm.
         Unloaded += (_, _) => SnippetPopup.IsOpen = false;
 
+        // Auswahlfeld über dem Text: korrigieren, professioneller, kürzen, verlängern.
+        BuildAiActions();
+
         // Ein Klick auf ein Bild im Text öffnet die Bild-Eigenschaften: Größe,
         // Ausrichtung, Textfluss und Unterschrift. Jeder Editor bringt das Fenster mit;
         // eine Ansicht kann es über die Eigenschaft durch etwas anderes ersetzen.
@@ -968,6 +991,102 @@ public partial class HtmlEditor : UserControl
 
             return dialog.ShowDialog() == true ? dialog.Format : null;
         };
+    }
+
+    /// <summary>Auswahlfeld über dem Text: Platzhalter und die vier Überarbeitungen der KI.</summary>
+    private void BuildAiActions()
+    {
+        AiActionBox.Items.Add(new ComboBoxItem { Content = "Aktion wählen …", IsEnabled = false });
+
+        foreach (var action in Enum.GetValues<AiTextAction>())
+        {
+            AiActionBox.Items.Add(new ComboBoxItem
+            {
+                Content = AiTextActions.Label(action),
+                Tag = action,
+            });
+        }
+
+        AiActionBox.SelectedIndex = 0;
+    }
+
+    /// <summary>
+    /// Gewählte Überarbeitung: Der Text des Editors geht mit der Anweisung an die KI, das
+    /// Ergebnis erscheint im Vergleichsfenster. Erst „Text übernehmen“ ersetzt den Text,
+    /// „Abbrechen“ lässt ihn unverändert.
+    /// </summary>
+    private async void OnAiActionSelected(object sender, SelectionChangedEventArgs e)
+    {
+        if (_aiRunning || AiActionBox.SelectedItem is not ComboBoxItem { Tag: AiTextAction action })
+        {
+            return;
+        }
+
+        AiActionBox.SelectedIndex = 0;
+        var owner = Window.GetWindow(this);
+
+        if (_snippetServices is not { } services)
+        {
+            Show(owner, "Die KI steht in diesem Feld nicht zur Verfügung.", MessageBoxImage.Information, "KI");
+            return;
+        }
+
+        if (!services.Ai.IsConfigured)
+        {
+            Show(owner,
+                "Es ist keine KI verbunden. Bitte im Reiter „KI“ einen Anbieter wählen und den Schlüssel hinterlegen.",
+                MessageBoxImage.Information, "KI");
+            return;
+        }
+
+        string userText;
+        try
+        {
+            userText = AiTextFormat.ToPlainText(await GetHtmlAsync());
+        }
+        catch (InvalidOperationException exception)
+        {
+            Show(owner, exception.Message, MessageBoxImage.Warning, "KI");
+            return;
+        }
+
+        if (userText.Length == 0)
+        {
+            Show(owner,
+                action == AiTextAction.FromKeywords
+                    ? "Bitte zuerst die Stichworte ins Feld schreiben, aus denen der Text entstehen soll."
+                    : "Im Feld steht kein Text, den die KI überarbeiten könnte.",
+                MessageBoxImage.Information, "KI");
+            return;
+        }
+
+        _aiRunning = true;
+        AiActionBox.IsEnabled = false;
+        try
+        {
+            var answer = await services.Ai.AskAsync(action, userText, CancellationToken.None);
+
+            var window = new Views.AiTextWindow(AiTextActions.Label(action), userText, answer);
+            if (owner is not null)
+            {
+                window.Owner = owner;
+            }
+
+            if (window.ShowDialog() == true)
+            {
+                SetHtml(AiTextFormat.ToHtml(window.Result));
+                ContentChanged?.Invoke(this, EventArgs.Empty);
+            }
+        }
+        catch (Exception exception) when (exception is LiftUpException or InvalidOperationException)
+        {
+            Show(owner, exception.Message, MessageBoxImage.Warning, "KI");
+        }
+        finally
+        {
+            _aiRunning = false;
+            AiActionBox.IsEnabled = true;
+        }
     }
 
     /// <summary>Zeigt den übergebenen HTML-Inhalt im Editor an.</summary>
@@ -1522,6 +1641,12 @@ public partial class HtmlEditor : UserControl
         {
             _snippetServices = value;
             SaveSnippetButton.IsEnabled = value is not null;
+
+            // Die KI steht über jedem Editor bereit, der die Dienste kennt.
+            AiActionBox.IsEnabled = value is not null;
+            AiHintText.Text = value?.Ai.IsConfigured == true
+                ? "Vorschlag wird vor dem Übernehmen angezeigt"
+                : "Keine KI verbunden – im Reiter „KI“ einrichten";
         }
     }
 

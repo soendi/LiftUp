@@ -14,10 +14,23 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <WrapPanel x:Name="ToolbarPanel" Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,6">
+        <!-- KI über dem Text: Aktion wählen, Vorschlag im Vergleichsfenster prüfen. -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,6">
+            <TextBlock Text="KI" Style="{StaticResource LiftUpFieldLabel}"
+                       VerticalAlignment="Center" Margin="0,0,6,0" />
+            <ComboBox x:Name="AiActionBox" Width="190"
+                      SelectionChanged="OnAiActionSelected"
+                      ToolTip="Text an die verbundene KI geben: korrigieren, professioneller, kürzen oder verlängern" />
+            <TextBlock x:Name="AiHintText" Style="{StaticResource LiftUpMutedText}"
+                       VerticalAlignment="Center" Margin="8,0,0,0"
+                       Text="Vorschlag wird vor dem Übernehmen angezeigt" />
+        </StackPanel>
+
+        <WrapPanel x:Name="ToolbarPanel" Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,6">
             <Button Content="Fett" FontWeight="Bold" Style="{StaticResource HtmlToolbarButton}" Click="OnBoldClick" ToolTip="Fett (Strg+B)" />
             <Button Content="Kursiv" FontStyle="Italic" Style="{StaticResource HtmlToolbarButton}" Click="OnItalicClick" ToolTip="Kursiv (Strg+I)" />
             <Button Style="{StaticResource HtmlToolbarButton}" Click="OnUnderlineClick" ToolTip="Unterstrichen (Strg+U)">
@@ -37,7 +50,7 @@
                     ToolTip="Markierten Text als Textvorlage ablegen; Name und Kategorie werden abgefragt" />
         </WrapPanel>
 
-        <Border Grid.Row="1" Background="White" BorderBrush="{StaticResource LiftUpBorder}" BorderThickness="1" CornerRadius="4">
+        <Border Grid.Row="2" Background="White" BorderBrush="{StaticResource LiftUpBorder}" BorderThickness="1" CornerRadius="4">
             <Grid>
                 <wv2:WebView2 x:Name="Browser" />
                 <TextBox x:Name="FallbackBox"

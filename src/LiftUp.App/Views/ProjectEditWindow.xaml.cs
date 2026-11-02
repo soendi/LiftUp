@@ -230,6 +230,78 @@ public partial class ProjectEditWindow : Window
         }
     }
 
+    /// <summary>
+    /// Straßenansicht zur Projektadresse: im Vollbild ein Foto aufnehmen, zuschneiden und als
+    /// Projektbild eintragen. Gespeichert wird es wie jedes andere Bild – beim Speichern des
+    /// Projekts landet die Datei im Bilderordner des Projekts.
+    /// </summary>
+    private void OnStreetViewClick(object sender, RoutedEventArgs e)
+    {
+        var address = StreetViewLink.BuildAddress(
+            StreetBox.Text, AddressLine2Box.Text, ZipBox.Text, CityBox.Text);
+        if (address.Length == 0)
+        {
+            address = StreetViewLink.BuildAddress(
+                ClientStreetBox.Text, ClientLine2Box.Text, ClientZipBox.Text, ClientCityBox.Text);
+        }
+
+        if (address.Length == 0)
+        {
+            ErrorText.Text = "Für die Straßenansicht fehlt die Adresse: bitte unter „Projekt“ " +
+                             "Straße, PLZ und Ort eintragen.";
+            return;
+        }
+
+        var browser = new StreetViewWindow(address) { Owner = this };
+        if (browser.ShowDialog() != true || browser.ImagePath is not { } photo)
+        {
+            return;
+        }
+
+        try
+        {
+            var crop = new ImageCropWindow(photo) { Owner = this };
+            if (crop.ShowDialog() != true || crop.Result is null)
+            {
+                return;
+            }
+
+            var target = Path.Combine(Path.GetTempPath(), $"StreetView-{DateTime.Now:yyyyMMdd-HHmmss}.png");
+            ImageCropWindow.SavePng(crop.Result, target);
+            ImageBox.Text = target;
+            ErrorText.Text = string.Empty;
+        }
+        catch (Exception exception) when (
+            exception is IOException
+                or UnauthorizedAccessException
+                or NotSupportedException
+                or ArgumentException
+                or System.Runtime.InteropServices.COMException)
+        {
+            ErrorText.Text = "Das Foto konnte nicht übernommen werden: " + exception.Message;
+        }
+        finally
+        {
+            TryDeleteFile(photo);
+        }
+    }
+
+    /// <summary>Räumt die Zwischendatei auf; ein Fehler dabei darf den Ablauf nicht stören.</summary>
+    private static void TryDeleteFile(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // Die Datei liegt im temporären Ordner; sie darf dort liegen bleiben.
+        }
+    }
+
     private void OnAddContactClick(object sender, RoutedEventArgs e) =>
         AddRow(ContactsGrid, _contacts);
 

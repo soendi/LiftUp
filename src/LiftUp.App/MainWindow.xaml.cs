@@ -109,6 +109,7 @@ public partial class MainWindow : Window
         var system = new List<TabItem>();
         if (session.Can(Permission.ChangeSettings))
         {
+            system.Add(CreateTab("KI", new AiView(_services)));
             system.Add(CreateTab("Datenbank", new DatabaseView(_services)));
         }
 

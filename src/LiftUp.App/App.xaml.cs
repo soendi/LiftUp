@@ -142,6 +142,9 @@ public sealed class AppServices(Database database)
     /// <summary>Beendet die Sitzung beim Abmelden; danach ist kein Benutzer mehr angemeldet.</summary>
     public void ClearSession() => Session = null;
 
+    /// <summary>Die verbundene KI für die Überarbeitung von Texten.</summary>
+    public AiService Ai { get; } = new(database);
+
     public ProjectService Projects => new(Database, CurrentSession);
 
     /// <summary>Zustandsanalyse und Investitionsplanung je Projekt.</summary>

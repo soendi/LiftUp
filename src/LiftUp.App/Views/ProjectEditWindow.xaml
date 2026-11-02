@@ -71,10 +71,13 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <TextBox Grid.Column="0" x:Name="ImageBox"
                              ToolTip="Bild für das Deckblatt; wird beim Speichern in den Projektordner kopiert" />
                     <Button Grid.Column="1" Content="Bild wählen …" Margin="8,0,0,0" Click="OnBrowseImageClick" />
+                    <Button Grid.Column="2" Content="Google Street View" Margin="8,0,0,0" Click="OnStreetViewClick"
+                            ToolTip="Straßenansicht zur Projektadresse im Vollbild öffnen, Foto aufnehmen, zuschneiden und als Projektbild übernehmen" />
                 </Grid>
 
                 <CheckBox Grid.Row="7" Grid.Column="1"

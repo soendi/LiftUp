@@ -1,0 +1,114 @@
+<UserControl x:Class="LiftUp.App.Views.AiView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Style="{StaticResource LiftUpCard}" Padding="12" Margin="0,0,0,10">
+            <StackPanel>
+                <TextBlock Text="Künstliche Intelligenz"
+                           FontSize="16"
+                           FontWeight="SemiBold" />
+                <TextBlock Style="{StaticResource LiftUpMutedText}"
+                           TextWrapping="Wrap"
+                           Margin="0,6,0,0"
+                           Text="Hier wird eine KI verbunden. Danach steht über jedem Text-Editor ein Auswahlfeld bereit: Text korrigieren, professioneller formulieren, kürzen oder verlängern. Der eigene Text und der Vorschlag der KI erscheinen nebeneinander, übernommen wird nur auf Knopfdruck. Der Schlüssel wird geschützt in der Datenbank abgelegt und verlässt den Rechner nur zur Anfrage beim gewählten Anbieter." />
+            </StackPanel>
+        </Border>
+
+        <Border Grid.Row="1" Style="{StaticResource LiftUpCard}" Padding="12" Margin="0,0,0,10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="KI-Anbieter"
+                           Style="{StaticResource LiftUpFieldLabel}"
+                           VerticalAlignment="Center" Margin="0,0,8,8" />
+                <ComboBox Grid.Row="0" Grid.Column="1" x:Name="ProviderBox"
+                          DisplayMemberPath="Name"
+                          Margin="0,0,16,8"
+                          SelectionChanged="OnProviderChanged" />
+
+                <TextBlock Grid.Row="0" Grid.Column="2" Text="Anmeldung"
+                           Style="{StaticResource LiftUpFieldLabel}"
+                           VerticalAlignment="Center" Margin="0,0,8,8" />
+                <ComboBox Grid.Row="0" Grid.Column="3" x:Name="AuthBox"
+                          Margin="0,0,0,8"
+                          SelectionChanged="OnAuthChanged" />
+
+                <TextBlock Grid.Row="1" Grid.Column="0" x:Name="SecretLabel" Text="API-Schlüssel"
+                           Style="{StaticResource LiftUpFieldLabel}"
+                           VerticalAlignment="Center" Margin="0,0,8,8" />
+                <PasswordBox Grid.Row="1" Grid.Column="1" x:Name="SecretBox" Margin="0,0,16,8" />
+
+                <TextBlock Grid.Row="1" Grid.Column="2" Text="Modell"
+                           Style="{StaticResource LiftUpFieldLabel}"
+                           VerticalAlignment="Center" Margin="0,0,8,8" />
+                <ComboBox Grid.Row="1" Grid.Column="3" x:Name="ModelBox"
+                          IsEditable="True"
+                          Margin="0,0,0,8"
+                          ToolTip="Vorschlag auswählen oder eine eigene Modellkennung eintragen" />
+
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="Adresse"
+                           Style="{StaticResource LiftUpFieldLabel}"
+                           VerticalAlignment="Center" Margin="0,0,8,8" />
+                <TextBox Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="3" x:Name="BaseUrlBox"
+                         Margin="0,0,0,8"
+                         ToolTip="Adresse des Anbieters; für einen eigenen Server, etwa Ollama im Netzwerk, hier ändern" />
+
+                <TextBlock Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="3"
+                           x:Name="KeyHintText"
+                           Style="{StaticResource LiftUpMutedText}"
+                           TextWrapping="Wrap" />
+            </Grid>
+        </Border>
+
+        <Border Grid.Row="2" Style="{StaticResource LiftUpCard}" Padding="12" Margin="0,0,0,10">
+            <StackPanel>
+                <WrapPanel Orientation="Horizontal">
+                    <Button x:Name="TestButton" Content="Verbindung testen" Click="OnTestClick" Margin="0,0,8,8" />
+                    <Button Content="Speichern" Style="{StaticResource LiftUpPrimaryButton}" Click="OnSaveClick" Margin="0,0,8,8" />
+                    <Button Content="Schlüssel entfernen" Click="OnDisconnectClick" Margin="0,0,8,8" />
+                </WrapPanel>
+
+                <TextBlock x:Name="InfoText"
+                           Style="{StaticResource LiftUpMutedText}"
+                           TextWrapping="Wrap"
+                           Margin="0,2,0,0" />
+            </StackPanel>
+        </Border>
+
+        <Border Grid.Row="3" Style="{StaticResource LiftUpCard}" Padding="12" VerticalAlignment="Top">
+            <StackPanel>
+                <TextBlock Text="Zustand" Style="{StaticResource LiftUpFieldLabel}" Margin="0,0,0,6" />
+                <TextBlock x:Name="StateText" TextWrapping="Wrap" />
+                <TextBlock Style="{StaticResource LiftUpMutedText}" Margin="0,10,0,0">
+                    <Run Text="Schlüssel anlegen:" />
+                    <Hyperlink x:Name="SetupLink" RequestNavigate="OnOpenSetupClick">
+                        <Run x:Name="SetupLinkText" />
+                    </Hyperlink>
+                </TextBlock>
+                <TextBlock Style="{StaticResource LiftUpMutedText}"
+                           TextWrapping="Wrap"
+                           Margin="0,10,0,0"
+                           Text="Die Anfrage schickt nur den Text des Editors und die gewählte Anweisung an den Anbieter, nichts aus der Datenbank. Bei jedem Aufruf entstehen beim Anbieter Kosten – je nach Anbieter und Modell unterschiedlich." />
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>

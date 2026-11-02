@@ -1,0 +1,51 @@
+<Window x:Class="LiftUp.App.Views.StreetViewWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+        Title="Google Street View"
+        Width="1280"
+        Height="800"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        WindowState="Maximized"
+        WindowStartupLocation="CenterOwner"
+        Background="#20262E">
+
+    <Grid>
+        <wv2:WebView2 x:Name="Browser" />
+
+        <!-- Schmale Leiste über dem Bild: Adresse, Aufnahme und Ende des Vollbilds. -->
+        <Border x:Name="Bar"
+                VerticalAlignment="Top"
+                HorizontalAlignment="Center"
+                Margin="0,18,0,0"
+                Padding="16,10"
+                Background="#F5FFFFFF"
+                BorderBrush="#DCE1E8"
+                BorderThickness="1"
+                CornerRadius="8">
+            <StackPanel>
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Straßenansicht:" Style="{StaticResource LiftUpFieldLabel}"
+                               VerticalAlignment="Center" Margin="0,0,6,0" />
+                    <TextBlock x:Name="AddressText" FontWeight="SemiBold" VerticalAlignment="Center"
+                               Foreground="{StaticResource LiftUpHeader}" MaxWidth="420"
+                               TextTrimming="CharacterEllipsis" />
+                    <Button x:Name="CaptureButton" Content="Foto aufnehmen" Margin="18,0,8,0"
+                            Style="{StaticResource LiftUpPrimaryButton}" Click="OnCaptureClick" />
+                    <Button Content="Neu laden" Click="OnReloadClick" />
+                    <Button Content="Abbrechen" Margin="0" Click="OnCancelClick" />
+                </StackPanel>
+                <TextBlock x:Name="HintText" Style="{StaticResource LiftUpMutedText}" Margin="0,8,0,0"
+                           Text="Adresse wird gesucht. Bildausschnitt mit der Maus verschieben und zoomen, dann „Foto aufnehmen“. Die Leiste ist auf dem Foto nicht zu sehen." />
+            </StackPanel>
+        </Border>
+
+        <!-- Rückmeldung, solange die Seite lädt oder das Foto aufgenommen wird. -->
+        <Border x:Name="WaitPanel" Background="#E620262E" Padding="24">
+            <TextBlock x:Name="WaitText" Text="Straßenansicht wird geladen …"
+                       Foreground="White" FontSize="15" HorizontalAlignment="Center"
+                       VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="560" />
+        </Border>
+    </Grid>
+</Window>
