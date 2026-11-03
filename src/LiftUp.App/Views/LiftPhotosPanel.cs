@@ -259,9 +259,7 @@ public sealed class LiftPhotosPanel : Grid
             {
                 var path = _services.Analysis.ImportPhoto(_projectId, file);
 
-                // Die Aufzugsnummer steht als Schlagwort am Bild; so lässt es sich in der
-                // Bildbibliothek nach Aufzug filtern.
-                _services.Images.TryAddTagToFile(_projectId, path, _liftKey);
+                TagPhoto(path);
                 var (width, height) = ReadPixelSize(path);
                 var row = new PhotoRow(new ProjectAnalysisPhoto
                 {
@@ -370,6 +368,10 @@ public sealed class LiftPhotosPanel : Grid
             foreach (var photo in saved)
             {
                 _rows.Add(new PhotoRow(photo));
+
+                // Jedes Foto dieses Aufzugs trägt dessen Nummer als Schlagwort – gleich, ob es
+                // gezogen, über «Fotos hinzufügen …» gewählt oder schon im Ordner gelegen hat.
+                TagPhoto(photo.FilePath);
             }
 
             _info.Text = saved.Count == 1 ? "Gespeichert: 1 Foto." : $"Gespeichert: {saved.Count} Fotos.";
@@ -380,6 +382,10 @@ public sealed class LiftPhotosPanel : Grid
             _info.Text = exception.Message;
         }
     }
+
+    /// <summary>Setzt die Nummer des Aufzugs als Schlagwort an dieses Bild.</summary>
+    private void TagPhoto(string filePath) =>
+        _services.Images.TryAddTagToFile(_projectId, filePath, _liftKey);
 
     private static (double Width, double Height) ReadPixelSize(string filePath)
     {
