@@ -66,5 +66,6 @@ public static class AiTextActions
         "Du überarbeitest deutsche Fachtexte aus der Aufzugsbranche (Wartung, Prüfung, Instandsetzung, " +
         "Modernisierung). Antworte ausschließlich mit dem überarbeiteten Text – ohne Vorrede, ohne " +
         "Kommentar, ohne Anführungszeichen und ohne Markdown-Auszeichnung. Behalte die Absätze bei. " +
+        "Verwende kein „ß“, sondern immer „ss“ – also die Schweizer Schreibweise. " +
         "Erfinde keine Fakten, Zahlen oder Normen.";
 }

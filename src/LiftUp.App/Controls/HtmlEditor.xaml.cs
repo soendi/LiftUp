@@ -37,11 +37,21 @@ public partial class HtmlEditor : UserControl
     /// <summary>Ein angeklicktes Bild mit seinen aktuellen Layout-Angaben.</summary>
     public sealed record ImageFormatRequest(string Id, ImageFormat Current);
 
+    /// <summary>Antwort auf den Bild-Dialog: neue Angaben, Bild löschen oder nichts ändern.</summary>
+    public sealed record ImageFormatEdit(ImageFormat? Format, bool Delete)
+    {
+        /// <summary>Das Bild bleibt, wie es ist.</summary>
+        public static ImageFormatEdit Unchanged { get; } = new(null, false);
+
+        /// <summary>Das Bild wird samt Unterschrift aus dem Text entfernt.</summary>
+        public static ImageFormatEdit Remove { get; } = new(null, true);
+    }
+
     /// <summary>
     /// Wird gesetzt, wenn im Text ein Bild angeklickt wurde. Liefert die neuen
-    /// Angaben oder <c>null</c>, wenn nichts geändert werden soll.
+    /// Angaben, das Löschen oder <c>null</c>, wenn nichts geändert werden soll.
     /// </summary>
-    public Func<ImageFormatRequest, ImageFormat?>? ImageFormatRequested { get; set; }
+    public Func<ImageFormatRequest, ImageFormatEdit?>? ImageFormatRequested { get; set; }
 
     private const string EditorPageTemplate = """
         <!DOCTYPE html>
@@ -598,6 +608,28 @@ public partial class HtmlEditor : UserControl
                 }
             });
 
+            // Doppelklick markiert ein Wort; ein Leerzeichen dahinter gehört nicht dazu.
+            document.addEventListener('dblclick', function () {
+                var selection = window.getSelection();
+                if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+                    return;
+                }
+
+                try {
+                    var guard = 0;
+                    while (guard < 12 && /\s$/.test(selection.toString())) {
+                        var before = selection.toString().length;
+                        selection.modify('extend', 'backward', 'character');
+                        if (selection.toString().length >= before) {
+                            break;
+                        }
+                        guard += 1;
+                    }
+                } catch (error) {
+                    // Ohne Auswahl-Schnittstelle bleibt die Markierung des Browsers.
+                }
+            });
+
             window.liftupGetSelectionHtml = function () {
                 var selection = window.getSelection();
                 if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
@@ -874,6 +906,55 @@ public partial class HtmlEditor : UserControl
                     window.liftupBelowStrip().appendChild(figure);
                 } else if (anchor && anchor.parentNode) {
                     anchor.parentNode.replaceChild(figure, anchor);
+                }
+
+                return true;
+            };
+
+            // „Bild löschen“: Figure samt Unterschrift und Ankerstelle entfernen.
+            window.liftupRemoveImage = function (id) {
+                if (!id) {
+                    return false;
+                }
+
+                var figure = window.liftupFormatTarget;
+                window.liftupFormatTarget = null;
+                if (!figure || !figure.isConnected || figure.dataset.liftupId !== id) {
+                    figure = document.querySelector('[data-liftup-id="' + id + '"]');
+                }
+                if (!figure) {
+                    return false;
+                }
+
+                // Die Ankerstelle hält die Position im Text; ohne Bild braucht sie niemand mehr.
+                var anchor = document.querySelector('[data-liftup-anchor="' + id + '"]');
+                if (anchor && anchor.parentNode) {
+                    anchor.parentNode.removeChild(anchor);
+                }
+
+                var parent = figure.parentNode;
+                if (parent) {
+                    parent.removeChild(figure);
+
+                    // Ein Absatz, in dem nur das Bild stand, verschwindet mit ihm.
+                    if (parent !== document.body && parent.tagName === 'P'
+                        && !parent.textContent.trim() && !parent.querySelector('img')) {
+                        parent.parentNode && parent.parentNode.removeChild(parent);
+                    }
+                }
+
+                var strip = document.getElementById('liftup-below');
+                if (strip && strip.children.length === 0 && strip.parentNode) {
+                    strip.parentNode.removeChild(strip);
+                }
+
+                try {
+                    window.chrome.webview.postMessage(JSON.stringify({
+                        type: 'changed',
+                        filled: window.liftupHasContent()
+                    }));
+                } catch (error) {
+                    // Ohne Verbindung zur Anwendung bleibt die Farbe beim letzten Stand.
                 }
 
                 return true;
@@ -1186,7 +1267,13 @@ public partial class HtmlEditor : UserControl
                 dialog.Owner = owner;
             }
 
-            return dialog.ShowDialog() == true ? dialog.Format : null;
+            if (dialog.ShowDialog() != true)
+            {
+                return null;
+            }
+
+            // „Bild löschen“ im Dialog entfernt das Bild aus dem Text.
+            return dialog.DeleteRequested ? ImageFormatEdit.Remove : new ImageFormatEdit(dialog.Format, false);
         };
     }
 
@@ -1786,8 +1873,21 @@ public partial class HtmlEditor : UserControl
                 return;
             }
 
-            var format = ImageFormatRequested(new ImageFormatRequest(id, current));
-            if (format is null)
+            var edit = ImageFormatRequested(new ImageFormatRequest(id, current));
+            if (edit is null)
+            {
+                return;
+            }
+
+            // „Bild löschen“: Das Bild verschwindet samt Unterschrift aus dem Text.
+            if (edit.Delete)
+            {
+                _ = Browser.CoreWebView2.ExecuteScriptAsync(
+                    "window.liftupRemoveImage(" + JsonSerializer.Serialize(id) + "); true");
+                return;
+            }
+
+            if (edit.Format is not { } format)
             {
                 return;
             }

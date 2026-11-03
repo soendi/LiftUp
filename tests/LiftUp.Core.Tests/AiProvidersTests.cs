@@ -81,4 +81,13 @@ public sealed class AiProvidersTests
         Assert.Contains("Konnektoren", instruction, StringComparison.Ordinal);
         Assert.Contains("keine Aufzählung", instruction, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void Jede_KI_Anfrage_verlangt_die_Schweizer_Schreibweise()
+    {
+        // Kein „ß“, sondern „ss“ – die Anweisung gilt für alle Aktionen.
+        Assert.Contains("kein „ß“", AiTextActions.SystemPrompt, StringComparison.Ordinal);
+        Assert.Contains("immer „ss“", AiTextActions.SystemPrompt, StringComparison.Ordinal);
+        Assert.Contains("Schweizer Schreibweise", AiTextActions.SystemPrompt, StringComparison.Ordinal);
+    }
 }

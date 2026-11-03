@@ -164,6 +164,20 @@ public sealed class ProjectTableService
                     : string.Empty;
             }
 
+            // Angaben ohne eigene Spalte – etwa die Preise je Massnahme aus dem Rechner –
+            // gehören weiterhin zur Zeile. Ohne sie stünden beim nächsten Öffnen des
+            // Rechners nur noch die Massnahmen ohne Kosten da.
+            if (match is not null)
+            {
+                foreach (var (key, previous) in match.Values)
+                {
+                    if (!values.ContainsKey(key))
+                    {
+                        values[key] = previous ?? string.Empty;
+                    }
+                }
+            }
+
             foreach (var key in ProjectTableCatalog.SharedWithInvestitionsplanung)
             {
                 values[key] = Value(lift, key);

@@ -160,6 +160,8 @@ Der Reiter **KI** (direkt vor „Datenbank“) verbindet LiftUp mit einem Sprach
   Der Text geht absatzweise an das Modell, das Ergebnis erscheint im Vergleichsfenster (links der
   eigene Text, rechts der Vorschlag – dort noch editierbar). „Text übernehmen“ ersetzt den Inhalt,
   „Abbrechen“ lässt ihn unverändert.
+- Jede Anfrage verlangt die Schweizer Schreibweise: kein „ß“, sondern immer „ss“ – auch in
+  bereits vorhandenen Wörtern.
 
 ## Datenmodell
 
@@ -380,6 +382,8 @@ Zeilen, die mit `1.`, `2.` oder `-` beginnen, werden zu einer echten Aufzählung
 die Zeile ab, spätestens beim Verlassen des Reiters steht die Liste im Text. Eigene Nummern
 bleiben erhalten, auch wenn sie nicht bei 1 beginnen oder zwischendurch springen.
 
+Ein Doppelklick markiert das Wort unter dem Zeiger – ein Leerzeichen dahinter gehört nicht dazu.
+
 Markierter Text lässt sich in jedem dieser Editoren über „Als Textvorlage speichern“ ablegen:
 Der Dialog fragt Name und Kategorie ab, danach steht der Text über `/` sofort zur Verfügung.
 Gespeichert wird nur die Markierung, ohne den Text davor und danach; Formatierung bleibt erhalten.
@@ -391,7 +395,8 @@ sofort in die Bildbibliothek des Projekts übernommen. Textbausteine und der Bau
 an keinem Projekt; dort wird das Bild ohne Kopie eingesetzt. Ein Klick auf ein Bild im Text öffnet
 die Bild-Eigenschaften: Größe (klein, mittel, groß), Ausrichtung (links, zentriert, rechts, unter
 dem Text), Textfluss (im Text, quadratisch, eng, durchlaufend, oben und unten) und eine
-Bildunterschrift. Ziehen mit der Maus verschiebt das Bild an eine andere Stelle im Text.
+Bildunterschrift. Ziehen mit der Maus verschiebt das Bild an eine andere Stelle im Text;
+„Bild löschen“ im selben Dialog entfernt es samt Unterschrift wieder aus dem Text.
 
 Außerhalb der Analyse gilt dasselbe im Dokument-Editor und in den Tabellenzellen der Tabellen
 (dort `//` und `/` als reiner Text, ohne Bilder; `//` durchsucht die Werte des gewählten
@@ -402,7 +407,9 @@ sie ein, `{{analyse:2.1}}` einen einzelnen Punkt.
 **Reiter „4. Fotos“:** Unter dem Haupttitel folgt je Aufzug der Zustandsanalyse ein Unter-Reiter –
 aber erst, wenn Anlagebezeichnung und Standort erfasst sind; sonst bleibt der Haupttitel ohne
 Unter-Reiter. Die Reiter heissen nach dem Muster „4.1 8609861 Messligfeldstrasse 1“, „4.2 …“. Dort lassen sich Fotos hinzufügen – sie werden in den
-Bilderordner des Projekts kopiert – und mit Bildunterschrift versehen. Der kleine Bild-Editor
+Bilderordner des Projekts kopiert – und mit Bildunterschrift versehen. Dieselben Bilder lassen
+sich auch aus dem Explorer auf die Foto-Fläche ziehen; der Hinweis darauf steht auf der leeren
+Vorschau. Der kleine Bild-Editor
 legt Kreise und Pfeile über das Foto, um den Kunden auf eine Stelle hinzuweisen; gespeichert
 werden Bildpixel, damit die Markierung im PDF exakt sitzt. Die Fotos erscheinen als eigene
 Seiten hinter den Tabellen: zwei Bilder pro Zeile in einem Raster, je Aufzug eine Überschrift.

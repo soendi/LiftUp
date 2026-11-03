@@ -79,8 +79,12 @@
                        Text="Optional; steht klein unter dem Bild. Im Editor lässt sich die Unterschrift auch direkt anklicken und tippen." />
 
             <Grid Margin="0,14,0,0">
-                <Button Content="Zurücksetzen" HorizontalAlignment="Left" Click="OnResetClick"
-                        ToolTip="Größe, Seite und Textfluss auf die Vorgabe setzen und die Bildunterschrift entfernen." />
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
+                    <Button Content="Zurücksetzen" Click="OnResetClick"
+                            ToolTip="Größe, Seite und Textfluss auf die Vorgabe setzen und die Bildunterschrift entfernen." />
+                    <Button Content="Bild löschen" Click="OnDeleteClick" Margin="8,0,0,0"
+                            ToolTip="Entfernt das Bild samt Bildunterschrift aus dem Text." />
+                </StackPanel>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                     <Button Content="Abbrechen" Click="OnCancelClick" />
                     <Button Content="Übernehmen" IsDefault="True" Style="{StaticResource LiftUpPrimaryButton}"

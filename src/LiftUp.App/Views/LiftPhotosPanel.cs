@@ -29,6 +29,16 @@ public sealed class LiftPhotosPanel : Grid
     private readonly Button _edit = new() { Content = "Markieren …", IsEnabled = false };
     private readonly Button _remove = new() { Content = "Entfernen", IsEnabled = false };
 
+    /// <summary>Hinweis auf der leeren Vorschaufläche: Bilder lassen sich hierher ziehen.</summary>
+    private readonly TextBlock _dropHint = new()
+    {
+        TextWrapping = TextWrapping.Wrap,
+        TextAlignment = TextAlignment.Center,
+        HorizontalAlignment = HorizontalAlignment.Center,
+        VerticalAlignment = VerticalAlignment.Center,
+        Margin = new Thickness(20),
+    };
+
     /// <summary>Meldet, wenn Fotos hinzukommen oder wegfallen – für die Farbe des Reiters.</summary>
     public event EventHandler? PhotosChanged;
 
@@ -40,6 +50,11 @@ public sealed class LiftPhotosPanel : Grid
         _services = services;
         _projectId = projectId;
         _liftKey = liftKey;
+
+        // Bilder aus dem Explorer lassen sich auf die ganze Foto-Fläche ziehen.
+        AllowDrop = true;
+        DragOver += OnFilesDragOver;
+        Drop += OnFilesDrop;
 
         RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
@@ -56,13 +71,20 @@ public sealed class LiftPhotosPanel : Grid
         _list.SelectionChanged += (_, _) => OnSelectionChanged();
         _list.ItemsSource = _rows;
 
+        _dropHint.Text = "Bilder hierher ziehen – sie werden in den Bilderordner des Projekts kopiert.";
+        _dropHint.Style = (Style)Application.Current.FindResource("LiftUpMutedText");
+
+        var previewArea = new Grid();
+        previewArea.Children.Add(_preview);
+        previewArea.Children.Add(_dropHint);
+
         var previewBorder = new Border
         {
             Background = new SolidColorBrush(Color.FromRgb(0xF5, 0xF7, 0xFA)),
             BorderBrush = new SolidColorBrush(Color.FromRgb(0xD9, 0xE2, 0xEC)),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(3),
-            Child = _preview,
+            Child = previewArea,
         };
 
         body.Children.Add(_list);
@@ -134,6 +156,7 @@ public sealed class LiftPhotosPanel : Grid
         _edit.IsEnabled = row is not null;
         _remove.IsEnabled = row is not null;
         _preview.Source = row?.Preview;
+        _dropHint.Visibility = _preview.Source is null ? Visibility.Visible : Visibility.Collapsed;
     }
 
     /// <summary>Lädt die gespeicherten Fotos dieses Aufzugs.</summary>
@@ -197,11 +220,40 @@ public sealed class LiftPhotosPanel : Grid
             return;
         }
 
+        AddPhotos(dialog.FileNames);
+    }
+
+    private void OnFilesDragOver(object sender, DragEventArgs e)
+    {
+        e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop)
+            ? DragDropEffects.Copy
+            : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    /// <summary>Bilder, die aus dem Explorer auf die Fläche gezogen wurden.</summary>
+    private void OnFilesDrop(object sender, DragEventArgs e)
+    {
+        if (e.Data.GetData(DataFormats.FileDrop) is not string[] files || files.Length == 0)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        AddPhotos(files);
+    }
+
+    /// <summary>
+    /// Übernimmt Bilddateien in den Bilderordner des Projekts und stellt sie in die Liste.
+    /// Ein Fehler bricht die übrigen nicht ab.
+    /// </summary>
+    private void AddPhotos(IReadOnlyList<string> files)
+    {
         PhotoRow? first = null;
         var added = 0;
         var errors = new List<string>();
 
-        foreach (var file in dialog.FileNames)
+        foreach (var file in files)
         {
             try
             {
@@ -233,7 +285,7 @@ public sealed class LiftPhotosPanel : Grid
 
         if (added == 0)
         {
-            _info.Text = string.Join(" ", errors);
+            _info.Text = errors.Count > 0 ? string.Join(" ", errors) : "Keine Bilder übernommen.";
             return;
         }
 

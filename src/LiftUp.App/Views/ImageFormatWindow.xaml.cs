@@ -66,7 +66,17 @@ public partial class ImageFormatWindow : Window
             : ImageFlow.Inline,
         string.IsNullOrWhiteSpace(CaptionBox.Text) ? null : CaptionBox.Text.Trim());
 
+    /// <summary>Der Benutzer will das Bild aus dem Text entfernen.</summary>
+    public bool DeleteRequested { get; private set; }
+
     private void OnApplyClick(object sender, RoutedEventArgs e) => DialogResult = true;
 
     private void OnCancelClick(object sender, RoutedEventArgs e) => DialogResult = false;
+
+    /// <summary>„Bild löschen“: Der Dialog schließt wie beim Übernehmen, das Bild fällt weg.</summary>
+    private void OnDeleteClick(object sender, RoutedEventArgs e)
+    {
+        DeleteRequested = true;
+        DialogResult = true;
+    }
 }

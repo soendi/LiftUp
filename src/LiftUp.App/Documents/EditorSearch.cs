@@ -19,6 +19,9 @@ public sealed class EditorSearch
     private readonly HashSet<Guid> _scannedProjects = [];
     private IReadOnlyList<TextSnippet>? _snippetBodies;
 
+    /// <summary>Stand der Textbausteine beim letzten Laden – ändert er sich, wird neu gelesen.</summary>
+    private string _snippetStamp = string.Empty;
+
     public EditorSearch(AppServices services, Func<Guid?> projectId, Action<string> reportError)
     {
         _services = services;
@@ -34,11 +37,19 @@ public sealed class EditorSearch
     {
         try
         {
-            _snippetBodies ??= _services.Snippets.GetAll()
-                .Select(item => _services.Snippets.Get(item.Id))
-                .ToArray();
+            // Die Liste ist billig zu lesen; die Inhalte nur, wenn ein Baustein dazugekommen
+            // oder geändert worden ist. Ein neuer Textbaustein steht damit sofort über „/“ bereit.
+            var summaries = _services.Snippets.GetAll();
+            var stamp = string.Join("|", summaries.Select(item => $"{item.Id:N}:{item.Version}"));
+            if (_snippetBodies is null || stamp != _snippetStamp)
+            {
+                _snippetBodies = summaries
+                    .Select(item => _services.Snippets.Get(item.Id))
+                    .ToArray();
+                _snippetStamp = stamp;
+            }
 
-            return SnippetAutocomplete.Search(_snippetBodies, query)
+            return SnippetAutocomplete.Search(_snippetBodies ?? [], query)
                 .Select(snippet => new HtmlEditor.SnippetChoice(
                     snippet.Name,
                     string.IsNullOrWhiteSpace(snippet.Category)

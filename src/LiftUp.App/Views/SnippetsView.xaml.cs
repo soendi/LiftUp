@@ -10,6 +10,9 @@ public partial class SnippetsView : UserControl
     private Guid? _snippetId;
     private bool _isArchived;
 
+    /// <summary>Beim Neuladen der Liste den Editor nicht mit dem gespeicherten Stand überschreiben.</summary>
+    private bool _refreshing;
+
     public SnippetsView(AppServices services)
     {
         _services = services;
@@ -20,6 +23,48 @@ public partial class SnippetsView : UserControl
         // Textbausteine hängen an keinem Projekt; Bilder werden ohne Kopie eingesetzt.
         BodyEditor.EnableImageInsert(services);
         LoadSnippets();
+
+        // Ein im Text-Editor gespeicherter Baustein steht sofort in der Liste.
+        IsVisibleChanged += (_, args) =>
+        {
+            if (args.NewValue is true)
+            {
+                RefreshList();
+            }
+        };
+    }
+
+    /// <summary>
+    /// Liest die Liste neu, ohne den offenen Textbaustein zu ersetzen: Wer gerade tippt,
+    /// verliert beim Reiterwechsel nichts; ein neuer Baustein erscheint trotzdem sofort.
+    /// </summary>
+    private void RefreshList()
+    {
+        try
+        {
+            var snippets = _services.Snippets.GetAll(includeArchived: true);
+
+            _refreshing = true;
+            try
+            {
+                SnippetsGrid.ItemsSource = snippets;
+                SnippetsGrid.SelectedItem = snippets.FirstOrDefault(item => item.Id == _snippetId);
+            }
+            finally
+            {
+                _refreshing = false;
+            }
+
+            // Der offene Baustein wurde inzwischen anderswo gelöscht.
+            if (_snippetId is { } id && snippets.All(item => item.Id != id))
+            {
+                ClearEditor();
+            }
+        }
+        catch (LiftUpException exception)
+        {
+            InfoText.Text = exception.Message;
+        }
     }
 
     private void LoadSnippets(Guid? selectId = null)
@@ -46,6 +91,11 @@ public partial class SnippetsView : UserControl
 
     private void OnSelected(object sender, SelectionChangedEventArgs e)
     {
+        if (_refreshing)
+        {
+            return;
+        }
+
         if (SnippetsGrid.SelectedItem is TextSnippetListItem item)
         {
             LoadSnippet(item.Id);

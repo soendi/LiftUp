@@ -140,6 +140,8 @@ public partial class ProjectTableView : UserControl, ITabFillSource
         {
             if (args.NewValue is true)
             {
+                // Zwischenzeitlich gespeicherte Textbausteine stehen auch hier sofort bereit.
+                LoadSnippets();
                 RefreshIfUnmodified();
             }
             else
@@ -382,6 +384,8 @@ public partial class ProjectTableView : UserControl, ITabFillSource
 
     private void LoadSnippets()
     {
+        _snippets.Clear();
+
         try
         {
             _snippets.AddRange(_services.Snippets.GetAll()
