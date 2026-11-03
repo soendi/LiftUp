@@ -1,0 +1,30 @@
+MasterKey – öffentlicher Lizenzschlüssel
+=======================================
+
+Algorithmus:          Ed25519 (RFC 8032)
+Formatversion:        1
+Schlüsseldatei:       Format masterkey-private-key, Version 1
+Erstellt (UTC):       2026-11-03T17:02:05Z
+
+Öffentlicher Schlüssel (Base64 URL-safe, 32 Bytes):
+uLqDxYoMmqVkXkxzCAvI2txYVfy7xPkV42wJnyT4jtg
+
+Öffentlicher Schlüssel (Base64, Standard):
+uLqDxYoMmqVkXkxzCAvI2txYVfy7xPkV42wJnyT4jtg=
+
+Öffentlicher Schlüssel (Hex):
+B8BA83C58A0C9AA5645E4C73080BC8DADC5855FCBBC4F915E36C099F24F88ED8
+
+Fingerabdruck (SHA-256 über die 32 Rohbytes):
+SHA256:7F6E 8F07 557B 8E65 A2CA 89BC 3C59 EB57 FFAB 9C6F 23F2 0C2D F47B BBD8 83EA D22F
+
+Verwendung in LiftUp
+---------------------
+1. 'public-key.bin' in das Kundenprogramm einbetten (exakt 32 Bytes, kein Header).
+2. Lizenzcode Base64-URL-safe ohne Padding dekodieren (81 Bytes).
+3. Bytes 0..16 = Nutzdaten, Bytes 17..80 = Ed25519-Signatur.
+4. Signaturprüfung über: ASCII("MASTERKEY-LICENSE-V1") + Nutzdaten.
+5. Nutzdaten: 1 Byte Formatversion (1), 8 Bytes IssuedAt, 8 Bytes ExpiresAt,
+   beide als vorzeichenlose 64-Bit-Ganzzahlen in Big-Endian, Unix-Sekunden in UTC.
+
+Details: docs/FORMAT.md
