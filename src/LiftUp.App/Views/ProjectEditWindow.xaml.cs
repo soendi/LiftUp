@@ -473,15 +473,14 @@ public partial class ProjectEditWindow : Window
 
         try
         {
-            if (_projectId is null)
+            var projectId = _projectId ?? _services.Projects.Create(input).Id;
+            if (_projectId is not null)
             {
-                SavedProjectId = _services.Projects.Create(input).Id;
+                _services.Projects.Update(projectId, input);
             }
-            else
-            {
-                _services.Projects.Update(_projectId.Value, input);
-                SavedProjectId = _projectId.Value;
-            }
+
+            SavedProjectId = projectId;
+            TagProjectImage(projectId);
 
             DialogResult = true;
         }
@@ -496,6 +495,31 @@ public partial class ProjectEditWindow : Window
         catch (Exception exception)
         {
             ErrorText.Text = "Das Projekt konnte nicht gespeichert werden: " + exception.Message;
+        }
+    }
+
+    /// <summary>Schlagwort, unter dem das Projektbild in der Bildbibliothek gefiltert werden kann.</summary>
+    private const string ProjectImageTag = "Projektbild";
+
+    /// <summary>
+    /// Gibt dem Projektbild das Schlagwort «Projektbild», damit es in der Bildbibliothek
+    /// gefunden wird. Ohne Recht „Bilder verwalten“ bleibt es aus.
+    /// </summary>
+    private void TagProjectImage(Guid projectId)
+    {
+        try
+        {
+            var imagePath = _services.Projects.GetProject(projectId).ImagePath;
+            if (string.IsNullOrWhiteSpace(imagePath))
+            {
+                return;
+            }
+
+            _services.Images.TryAddTagToFile(projectId, imagePath, ProjectImageTag);
+        }
+        catch (LiftUpException)
+        {
+            // Das Schlagwort ist eine Bequemlichkeit; das Projekt ist bereits gespeichert.
         }
     }
 

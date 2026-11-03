@@ -81,7 +81,8 @@ Benutzer verwalten, Rollen und Rechte verwalten. Die Prüfung passiert in der Co
   Beide Register führen eigene Ansprechpersonen (Name, E-Mail, Telefon, Zuständigkeit).
 - **Projektbild** für das Deckblatt, direkt unter dem Projektordner über „Bild wählen …“ ausgewählt:
   Bei einem bestehenden Projekt startet die Auswahl im Bilderordner, bei einem neuen Projekt
-  landet die Datei beim Speichern in `02_Bilder` des Projektordners.
+  landet die Datei beim Speichern in `02_Bilder` des Projektordners. In der Bildbibliothek trägt sie
+  das Schlagwort «Projektbild».
 - **Google Street View** neben „Bild wählen …“: öffnet die Straßenansicht zur Projektadresse
   (Kunde, sonst Auftraggeber) im Vollbild, nimmt auf Knopfdruck ein Foto auf, schließt den Browser
   wieder und zeigt das Foto in einem Zuschnitt-Fenster. Der Ausschnitt wird beim Speichern als
@@ -419,7 +420,8 @@ sie ein, `{{analyse:2.1}}` einen einzelnen Punkt.
 **Reiter „4. Fotos“:** Unter dem Haupttitel folgt je Aufzug der Zustandsanalyse ein Unter-Reiter –
 aber erst, wenn Anlagebezeichnung und Standort erfasst sind; sonst bleibt der Haupttitel ohne
 Unter-Reiter. Die Reiter heissen nach dem Muster „4.1 8609861 Messligfeldstrasse 1“, „4.2 …“. Dort lassen sich Fotos hinzufügen – sie werden in den
-Bilderordner des Projekts kopiert – und mit Bildunterschrift versehen. Dieselben Bilder lassen
+Bilderordner des Projekts kopiert – und mit Bildunterschrift versehen. Jedes so übernommene Foto
+(Auswahl oder Ziehen aus dem Explorer) trägt die Anlagebezeichnung des Aufzugs als Schlagwort. Dieselben Bilder lassen
 sich auch aus dem Explorer auf die Foto-Fläche ziehen; der Hinweis darauf steht auf der leeren
 Vorschau. Der kleine Bild-Editor
 legt Kreise und Pfeile über das Foto, um den Kunden auf eine Stelle hinzuweisen; gespeichert

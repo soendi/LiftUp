@@ -258,6 +258,10 @@ public sealed class LiftPhotosPanel : Grid
             try
             {
                 var path = _services.Analysis.ImportPhoto(_projectId, file);
+
+                // Die Aufzugsnummer steht als Schlagwort am Bild; so lässt es sich in der
+                // Bildbibliothek nach Aufzug filtern.
+                _services.Images.TryAddTagToFile(_projectId, path, _liftKey);
                 var (width, height) = ReadPixelSize(path);
                 var row = new PhotoRow(new ProjectAnalysisPhoto
                 {

@@ -313,6 +313,54 @@ public sealed class ImageService
     }
 
     /// <summary>
+    /// Setzt ein Schlagwort auf das Bild an diesem Pfad – etwa «Projektbild» oder die Nummer
+    /// des Aufzugs. Ist das Bild noch nicht in der Bibliothek, wird der Projektordner vorher
+    /// eingelesen. Ohne Recht „Bilder verwalten“ oder ohne Treffer bleibt es aus, damit der
+    /// Aufrufer nicht prüfen muss.
+    /// </summary>
+    public bool TryAddTagToFile(Guid projectId, string filePath, string tag)
+    {
+        var value = (tag ?? string.Empty).Trim();
+        if (value.Length == 0 || string.IsNullOrWhiteSpace(filePath) || !_actor.Can(Permission.ManageImages))
+        {
+            return false;
+        }
+
+        try
+        {
+            var image = FindImageByPath(projectId, filePath);
+            if (image is null)
+            {
+                SyncProjectFolder(projectId);
+                image = FindImageByPath(projectId, filePath);
+            }
+
+            if (image is null)
+            {
+                return false;
+            }
+
+            SetTags([image.Id], value, null);
+            return true;
+        }
+        catch (LiftUpException)
+        {
+            // Das Schlagwort ist eine Bequemlichkeit; das Speichern bleibt davon unberührt.
+            return false;
+        }
+    }
+
+    private LibraryImage? FindImageByPath(Guid projectId, string filePath)
+    {
+        var fullPath = Path.GetFullPath(filePath);
+
+        using var connection = _database.Open();
+        return _images.GetForProject(connection, null, projectId)
+            .LastOrDefault(image => string.Equals(
+                Path.GetFullPath(image.FilePath), fullPath, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
     /// Ersetzt die Datei eines fehlenden Bildes durch eine neu ausgewählte Datei. Gibt es
     /// noch keinen Eintrag mit diesem Namen, wird er angelegt; sonst wird der vorhandene
     /// Eintrag auf die Kopie im Bibliotheksordner umgestellt. Der Name bleibt, damit
