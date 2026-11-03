@@ -54,18 +54,32 @@ public static class StreetViewLink
     /// Kartenadresse, die direkt die Straßenansicht zeigt. <c>map_action=pano</c> greift bei
     /// Google nur zusammen mit einem Punkt – ohne <c>viewpoint</c> erscheint die Karte.
     /// </summary>
-    public static string BuildPanoUrl(double latitude, double longitude)
+    public static string BuildPanoUrl(double latitude, double longitude) =>
+        BuildPanoUrl(latitude, longitude, null);
+
+    /// <summary>
+    /// Kartenadresse mit Blickrichtung. <paramref name="heading"/> dreht die Kamera zum Gebäude,
+    /// damit nicht die Strasse entlang geschaut wird; die Gradzahl zählt im Uhrzeigersinn ab Nord.
+    /// </summary>
+    public static string BuildPanoUrl(double latitude, double longitude, double? heading)
     {
         if (latitude is < -90 or > 90 || longitude is < -180 or > 180)
         {
             throw new ValidationException("Die gefundenen Koordinaten liegen nicht auf der Erde.");
         }
 
-        return "https://www.google.com/maps/@?api=1&map_action=pano&viewpoint="
-               + latitude.ToString("0.######", CultureInfo.InvariantCulture)
-               + ","
-               + longitude.ToString("0.######", CultureInfo.InvariantCulture)
-               + "&hl=de";
+        var url = "https://www.google.com/maps/@?api=1&map_action=pano&viewpoint="
+                  + latitude.ToString("0.######", CultureInfo.InvariantCulture)
+                  + ","
+                  + longitude.ToString("0.######", CultureInfo.InvariantCulture);
+
+        if (heading is { } value)
+        {
+            var normalized = ((value % 360) + 360) % 360;
+            url += "&heading=" + Math.Round(normalized).ToString("0", CultureInfo.InvariantCulture);
+        }
+
+        return url + "&hl=de";
     }
 
     private static void AddPart(List<string> parts, string? value)

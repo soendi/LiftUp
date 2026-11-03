@@ -85,7 +85,11 @@ Benutzer verwalten, Rollen und Rechte verwalten. Die Prüfung passiert in der Co
 - **Google Street View** neben „Bild wählen …“: öffnet die Straßenansicht zur Projektadresse
   (Kunde, sonst Auftraggeber) im Vollbild, nimmt auf Knopfdruck ein Foto auf, schließt den Browser
   wieder und zeigt das Foto in einem Zuschnitt-Fenster. Der Ausschnitt wird beim Speichern als
-  `StreetView-<Datum>-<Zeit>.png` in `02_Bilder` übernommen.
+  `StreetView-<Datum>-<Zeit>.png` in `02_Bilder` übernommen. Geöffnet wird auf der Strasse vor dem
+  Haus, nicht auf der Hausadresse: LiftUp sucht über OpenStreetMap die nächste Strasse (Hauptstrasse
+  vor Quartierstrasse), setzt den Blickpunkt auf deren Verlauf und dreht die Kamera zum Gebäude;
+  die Leiste nennt den Strassennamen. Ohne Netz oder ohne Strassendaten bleibt es beim bisherigen
+  Verhalten.
 - **Meilensteine** im dritten Register des Dialogs: Bezeichnung, Häkchen „Erledigt“ und Datum.
   Ein abgehakter Meilenstein ohne Datum bekommt das heutige; das Datum des Meilensteins
   „Begehung“ steht auf dem Deckblatt.
