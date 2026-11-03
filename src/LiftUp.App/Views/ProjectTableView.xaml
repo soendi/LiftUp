@@ -45,6 +45,8 @@
             </StackPanel>
         </Border>
 
+        <!-- Die Tabelle ist breiter als das Fenster: die Leiste zum Seitwärtsrollen bleibt
+             darum immer sichtbar, und Umschalt + Mausrad scrollt ebenfalls seitwärts. -->
         <DataGrid Grid.Row="3" x:Name="RowsGrid"
                   AutoGenerateColumns="False"
                   CanUserAddRows="False"
@@ -53,7 +55,9 @@
                   HeadersVisibility="Column"
                   GridLinesVisibility="Horizontal"
                   SelectionMode="Single"
-                  MinRowHeight="26" />
+                  MinRowHeight="26"
+                  ScrollViewer.HorizontalScrollBarVisibility="Visible"
+                  PreviewMouseWheel="OnGridMouseWheel" />
 
         <Border Grid.Row="4" Style="{StaticResource LiftUpCard}" Padding="10" Margin="0,10,0,0">
             <StackPanel Orientation="Horizontal">

@@ -575,6 +575,47 @@ public partial class ProjectTableView : UserControl, ITabFillSource
 
     private void OnRefreshClick(object sender, RoutedEventArgs e) => LoadRows();
 
+    /// <summary>
+    /// Mit gedrückter Umschalttaste scrollt das Mausrad die Tabelle seitwärts; ohne Taste
+    /// bleibt es beim senkrechten Scrollen. So ist die breite Tabelle auch mit einer
+    /// gewöhnlichen Maus erreichbar, ohne die Leiste zu ziehen.
+    /// </summary>
+    private void OnGridMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (e.Delta == 0 || (Keyboard.Modifiers & ModifierKeys.Shift) == 0)
+        {
+            return;
+        }
+
+        if (FindScrollViewer(RowsGrid) is not { } viewer)
+        {
+            return;
+        }
+
+        // Ein Rasterschritt sind 120 Einheiten; rund 60 Pixel je Schritt lesen sich ruhig.
+        viewer.ScrollToHorizontalOffset(viewer.HorizontalOffset - e.Delta / 2);
+        e.Handled = true;
+    }
+
+    private static ScrollViewer? FindScrollViewer(DependencyObject root)
+    {
+        if (root is ScrollViewer viewer)
+        {
+            return viewer;
+        }
+
+        var count = VisualTreeHelper.GetChildrenCount(root);
+        for (var index = 0; index < count; index += 1)
+        {
+            if (FindScrollViewer(VisualTreeHelper.GetChild(root, index)) is { } found)
+            {
+                return found;
+            }
+        }
+
+        return null;
+    }
+
     private void OnAddRowClick(object sender, RoutedEventArgs e)
     {
         var model = new ProjectTableRowModel();

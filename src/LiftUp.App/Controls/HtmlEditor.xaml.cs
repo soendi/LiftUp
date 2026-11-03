@@ -974,8 +974,124 @@ public partial class HtmlEditor : UserControl
                 return true;
             };
 
-            // Enter vor dem Browser: die Zeile wird zuerst zum Absatz. Shift+Enter bleibt ein
-            // Umbruch, und die Baustein-Vorschläge behalten Enter für sich.
+            // ---- Aufzählungen aus getippten Zeilen ----
+            // „1. …“ oder „- …“ in einer eigenen Zeile wird zu einer echten Liste: beim
+            // Verlassen der Zeile (Enter) und spätestens beim Lesen des Textes.
+            window.liftupListMarker = function (block) {
+                if (!block || block.nodeType !== 1 || !/^(P|DIV)$/.test(block.tagName)) {
+                    return null;
+                }
+                if (block.querySelector('ul, ol, table, figure, p, div')) {
+                    return null;
+                }
+
+                var text = block.textContent.replace(/\u00a0/g, ' ');
+                var ordered = /^\s*(\d{1,3})[.)]\s+/.exec(text);
+                if (ordered) {
+                    return { kind: 'ol', number: parseInt(ordered[1], 10), length: ordered[0].length };
+                }
+
+                var bullet = /^\s*[-*•]\s+/.exec(text);
+                if (bullet) {
+                    return { kind: 'ul', number: 0, length: bullet[0].length };
+                }
+                return null;
+            };
+
+            // Entfernt „1. “ bzw. „- “ am Zeilenanfang – auch wenn das Zeichen fett oder
+            // kursiv getippt wurde.
+            window.liftupStripListMarker = function (block, length) {
+                var remaining = length;
+                var walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT, null);
+                var node = walker.nextNode();
+                while (node && remaining > 0) {
+                    var value = node.nodeValue;
+                    if (value.length <= remaining) {
+                        remaining -= value.length;
+                        node.nodeValue = '';
+                    } else {
+                        node.nodeValue = value.substring(remaining);
+                        remaining = 0;
+                    }
+                    node = walker.nextNode();
+                }
+            };
+
+            window.liftupListStart = function (list) {
+                var value = parseInt(list.getAttribute('start'), 10);
+                return isNaN(value) ? 1 : value;
+            };
+
+            // Fasst aufeinanderfolgende Zeilen zu einer Liste zusammen. Eigene Nummern bleiben
+            // erhalten, wenn die Zeilen nicht bei 1 beginnen oder zwischendurch springen.
+            window.liftupConvertLists = function () {
+                var body = document.body;
+                if (!body) {
+                    return false;
+                }
+
+                var nodes = Array.prototype.slice.call(body.childNodes);
+                var current = null;
+                var changed = false;
+
+                for (var index = 0; index < nodes.length; index += 1) {
+                    var node = nodes[index];
+
+                    // Eine vorhandene Liste nimmt die folgenden Zeilen auf.
+                    if (node.nodeType === 1 && /^(UL|OL)$/.test(node.tagName)) {
+                        current = node.children.length > 0 ? node : null;
+                        continue;
+                    }
+
+                    var marker = window.liftupListMarker(node);
+                    if (!marker) {
+                        current = null;
+                        continue;
+                    }
+
+                    // „1.“ ohne Text dahinter bleibt stehen, wie es getippt wurde.
+                    var rest = node.textContent.replace(/\u00a0/g, ' ').substring(marker.length);
+                    if (!rest.replace(/\s/g, '')) {
+                        current = null;
+                        continue;
+                    }
+
+                    window.liftupStripListMarker(node, marker.length);
+
+                    var item = document.createElement('li');
+                    while (node.firstChild) {
+                        item.appendChild(node.firstChild);
+                    }
+
+                    var tag = marker.kind === 'ol' ? 'OL' : 'UL';
+                    if (current && current.tagName !== tag) {
+                        current = null;
+                    }
+
+                    if (!current) {
+                        current = document.createElement(marker.kind);
+                        if (marker.kind === 'ol' && marker.number > 1) {
+                            current.setAttribute('start', String(marker.number));
+                        }
+                        body.insertBefore(current, node);
+                    } else if (marker.kind === 'ol') {
+                        var expected = window.liftupListStart(current) + current.children.length;
+                        if (marker.number !== expected) {
+                            item.setAttribute('value', String(marker.number));
+                        }
+                    }
+
+                    current.appendChild(item);
+                    body.removeChild(node);
+                    changed = true;
+                }
+
+                return changed;
+            };
+
+            // Enter vor dem Browser: eine lose Zeile wird zuerst zum Absatz, getippte
+            // Aufzählungszeichen werden zur Liste. Shift+Enter bleibt ein Umbruch, und die
+            // Baustein-Vorschläge behalten Enter für sich.
             document.addEventListener('keydown', function (event) {
                 if (event.key !== 'Enter' || event.shiftKey || event.ctrlKey || event.altKey) {
                     return;
@@ -987,14 +1103,17 @@ public partial class HtmlEditor : UserControl
                 if (!selection || selection.rangeCount === 0) {
                     return;
                 }
-                if (window.liftupTopBlock(selection.getRangeAt(0).startContainer)) {
-                    return;
+                if (!window.liftupTopBlock(selection.getRangeAt(0).startContainer)) {
+                    window.liftupWrapLooseText();
                 }
-                window.liftupWrapLooseText();
+                window.liftupConvertLists();
             }, true);
 
             window.liftupGetHtml = function () {
                 window.liftupCloseSnippets();
+                // Spätestens hier entsteht die Liste – auch wenn die letzte Zeile ohne Enter
+                // geschrieben wurde.
+                window.liftupConvertLists();
                 return document.body.innerHTML;
             };
         </script>
@@ -1696,7 +1815,8 @@ public partial class HtmlEditor : UserControl
         var script = "document.body.innerHTML = "
                      + JsonSerializer.Serialize(_pendingHtml)
                      + "; window.liftupNormalizeFigures && window.liftupNormalizeFigures()"
-                     + "; window.liftupWrapLooseText && window.liftupWrapLooseText(); true";
+                     + "; window.liftupWrapLooseText && window.liftupWrapLooseText()"
+                     + "; window.liftupConvertLists && window.liftupConvertLists(); true";
 
         await Browser.CoreWebView2.ExecuteScriptAsync(script);
     }

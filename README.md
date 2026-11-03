@@ -376,6 +376,10 @@ Vorschlag nennt in der zweiten Zeile Spalte und Herkunft („Jahr · Investition
 Zeile wird als Text eingefügt. Gesucht wird ausschließlich im aktuell gewählten Projekt. Sind mehrere Standorte erfasst, steht der Standort dabei – in der Vorschlagsliste
 und im eingefügten Text: „Aufzugsanlage 938702809 (Messligfeldstrasse 1)“.
 
+Zeilen, die mit `1.`, `2.` oder `-` beginnen, werden zu einer echten Aufzählung: Enter schliesst
+die Zeile ab, spätestens beim Verlassen des Reiters steht die Liste im Text. Eigene Nummern
+bleiben erhalten, auch wenn sie nicht bei 1 beginnen oder zwischendurch springen.
+
 Markierter Text lässt sich in jedem dieser Editoren über „Als Textvorlage speichern“ ablegen:
 Der Dialog fragt Name und Kategorie ab, danach steht der Text über `/` sofort zur Verfügung.
 Gespeichert wird nur die Markierung, ohne den Text davor und danach; Formatierung bleibt erhalten.
