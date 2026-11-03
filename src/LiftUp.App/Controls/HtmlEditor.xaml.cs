@@ -1268,14 +1268,54 @@ public partial class HtmlEditor : UserControl
                 return blocks;
             };
 
+            // Erkennt „- “, „* “ oder „1. “ am Anfang einer Zeile – auch in einem
+            // Listeneintrag. Erst wenn Text folgt, gilt es als Zeichen; ein gerade getipptes
+            // „- “ bleibt also stehen.
+            window.liftupLineMarker = function (element) {
+                if (!element || element.nodeType !== 1) {
+                    return null;
+                }
+                if (!/^(P|DIV|LI)$/.test(element.tagName)) {
+                    return null;
+                }
+                if (element.querySelector('ul, ol, table, figure, p, div')) {
+                    return null;
+                }
+
+                var text = element.textContent.replace(/\u00a0/g, ' ');
+                var ordered = /^\s*(\d{1,3})[.)]\s+/.exec(text);
+                if (ordered && text.substring(ordered[0].length).trim()) {
+                    return { kind: 'ol', number: parseInt(ordered[1], 10), length: ordered[0].length };
+                }
+
+                var bullet = /^\s*[-*•]\s+/.exec(text);
+                if (bullet && text.substring(bullet[0].length).trim()) {
+                    return { kind: 'ul', number: 0, length: bullet[0].length };
+                }
+                return null;
+            };
+
             // Entfernt „- “ oder „1. “ am Anfang einer Zeile.
             window.liftupStripLineMarker = function (block) {
-                var marker = window.liftupListMarker(block);
+                var marker = window.liftupLineMarker(block);
                 if (!marker) {
                     return false;
                 }
                 window.liftupStripListMarker(block, marker.length);
                 return true;
+            };
+
+            // Zeichen am Anfang von Listeneinträgen entfernen – auch wenn die Liste schon
+            // bestand oder der Browser sie beim Umwandeln selbst angelegt hat.
+            window.liftupCleanListItems = function () {
+                var items = document.body ? document.body.querySelectorAll('li') : [];
+                var changed = false;
+                for (var index = 0; index < items.length; index += 1) {
+                    if (window.liftupStripLineMarker(items[index])) {
+                        changed = true;
+                    }
+                }
+                return changed;
             };
 
             // „Aufzählung“ und „Nummerierung“: die Zeichen am Zeilenanfang entfernen und die
@@ -1315,6 +1355,12 @@ public partial class HtmlEditor : UserControl
                 }
 
                 document.execCommand(command, false, null);
+
+                // Was der Browser selbst als Liste angelegt hat, wird ebenfalls bereinigt.
+                if (window.liftupCleanListItems()) {
+                    changed = true;
+                }
+
                 window.liftupRange = selection.rangeCount > 0 ? selection.getRangeAt(0).cloneRange() : null;
                 return changed;
             };
@@ -1338,8 +1384,27 @@ public partial class HtmlEditor : UserControl
                 if (window.liftupConvertLists()) {
                     changed = true;
                 }
+
+                if (window.liftupCleanListItems()) {
+                    changed = true;
+                }
                 return changed;
             };
+
+            // „- “ in einem Listeneintrag verschwindet sofort – die Liste zeigt nur den Text.
+            document.addEventListener('input', function () {
+                var selection = window.getSelection();
+                if (!selection || selection.rangeCount === 0) {
+                    return;
+                }
+
+                var node = selection.getRangeAt(0).startContainer;
+                var element = node && node.nodeType === 1 ? node : (node ? node.parentNode : null);
+                var item = element && element.closest ? element.closest('li') : null;
+                if (item) {
+                    window.liftupStripLineMarker(item);
+                }
+            }, true);
 
             // Enter vor dem Browser: eine lose Zeile wird zuerst zum Absatz, getippte
             // Aufzählungszeichen werden zur Liste. Shift+Enter bleibt ein Umbruch, und die
