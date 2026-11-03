@@ -89,7 +89,10 @@ Benutzer verwalten, Rollen und Rechte verwalten. Die Prüfung passiert in der Co
   Haus, nicht auf der Hausadresse: LiftUp sucht über OpenStreetMap die nächste Strasse (Hauptstrasse
   vor Quartierstrasse), setzt den Blickpunkt auf deren Verlauf und dreht die Kamera zum Gebäude;
   die Leiste nennt den Strassennamen. Ohne Netz oder ohne Strassendaten bleibt es beim bisherigen
-  Verhalten.
+  Verhalten. Weil Google ohne weitere Angaben auch privat hochgeladene Panoramen zeigt, lässt sich
+  im Reiter «Datenbank» ein Google-Maps-Schlüssel hinterlegen: damit fragt LiftUp die amtlichen
+  Aufnahmen ab (`source=google`) und öffnet genau deren Kennung. Die Metadaten-Abfragen sind bei
+  Google kostenlos, die Kartenansicht selbst braucht keinen Schlüssel.
 - **Meilensteine** im dritten Register des Dialogs: Bezeichnung, Häkchen „Erledigt“ und Datum.
   Ein abgehakter Meilenstein ohne Datum bekommt das heutige; das Datum des Meilensteins
   „Begehung“ steht auf dem Deckblatt.

@@ -252,7 +252,11 @@ public partial class ProjectEditWindow : Window
             return;
         }
 
-        var browser = new StreetViewWindow(address) { Owner = this };
+        var browser = new StreetViewWindow(
+            address, LiftUp.Core.Services.StreetViewSettings.LoadApiKey(_services.Database))
+        {
+            Owner = this,
+        };
         if (browser.ShowDialog() != true || browser.ImagePath is not { } photo)
         {
             return;

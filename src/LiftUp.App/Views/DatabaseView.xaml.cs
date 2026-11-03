@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using LiftUp.Core.Domain;
+using LiftUp.Core.Services;
 using LiftUp.Core.Sync;
 using Microsoft.Win32;
 
@@ -47,7 +48,30 @@ public partial class DatabaseView : UserControl
             .FirstOrDefault(mode => string.Equals(mode, settings.SslMode, StringComparison.OrdinalIgnoreCase))
             ?? "Prefer";
 
+        StreetViewKeyBox.Password = StreetViewSettings.LoadApiKey(_services.Database);
+        StreetViewKeyHint.Text = StreetViewKeyBox.Password.Length > 0
+            ? "Schlüssel hinterlegt – die Strassenansicht nutzt die amtlichen Aufnahmen."
+            : "Kein Schlüssel hinterlegt – Street View kann privat aufgenommene Panoramen zeigen.";
+
         RefreshStatus();
+    }
+
+    /// <summary>Merkt sich den Google-Schlüssel für die Strassenansicht; leer entfernt ihn.</summary>
+    private void OnSaveStreetViewKeyClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            StreetViewSettings.SaveApiKey(_services.Database, StreetViewKeyBox.Password);
+            StreetViewKeyHint.Text = StreetViewKeyBox.Password.Length > 0
+                ? "Schlüssel gespeichert."
+                : "Schlüssel entfernt.";
+        }
+        catch (Exception exception) when (
+            exception is LiftUpException or InvalidOperationException or UnauthorizedAccessException)
+        {
+            MessageBox.Show("Der Schlüssel konnte nicht gespeichert werden.\n\n" + exception.Message,
+                "Google Street View", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
     }
 
     private void RefreshStatus()

@@ -55,13 +55,21 @@ public static class StreetViewLink
     /// Google nur zusammen mit einem Punkt – ohne <c>viewpoint</c> erscheint die Karte.
     /// </summary>
     public static string BuildPanoUrl(double latitude, double longitude) =>
-        BuildPanoUrl(latitude, longitude, null);
+        BuildPanoUrl(latitude, longitude, null, null);
 
     /// <summary>
     /// Kartenadresse mit Blickrichtung. <paramref name="heading"/> dreht die Kamera zum Gebäude,
     /// damit nicht die Strasse entlang geschaut wird; die Gradzahl zählt im Uhrzeigersinn ab Nord.
     /// </summary>
-    public static string BuildPanoUrl(double latitude, double longitude, double? heading)
+    public static string BuildPanoUrl(double latitude, double longitude, double? heading) =>
+        BuildPanoUrl(latitude, longitude, heading, null);
+
+    /// <summary>
+    /// Kartenadresse mit Blickrichtung und festgelegter Aufnahme. Mit <paramref name="panoId"/> zeigt
+    /// Google genau diese Aufnahme statt der nächstgelegenen – damit erscheint kein privat
+    /// hochgeladenes Panorama.
+    /// </summary>
+    public static string BuildPanoUrl(double latitude, double longitude, double? heading, string? panoId)
     {
         if (latitude is < -90 or > 90 || longitude is < -180 or > 180)
         {
@@ -72,6 +80,11 @@ public static class StreetViewLink
                   + latitude.ToString("0.######", CultureInfo.InvariantCulture)
                   + ","
                   + longitude.ToString("0.######", CultureInfo.InvariantCulture);
+
+        if (!string.IsNullOrWhiteSpace(panoId))
+        {
+            url += "&pano=" + Uri.EscapeDataString(panoId.Trim());
+        }
 
         if (heading is { } value)
         {

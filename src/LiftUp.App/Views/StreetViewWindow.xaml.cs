@@ -15,15 +15,17 @@ namespace LiftUp.App.Views;
 public partial class StreetViewWindow : Window
 {
     private readonly string _address;
+    private readonly string _apiKey;
     private readonly StreetViewService _streetView = new();
     private bool _started;
     private bool _capturing;
 
-    public StreetViewWindow(string address)
+    public StreetViewWindow(string address, string? apiKey = null)
     {
         InitializeComponent();
 
         _address = address;
+        _apiKey = apiKey?.Trim() ?? string.Empty;
         AddressText.Text = address;
         AddressText.ToolTip = address;
 
@@ -63,7 +65,7 @@ public partial class StreetViewWindow : Window
 
         // Ohne Koordinaten zeigt Google nur die Karte; mit Punkt öffnet es das Straßenbild.
         HintText.Text = "Adresse wird gesucht …";
-        var target = await _streetView.LocateAsync(_address, CancellationToken.None);
+        var target = await _streetView.LocateAsync(_address, _apiKey, CancellationToken.None);
         if (target is null)
         {
             HintText.Text = "Keine Straßenansicht gefunden – bitte auf der Karte mit dem gelben " +
@@ -77,7 +79,7 @@ public partial class StreetViewWindow : Window
             ? $"Ansicht von der {road}. Bildausschnitt mit der Maus verschieben und zoomen, dann „Foto aufnehmen“."
             : "Bildausschnitt mit der Maus verschieben und zoomen, dann „Foto aufnehmen“.";
         Browser.CoreWebView2.Navigate(StreetViewLink.BuildPanoUrl(
-            target.Viewpoint.Latitude, target.Viewpoint.Longitude, target.Heading));
+            target.Viewpoint.Latitude, target.Viewpoint.Longitude, target.Heading, target.PanoId));
     }
 
     private void OnNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)

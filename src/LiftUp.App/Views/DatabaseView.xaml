@@ -7,6 +7,7 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
@@ -87,7 +88,33 @@
             </StackPanel>
         </Border>
 
-        <Border Grid.Row="3" Style="{StaticResource LiftUpCard}" Padding="12" VerticalAlignment="Top">
+        <Border Grid.Row="3" Style="{StaticResource LiftUpCard}" Padding="12" Margin="0,0,0,10">
+            <StackPanel>
+                <TextBlock Text="Google Street View" FontWeight="SemiBold" />
+                <TextBlock Style="{StaticResource LiftUpMutedText}"
+                           TextWrapping="Wrap"
+                           Margin="0,6,0,10"
+                           Text="Ohne Schlüssel löst Google die Adresse selbst auf – dort kann ein privat hochgeladenes Panorama erscheinen. Mit einem Google-Maps-Schlüssel fragt LiftUp die amtlichen Aufnahmen ab («source=google») und öffnet genau diese. Die Metadaten-Abfragen sind bei Google kostenlos." />
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="API-Schlüssel"
+                               Style="{StaticResource LiftUpFieldLabel}"
+                               VerticalAlignment="Center" Margin="0,0,8,0" />
+                    <PasswordBox Grid.Column="1" x:Name="StreetViewKeyBox" Margin="0,0,8,0" />
+                    <Button Grid.Column="2" Content="Speichern" Click="OnSaveStreetViewKeyClick" />
+                </Grid>
+                <TextBlock x:Name="StreetViewKeyHint"
+                           Style="{StaticResource LiftUpMutedText}"
+                           TextWrapping="Wrap"
+                           Margin="0,6,0,0" />
+            </StackPanel>
+        </Border>
+
+        <Border Grid.Row="4" Style="{StaticResource LiftUpCard}" Padding="12" VerticalAlignment="Top">
             <StackPanel>
                 <TextBlock Text="Zustand" Style="{StaticResource LiftUpFieldLabel}" Margin="0,0,0,6" />
                 <TextBlock x:Name="StateText" TextWrapping="Wrap" />
