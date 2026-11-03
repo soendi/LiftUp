@@ -79,8 +79,13 @@ public partial class StreetViewWindow : Window
             ? $"Ansicht von der {road}. Bildausschnitt mit der Maus verschieben und zoomen, dann „Foto aufnehmen“."
             : "Strasse nicht gefunden – die Ansicht kann auf dem Gebäude stehen. Bildausschnitt mit " +
               "der Maus verschieben und zoomen, dann „Foto aufnehmen“.";
+        // Die Kamera schaut leicht nach oben, damit das Gebäude ganz im Bild ist.
         Browser.CoreWebView2.Navigate(StreetViewLink.BuildPanoUrl(
-            target.Viewpoint.Latitude, target.Viewpoint.Longitude, target.Heading, target.PanoId));
+            target.Viewpoint.Latitude,
+            target.Viewpoint.Longitude,
+            target.Heading,
+            target.PanoId,
+            StreetViewLink.DefaultPitch));
     }
 
     private void OnNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)

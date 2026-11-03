@@ -89,8 +89,9 @@ Benutzer verwalten, Rollen und Rechte verwalten. Die Prüfung passiert in der Co
   Haus, nicht auf der Hausadresse: LiftUp holt aus den OpenStreetMap-Daten die Fahrstrassen im
   Umkreis, wählt den Punkt der nächsten Strasse (Hauptstrasse vor Quartierstrasse, keine Fuss- oder
   Dienstwege), setzt ihn als Blickpunkt und dreht die Kamera per Blickrichtung zum Gebäude; die
-  Leiste nennt den Strassennamen. Ohne Netz oder ohne Strassendaten bleibt es beim Gebäudepunkt,
-  und die Leiste sagt es. Weil Google ohne weitere Angaben auch privat hochgeladene Panoramen zeigt, lässt sich
+  Leiste nennt den Strassennamen; die Kamera ist um 10° nach oben geneigt, damit das Gebäude ganz
+  im Bild steht. Ohne Netz oder ohne Strassendaten bleibt es beim Gebäudepunkt, und die Leiste
+  sagt es. Weil Google ohne weitere Angaben auch privat hochgeladene Panoramen zeigt, lässt sich
   im Reiter «Datenbank» ein Google-Maps-Schlüssel hinterlegen: damit fragt LiftUp die amtlichen
   Aufnahmen ab (`source=google`) und öffnet genau deren Kennung. Die Metadaten-Abfragen sind bei
   Google kostenlos, die Kartenansicht selbst braucht keinen Schlüssel.

@@ -8,6 +8,11 @@ namespace LiftUp.Core.Domain;
 /// </summary>
 public static class StreetViewLink
 {
+    /// <summary>
+    /// Neigung der Kamera in Grad: leicht nach oben, damit vom Gebäude mehr zu sehen ist als
+    /// Strasse und Trottoir. Google erlaubt Werte von -90 bis 90.
+    /// </summary>
+    public const double DefaultPitch = 10;
     /// <summary>Setzt Straße, Zusatz, PLZ und Ort zu einer Adresse zusammen; leere Teile fallen weg.</summary>
     public static string BuildAddress(string? street, string? line2, string? zip, string? city)
     {
@@ -62,14 +67,23 @@ public static class StreetViewLink
     /// damit nicht die Strasse entlang geschaut wird; die Gradzahl zählt im Uhrzeigersinn ab Nord.
     /// </summary>
     public static string BuildPanoUrl(double latitude, double longitude, double? heading) =>
-        BuildPanoUrl(latitude, longitude, heading, null);
+        BuildPanoUrl(latitude, longitude, heading, null, null);
 
     /// <summary>
     /// Kartenadresse mit Blickrichtung und festgelegter Aufnahme. Mit <paramref name="panoId"/> zeigt
     /// Google genau diese Aufnahme statt der nächstgelegenen – damit erscheint kein privat
     /// hochgeladenes Panorama.
     /// </summary>
-    public static string BuildPanoUrl(double latitude, double longitude, double? heading, string? panoId)
+    public static string BuildPanoUrl(double latitude, double longitude, double? heading, string? panoId) =>
+        BuildPanoUrl(latitude, longitude, heading, panoId, null);
+
+    /// <summary>
+    /// Kartenadresse mit Blickrichtung, Aufnahme und Neigung. <paramref name="pitch"/> kippt die
+    /// Kamera nach oben (positiv) oder unten (negativ); Werte ausserhalb von -90 bis 90 werden
+    /// auf den erlaubten Bereich begrenzt.
+    /// </summary>
+    public static string BuildPanoUrl(
+        double latitude, double longitude, double? heading, string? panoId, double? pitch)
     {
         if (latitude is < -90 or > 90 || longitude is < -180 or > 180)
         {
@@ -90,6 +104,12 @@ public static class StreetViewLink
         {
             var normalized = ((value % 360) + 360) % 360;
             url += "&heading=" + Math.Round(normalized).ToString("0", CultureInfo.InvariantCulture);
+        }
+
+        if (pitch is { } angle)
+        {
+            var normalizedPitch = Math.Clamp(angle, -90, 90);
+            url += "&pitch=" + Math.Round(normalizedPitch).ToString("0", CultureInfo.InvariantCulture);
         }
 
         return url + "&hl=de";

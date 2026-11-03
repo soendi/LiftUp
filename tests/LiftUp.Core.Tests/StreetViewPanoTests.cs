@@ -59,6 +59,26 @@ public class StreetViewPanoTests
     }
 
     [Fact]
+    public void Kamera_schaut_leicht_nach_oben()
+    {
+        var url = StreetViewLink.BuildPanoUrl(
+            48.857832, 2.295226, 270, null, StreetViewLink.DefaultPitch);
+
+        Assert.Contains("&pitch=10", url, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Neigung_bleibt_im_erlaubten_bereich()
+    {
+        Assert.Contains("&pitch=90", StreetViewLink.BuildPanoUrl(48.857832, 2.295226, null, null, 140),
+            StringComparison.Ordinal);
+        Assert.Contains("&pitch=-90", StreetViewLink.BuildPanoUrl(48.857832, 2.295226, null, null, -120),
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("&pitch=", StreetViewLink.BuildPanoUrl(48.857832, 2.295226, null, null, null),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Kartenadresse_nennt_die_aufnahme()
     {
         var url = StreetViewLink.BuildPanoUrl(48.857832, 2.295226, 270, "tu510ie_z4ptBZYo2BGEJg");
