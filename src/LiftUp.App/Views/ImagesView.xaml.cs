@@ -47,6 +47,10 @@ public partial class ImagesView : UserControl
         Loaded += (_, _) => StartFolderWatcher();
         Unloaded += (_, _) => StopFolderWatcher();
 
+        // Zurück auf diesem Reiter: Ordner abgleichen und Liste neu aufbauen. Fotos, die im
+        // Analyse-Reiter dazugekommen sind, stehen damit sofort in der Tabelle.
+        IsVisibleChanged += OnVisibleChanged;
+
         RestoreFilters();
         LoadProjects();
         LoadImages();
@@ -518,6 +522,28 @@ public partial class ImagesView : UserControl
         if (SelectedProjectId is { } projectId)
         {
             _selection.Select(projectId);
+        }
+    }
+
+    /// <summary>
+    /// Gleicht beim Wechsel auf diesen Reiter den Projektordner ab und lädt die Liste neu –
+    /// so erscheinen frisch eingelesene Bilder ohne Klick auf «Ordner einlesen».
+    /// </summary>
+    private void OnVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (e.NewValue is not true)
+        {
+            return;
+        }
+
+        StartFolderWatcher();
+
+        var sync = SyncProjectFolder();
+        LoadImages();
+
+        if (sync.Any)
+        {
+            InfoText.Text = DescribeSync(sync);
         }
     }
 
