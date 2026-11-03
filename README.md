@@ -380,7 +380,10 @@ und im eingefügten Text: „Aufzugsanlage 938702809 (Messligfeldstrasse 1)“.
 
 Zeilen, die mit `1.`, `2.` oder `-` beginnen, werden zu einer echten Aufzählung: Enter schliesst
 die Zeile ab, spätestens beim Verlassen des Reiters steht die Liste im Text. Eigene Nummern
-bleiben erhalten, auch wenn sie nicht bei 1 beginnen oder zwischendurch springen.
+bleiben erhalten, auch wenn sie nicht bei 1 beginnen oder zwischendurch springen. Dasselbe gilt
+für Texte, die als «- …» aus der KI zurückkommen: «Aufzählung» und «Nummerierung» entfernen die
+führenden Zeichen und setzen daraus die echte Liste, und beim Verlassen des Reiters wird der
+Text ebenso umgewandelt und gespeichert.
 
 Ein Doppelklick markiert das Wort unter dem Zeiger – ein Leerzeichen dahinter gehört nicht dazu.
 

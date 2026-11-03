@@ -1170,6 +1170,177 @@ public partial class HtmlEditor : UserControl
                 return changed;
             };
 
+            // Zeilen, die in einem Block nur durch <br> getrennt sind – etwa eingefügter
+            // KI-Text –, werden zu eigenen Absätzen. Geteilt wird nur, wenn eine Zeile mit
+            // „- “, „* “ oder „1. “ beginnt; andere Umbrüche (Shift+Enter) bleiben stehen.
+            window.liftupSplitLines = function (block) {
+                if (!block || block.nodeType !== 1 || !/^(P|DIV)$/.test(block.tagName)) {
+                    return null;
+                }
+                if (!block.querySelector('br')) {
+                    return null;
+                }
+                if (block.querySelector('p, div, ul, ol, table, figure, img')) {
+                    return null;
+                }
+
+                var lines = [[]];
+                var nodes = Array.prototype.slice.call(block.childNodes);
+                for (var index = 0; index < nodes.length; index += 1) {
+                    var node = nodes[index];
+                    if (node.nodeType === 1 && node.tagName === 'BR') {
+                        lines.push([]);
+                        continue;
+                    }
+                    lines[lines.length - 1].push(node.cloneNode(true));
+                }
+
+                var marked = false;
+                for (var line = 0; line < lines.length; line += 1) {
+                    var text = '';
+                    for (var part = 0; part < lines[line].length; part += 1) {
+                        text += lines[line][part].textContent || '';
+                    }
+                    if (/^\s*(?:[-*•]|\d{1,3}[.)])\s+\S/.test(text.replace(/\u00a0/g, ' '))) {
+                        marked = true;
+                        break;
+                    }
+                }
+                if (!marked) {
+                    return null;
+                }
+
+                var created = [];
+                for (var line = 0; line < lines.length; line += 1) {
+                    var paragraph = document.createElement('p');
+                    for (var part = 0; part < lines[line].length; part += 1) {
+                        paragraph.appendChild(lines[line][part]);
+                    }
+                    if (!paragraph.textContent.trim() && !paragraph.querySelector('img')) {
+                        continue;
+                    }
+                    block.parentNode.insertBefore(paragraph, block);
+                    created.push(paragraph);
+                }
+
+                block.parentNode.removeChild(block);
+                return created.length > 0 ? created : null;
+            };
+
+            // Ob eine Markierung einen Block berührt – mit Rückfall, falls der Browser
+            // intersectsNode nicht anbietet.
+            window.liftupTouches = function (range, node) {
+                if (typeof range.intersectsNode === 'function') {
+                    return range.intersectsNode(node);
+                }
+
+                var block = document.createRange();
+                block.selectNodeContents(node);
+                return range.compareBoundaryPoints(Range.START_TO_END, block) <= 0
+                    && range.compareBoundaryPoints(Range.END_TO_START, block) >= 0;
+            };
+
+            // Die Zeilen, die eine Markierung berührt – bereits getrennte Absätze.
+            window.liftupLineBlocks = function (range) {
+                var blocks = [];
+                var candidates = document.body.querySelectorAll('p, div');
+                for (var index = 0; index < candidates.length; index += 1) {
+                    var block = candidates[index];
+                    if (block.querySelector('p, div')) {
+                        continue;
+                    }
+                    if (block.closest && block.closest('ul, ol, table, figure')) {
+                        continue;
+                    }
+                    if (!window.liftupTouches(range, block)) {
+                        continue;
+                    }
+
+                    var lines = window.liftupSplitLines(block);
+                    if (lines) {
+                        for (var line = 0; line < lines.length; line += 1) {
+                            blocks.push(lines[line]);
+                        }
+                    } else {
+                        blocks.push(block);
+                    }
+                }
+                return blocks;
+            };
+
+            // Entfernt „- “ oder „1. “ am Anfang einer Zeile.
+            window.liftupStripLineMarker = function (block) {
+                var marker = window.liftupListMarker(block);
+                if (!marker) {
+                    return false;
+                }
+                window.liftupStripListMarker(block, marker.length);
+                return true;
+            };
+
+            // „Aufzählung“ und „Nummerierung“: die Zeichen am Zeilenanfang entfernen und die
+            // markierten Zeilen als echte Liste setzen. So entstehen keine doppelten Punkte,
+            // wenn der Text als „- …“ hereinkommt.
+            window.liftupApplyList = function (command) {
+                document.body.focus();
+                var selection = window.getSelection();
+                if (selection && window.liftupRange) {
+                    // Der Klick auf den Knopf nimmt dem Text die Markierung; sie liegt
+                    // zuletzt in liftupRange.
+                    selection.removeAllRanges();
+                    selection.addRange(window.liftupRange);
+                }
+                if (!selection || selection.rangeCount === 0) {
+                    document.execCommand(command, false, null);
+                    return false;
+                }
+
+                var range = selection.getRangeAt(0);
+                var blocks = window.liftupLineBlocks(range);
+                var changed = false;
+                for (var index = 0; index < blocks.length; index += 1) {
+                    if (window.liftupStripLineMarker(blocks[index])) {
+                        changed = true;
+                    }
+                }
+
+                if (changed) {
+                    // Nach dem Entfernen der Zeichen deckt die Markierung genau die
+                    // betroffenen Zeilen ab.
+                    var whole = document.createRange();
+                    whole.setStartBefore(blocks[0]);
+                    whole.setEndAfter(blocks[blocks.length - 1]);
+                    selection.removeAllRanges();
+                    selection.addRange(whole);
+                }
+
+                document.execCommand(command, false, null);
+                window.liftupRange = selection.rangeCount > 0 ? selection.getRangeAt(0).cloneRange() : null;
+                return changed;
+            };
+
+            // Lose Zeilen trennen und daraus echte Aufzählungen machen – spätestens beim
+            // Lesen des Textes, also auch beim Verlassen des Reiters.
+            window.liftupFormatLists = function () {
+                var body = document.body;
+                if (!body) {
+                    return false;
+                }
+
+                var changed = false;
+                var blocks = Array.prototype.slice.call(body.querySelectorAll('p, div'));
+                for (var index = 0; index < blocks.length; index += 1) {
+                    if (window.liftupSplitLines(blocks[index])) {
+                        changed = true;
+                    }
+                }
+
+                if (window.liftupConvertLists()) {
+                    changed = true;
+                }
+                return changed;
+            };
+
             // Enter vor dem Browser: eine lose Zeile wird zuerst zum Absatz, getippte
             // Aufzählungszeichen werden zur Liste. Shift+Enter bleibt ein Umbruch, und die
             // Baustein-Vorschläge behalten Enter für sich.
@@ -1194,7 +1365,7 @@ public partial class HtmlEditor : UserControl
                 window.liftupCloseSnippets();
                 // Spätestens hier entsteht die Liste – auch wenn die letzte Zeile ohne Enter
                 // geschrieben wurde.
-                window.liftupConvertLists();
+                window.liftupFormatLists();
                 return document.body.innerHTML;
             };
         </script>
@@ -1916,7 +2087,7 @@ public partial class HtmlEditor : UserControl
                      + JsonSerializer.Serialize(_pendingHtml)
                      + "; window.liftupNormalizeFigures && window.liftupNormalizeFigures()"
                      + "; window.liftupWrapLooseText && window.liftupWrapLooseText()"
-                     + "; window.liftupConvertLists && window.liftupConvertLists(); true";
+                     + "; window.liftupFormatLists && window.liftupFormatLists(); true";
 
         await Browser.CoreWebView2.ExecuteScriptAsync(script);
     }
@@ -1939,9 +2110,11 @@ public partial class HtmlEditor : UserControl
 
     private async void OnUnderlineClick(object sender, RoutedEventArgs e) => await ExecuteAsync("underline");
 
-    private async void OnBulletListClick(object sender, RoutedEventArgs e) => await ExecuteAsync("insertUnorderedList");
+    private async void OnBulletListClick(object sender, RoutedEventArgs e) =>
+        await ExecuteListAsync("insertUnorderedList");
 
-    private async void OnNumberedListClick(object sender, RoutedEventArgs e) => await ExecuteAsync("insertOrderedList");
+    private async void OnNumberedListClick(object sender, RoutedEventArgs e) =>
+        await ExecuteListAsync("insertOrderedList");
 
     private async void OnClearFormatClick(object sender, RoutedEventArgs e) => await ExecuteAsync("removeFormat");
 
@@ -2214,6 +2387,31 @@ public partial class HtmlEditor : UserControl
         catch (Exception exception)
         {
             throw new InvalidOperationException("Der Baustein konnte nicht eingefügt werden.", exception);
+        }
+    }
+
+    /// <summary>
+    /// Wandelt die markierten Zeilen in eine echte Liste. Führende Zeichen wie „- “, „* “ oder
+    /// „1. “ werden dabei entfernt – sonst stünden sie doppelt im Text, etwa bei Texten, die
+    /// als Aufzählung aus der KI zurückkommen.
+    /// </summary>
+    private async Task ExecuteListAsync(string command)
+    {
+        if (!_ready || _failed || Browser.CoreWebView2 is null)
+        {
+            await ExecuteAsync(command);
+            return;
+        }
+
+        try
+        {
+            await Browser.CoreWebView2.ExecuteScriptAsync(
+                $"window.liftupApplyList ? window.liftupApplyList('{command}') : document.execCommand('{command}'); true");
+        }
+        catch (InvalidOperationException)
+        {
+            // Lässt sich das Skript nicht ausführen, bleibt der bisherige Weg.
+            await ExecuteAsync(command);
         }
     }
 
