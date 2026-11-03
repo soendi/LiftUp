@@ -12,7 +12,7 @@ public static class StreetViewLink
     /// Neigung der Kamera in Grad: leicht nach oben, damit vom Gebäude mehr zu sehen ist als
     /// Strasse und Trottoir. Google erlaubt Werte von -90 bis 90.
     /// </summary>
-    public const double DefaultPitch = 10;
+    public const double DefaultPitch = 20;
     /// <summary>Setzt Straße, Zusatz, PLZ und Ort zu einer Adresse zusammen; leere Teile fallen weg.</summary>
     public static string BuildAddress(string? street, string? line2, string? zip, string? city)
     {

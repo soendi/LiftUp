@@ -64,7 +64,7 @@ public class StreetViewPanoTests
         var url = StreetViewLink.BuildPanoUrl(
             48.857832, 2.295226, 270, null, StreetViewLink.DefaultPitch);
 
-        Assert.Contains("&pitch=10", url, StringComparison.Ordinal);
+        Assert.Contains("&pitch=20", url, StringComparison.Ordinal);
     }
 
     [Fact]
