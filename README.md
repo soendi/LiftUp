@@ -86,10 +86,11 @@ Benutzer verwalten, Rollen und Rechte verwalten. Die Prüfung passiert in der Co
   (Kunde, sonst Auftraggeber) im Vollbild, nimmt auf Knopfdruck ein Foto auf, schließt den Browser
   wieder und zeigt das Foto in einem Zuschnitt-Fenster. Der Ausschnitt wird beim Speichern als
   `StreetView-<Datum>-<Zeit>.png` in `02_Bilder` übernommen. Geöffnet wird auf der Strasse vor dem
-  Haus, nicht auf der Hausadresse: LiftUp sucht über OpenStreetMap die nächste Strasse (Hauptstrasse
-  vor Quartierstrasse), setzt den Blickpunkt auf deren Verlauf und dreht die Kamera zum Gebäude;
-  die Leiste nennt den Strassennamen. Ohne Netz oder ohne Strassendaten bleibt es beim bisherigen
-  Verhalten. Weil Google ohne weitere Angaben auch privat hochgeladene Panoramen zeigt, lässt sich
+  Haus, nicht auf der Hausadresse: LiftUp holt aus den OpenStreetMap-Daten die Fahrstrassen im
+  Umkreis, wählt den Punkt der nächsten Strasse (Hauptstrasse vor Quartierstrasse, keine Fuss- oder
+  Dienstwege), setzt ihn als Blickpunkt und dreht die Kamera per Blickrichtung zum Gebäude; die
+  Leiste nennt den Strassennamen. Ohne Netz oder ohne Strassendaten bleibt es beim Gebäudepunkt,
+  und die Leiste sagt es. Weil Google ohne weitere Angaben auch privat hochgeladene Panoramen zeigt, lässt sich
   im Reiter «Datenbank» ein Google-Maps-Schlüssel hinterlegen: damit fragt LiftUp die amtlichen
   Aufnahmen ab (`source=google`) und öffnet genau deren Kennung. Die Metadaten-Abfragen sind bei
   Google kostenlos, die Kartenansicht selbst braucht keinen Schlüssel.

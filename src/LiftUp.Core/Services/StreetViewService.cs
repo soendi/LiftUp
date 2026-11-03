@@ -28,12 +28,12 @@ public sealed class StreetViewService
 {
     private const string SearchUrl = "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=";
 
-    private const string OverpassUrl = "https://overpass-api.de/api/interpreter";
+    // Die OSM-Schnittstelle liefert alle Wege eines kleinen Ausschnitts samt Koordinaten –
+    // ohne Schlüssel und ohne eigene Abfragesprache. Der Ausschnitt ist rund 330 × 330 m gross.
+    private const string MapUrl =
+        "https://api.openstreetmap.org/api/0.6/map.json?bbox={0},{1},{2},{3}";
 
-    // Gefragt werden die Strassen, auf denen Street View fährt; Fuss- und Dienstwege bleiben
-    // aussen vor, sonst landet die Ansicht auf dem Vorplatz des Gebäudes.
-    private const string RoadQuery =
-        "[out:json][timeout:15];way(around:120,{0},{1})[\"highway\"~\"^(trunk|primary|secondary|tertiary|residential|unclassified|living_street)$\"];out tags geom;";
+    private const double MapRadiusDegrees = 0.0015;
 
     private static readonly HttpClient Client = CreateClient();
 
@@ -80,7 +80,7 @@ public sealed class StreetViewService
             return null;
         }
 
-        var roads = await FindRoadsAsync(building, cancellationToken);
+        var roads = await FindRoadGeometryAsync(building, cancellationToken);
         var road = StreetViewGeometry.NearestRoad(building, roads);
         var viewpoint = road?.Point ?? building;
 
@@ -205,32 +205,26 @@ public sealed class StreetViewService
     }
 
     /// <summary>
-    /// Holt die Strassen im Umkreis von 120 Metern. Scheitert die Abfrage, bleibt es beim
-    /// Gebäudepunkt – die Strassenansicht funktioniert dann wie bisher.
+    /// Holt die Fahrstrassen im Umkreis und daraus die nächste. Scheitert die Abfrage, bleibt es
+    /// beim Gebäudepunkt – die Strassenansicht funktioniert dann wie bisher.
     /// </summary>
-    private async Task<IReadOnlyList<StreetRoad>> FindRoadsAsync(GeoPoint point, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<StreetRoad>> FindRoadGeometryAsync(
+        GeoPoint point, CancellationToken cancellationToken)
     {
         try
         {
-            var query = string.Format(
+            // Der Längengrad schrumpft mit der Breite; so bleibt der Ausschnitt quadratisch.
+            var longitude = MapRadiusDegrees / Math.Max(0.2, Math.Cos(point.Latitude * Math.PI / 180));
+            var url = string.Format(
                 CultureInfo.InvariantCulture,
-                RoadQuery,
-                point.Latitude.ToString("0.######", CultureInfo.InvariantCulture),
-                point.Longitude.ToString("0.######", CultureInfo.InvariantCulture));
+                MapUrl,
+                (point.Longitude - longitude).ToString("0.######", CultureInfo.InvariantCulture),
+                (point.Latitude - MapRadiusDegrees).ToString("0.######", CultureInfo.InvariantCulture),
+                (point.Longitude + longitude).ToString("0.######", CultureInfo.InvariantCulture),
+                (point.Latitude + MapRadiusDegrees).ToString("0.######", CultureInfo.InvariantCulture));
 
-            using var content = new FormUrlEncodedContent(new Dictionary<string, string>
-            {
-                ["data"] = query,
-            });
-
-            using var response = await Client.PostAsync(OverpassUrl, content, cancellationToken);
-            if (!response.IsSuccessStatusCode)
-            {
-                return Array.Empty<StreetRoad>();
-            }
-
-            var json = await response.Content.ReadAsStringAsync(cancellationToken);
-            return StreetViewGeometry.ParseRoads(json);
+            var json = await Client.GetStringAsync(url, cancellationToken);
+            return StreetViewGeometry.ParseMapRoads(json);
         }
         catch (Exception exception) when (
             exception is HttpRequestException or TaskCanceledException or InvalidOperationException)

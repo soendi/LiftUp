@@ -77,7 +77,8 @@ public partial class StreetViewWindow : Window
         // Der Punkt liegt auf der Strasse vor dem Haus, die Kamera schaut zum Gebäude.
         HintText.Text = target.RoadName is { Length: > 0 } road
             ? $"Ansicht von der {road}. Bildausschnitt mit der Maus verschieben und zoomen, dann „Foto aufnehmen“."
-            : "Bildausschnitt mit der Maus verschieben und zoomen, dann „Foto aufnehmen“.";
+            : "Strasse nicht gefunden – die Ansicht kann auf dem Gebäude stehen. Bildausschnitt mit " +
+              "der Maus verschieben und zoomen, dann „Foto aufnehmen“.";
         Browser.CoreWebView2.Navigate(StreetViewLink.BuildPanoUrl(
             target.Viewpoint.Latitude, target.Viewpoint.Longitude, target.Heading, target.PanoId));
     }
