@@ -60,6 +60,13 @@ public partial class InvestmentCalculatorWindow : Window
         public string? Price { get; set; }
     }
 
+    /// <summary>
+    /// Die Preise stehen als <c>{"name":…,"price":…}</c> in der Zeile. Ohne
+    /// <see cref="JsonSerializerDefaults.Web"/> liest der Serialisierer die Schlüssel
+    /// gross/klein-empfindlich – die Preise kämen dann leer zurück, obwohl sie gespeichert sind.
+    /// </summary>
+    private static readonly JsonSerializerOptions BreakdownJson = new(JsonSerializerDefaults.Web);
+
     private readonly ObservableCollection<MeasureRow> _left = [];
     private readonly ObservableCollection<MeasureRow> _right = [];
 
@@ -178,7 +185,7 @@ public partial class InvestmentCalculatorWindow : Window
 
         try
         {
-            var entries = JsonSerializer.Deserialize<List<BreakdownEntry>>(json);
+            var entries = JsonSerializer.Deserialize<List<BreakdownEntry>>(json, BreakdownJson);
             return entries is null
                 ? []
                 : entries
@@ -195,7 +202,7 @@ public partial class InvestmentCalculatorWindow : Window
     private static string Serialize(IReadOnlyList<MeasureRow> rows) =>
         rows.Count == 0
             ? string.Empty
-            : JsonSerializer.Serialize(rows.Select(row => new { name = row.Name, price = row.Price }));
+            : JsonSerializer.Serialize(rows.Select(row => new { name = row.Name, price = row.Price }), BreakdownJson);
 
     private void UpdateSums()
     {

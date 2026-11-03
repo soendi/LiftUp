@@ -11,7 +11,7 @@
            InstallerVersion="500"
            Compressed="yes">
 
-    <SummaryInformation Description="LiftUp – Projekt- und Benutzerverwaltung"
+    <SummaryInformation Description="LiftUp – Projektverwaltung, Dokumentverwaltung, Dokumentgenerierung"
                         Manufacturer="Lukas Sonderegger" />
 
     <!-- Benutzerinstallation: kein Adminrecht nötig, damit stille Updates ohne UAC laufen. -->
@@ -52,7 +52,7 @@
     <Component Id="StartMenuShortcut" Directory="ApplicationProgramsFolder" Guid="B1D3A9F2-6C4E-4F7B-9A21-5C8D0E2F3A11">
       <Shortcut Id="StartMenuLiftUp"
                 Name="LiftUp"
-                Description="Projekt- und Benutzerverwaltung"
+                Description="Projektverwaltung, Dokumentverwaltung, Dokumentgenerierung"
                 Target="[INSTALLFOLDER]LiftUp.App.exe"
                 WorkingDirectory="INSTALLFOLDER"
                 Icon="LiftUpIcon" />
@@ -63,7 +63,7 @@
     <Component Id="DesktopShortcut" Directory="DesktopFolder" Guid="C2E4B0A3-7D5F-4A8C-8B32-6D9E1F4A5B22">
       <Shortcut Id="DesktopLiftUp"
                 Name="LiftUp"
-                Description="Projekt- und Benutzerverwaltung"
+                Description="Projektverwaltung, Dokumentverwaltung, Dokumentgenerierung"
                 Target="[INSTALLFOLDER]LiftUp.App.exe"
                 WorkingDirectory="INSTALLFOLDER"
                 Icon="LiftUpIcon" />
