@@ -139,8 +139,24 @@ public sealed class AppServices(Database database)
 
     public void SetSession(Session session) => Session = session;
 
+    /// <summary>Notfallanmeldung mit MasterKey-Lizenzcode – ohne Benutzername und Passwort.</summary>
+    public EmergencyAuthenticationService Emergency { get; } = new(database);
+
+    /// <summary>Überwacht die Notfall-Sitzung; ohne Bedienung endet sie nach der eingestellten Zeit.</summary>
+    public EmergencySessionManager? EmergencySession { get; private set; }
+
+    public void SetEmergencySession(Session session)
+    {
+        Session = session;
+        EmergencySession = new EmergencySessionManager(session, TimeSpan.FromMinutes(Emergency.TimeoutMinutes));
+    }
+
     /// <summary>Beendet die Sitzung beim Abmelden; danach ist kein Benutzer mehr angemeldet.</summary>
-    public void ClearSession() => Session = null;
+    public void ClearSession()
+    {
+        Session = null;
+        EmergencySession = null;
+    }
 
     /// <summary>Die verbundene KI für die Überarbeitung von Texten.</summary>
     public AiService Ai { get; } = new(database);

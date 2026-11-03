@@ -24,7 +24,7 @@ public sealed partial class UserService
     {
         _database = database;
         _actor = actor;
-        _changes = new ChangeLogWriter(database, _actor.UserName);
+        _changes = new ChangeLogWriter(database, _actor.ActorName);
     }
 
     public IReadOnlyList<UserListItem> GetUsers(string? search = null)
@@ -198,6 +198,36 @@ public sealed partial class UserService
             hash.Iterations, mustChangePassword);
         _changes.Record(connection, transaction, "User", id.ToString("D"), "PasswordReset",
             new { existing.UserName, PasswordChanged = true, MustChangePassword = mustChangePassword }, rowVersion);
+        transaction.Commit();
+    }
+
+    /// <summary>
+    /// Entsperrt ein deaktiviertes Konto, damit sich der Benutzer wieder anmelden kann.
+    /// Gelöschte Konten bleiben gelöscht – es wird nichts entfernt, nur wieder freigegeben.
+    /// </summary>
+    public void Unlock(Guid id)
+    {
+        _actor.Require(Permission.ManageUsers);
+
+        using var connection = _database.Open();
+        using var transaction = connection.BeginTransaction();
+
+        var existing = _users.GetById(connection, transaction, id)
+                       ?? throw new ValidationException("Der Benutzer wurde nicht gefunden.");
+
+        if (existing.IsDeleted)
+        {
+            throw new ValidationException("Das Konto wurde gelöscht und kann nicht entsperrt werden.");
+        }
+
+        if (existing.IsActive)
+        {
+            throw new ValidationException($"Das Konto \"{existing.UserName}\" ist bereits aktiv.");
+        }
+
+        var rowVersion = _users.SetActive(connection, transaction, id, isActive: true);
+        _changes.Record(connection, transaction, "User", id.ToString("D"), "Unlocked",
+            new { existing.UserName, IsActive = true }, rowVersion);
         transaction.Commit();
     }
 

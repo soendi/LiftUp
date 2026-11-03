@@ -17,6 +17,8 @@ public partial class MainWindow : Window
     private bool _syncRunning;
     private bool _closingAfterSync;
     private bool _skipSyncOnClose;
+    private DispatcherTimer? _emergencyTimer;
+    private EmergencyAdminView? _emergencyView;
 
     public MainWindow(AppServices services)
     {
@@ -25,6 +27,16 @@ public partial class MainWindow : Window
 
         var session = _services.CurrentSession;
         UserText.Text = $"{session.DisplayName} · {session.RoleName}";
+
+        // Der Abgleich beginnt erst nach dem Aufbau der Reiter; der Notfallzugang braucht ihn nicht.
+        _syncTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(5) };
+
+        // Notfallzugang: ausschliesslich die Wiederherstellung, keine Projekt- oder Dokumentdaten.
+        if (session.IsEmergency)
+        {
+            SetupEmergencySession();
+            return;
+        }
 
         // Die Reiter sind in Themengruppen geordnet: Übersicht, Inhalte, Verwaltung, System.
         // Zwischen den Gruppen steht je ein Trennstrich; leere Gruppen fallen weg.
@@ -162,7 +174,6 @@ public partial class MainWindow : Window
         _services.Sync.ConfigurationChanged += (_, _) => UpdateSyncText();
 
         // Abgleich beim Start, alle fünf Minuten und vor dem Schließen.
-        _syncTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(5) };
         _syncTimer.Tick += async (_, _) => await TrySyncAsync();
 
         if (Tabs.Items.Count == 0)
@@ -386,6 +397,59 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// Notfallzugang: eine einzige, klar gekennzeichnete Ansicht für die Wiederherstellung,
+    /// die nach der eingestellten Inaktivitätszeit automatisch endet.
+    /// </summary>
+    private void SetupEmergencySession()
+    {
+        var session = _services.CurrentSession;
+        UserText.Text = "Notfall-Administrator · MasterKey";
+        ChangePasswordButton.Visibility = Visibility.Collapsed;
+
+        _emergencyView = new EmergencyAdminView(_services);
+        _emergencyView.EndRequested += (_, _) => OnLogoutClick(this, new RoutedEventArgs());
+
+        Tabs.Items.Add(CreateTab("Notfall-Wiederherstellung", _emergencyView));
+        Tabs.SelectedIndex = 0;
+
+        StatusText.Text =
+            $"Notfallzugang mit MasterKey · {session.UserName} · Abmeldung nach "
+            + $"{_services.Emergency.TimeoutMinutes} Minuten ohne Bedienung";
+        UpdateText.Text = $"Version {_services.Updates.CurrentVersion}";
+
+        // Jede Bedienung verlängert die Notfall-Sitzung.
+        PreviewMouseDown += (_, _) => _services.EmergencySession?.Touch();
+        PreviewKeyDown += (_, _) => _services.EmergencySession?.Touch();
+
+        _emergencyTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(20) };
+        _emergencyTimer.Tick += (_, _) => CheckEmergencySession();
+        _emergencyTimer.Start();
+    }
+
+    private void CheckEmergencySession()
+    {
+        var manager = _services.EmergencySession;
+        if (manager is null)
+        {
+            return;
+        }
+
+        if (!manager.IsExpired)
+        {
+            _emergencyView?.UpdateSessionText();
+            return;
+        }
+
+        _emergencyTimer?.Stop();
+        MessageBox.Show(
+            "Die Notfall-Sitzung wurde nach längerer Inaktivität beendet. Bitte mit dem neuen Passwort anmelden.",
+            "LiftUp",
+            MessageBoxButton.OK,
+            MessageBoxImage.Information);
+        OnLogoutClick(this, new RoutedEventArgs());
+    }
+
     private void OnChangePasswordClick(object sender, RoutedEventArgs e)
     {
         var dialog = new ChangePasswordWindow(_services.Auth, _services.CurrentSession, forced: false)
@@ -403,6 +467,21 @@ public partial class MainWindow : Window
     private void OnLogoutClick(object sender, RoutedEventArgs e)
     {
         var application = System.Windows.Application.Current;
+        _emergencyTimer?.Stop();
+
+        // Der Notfallzugang wird im Änderungsprotokoll abgeschlossen; der Code selbst
+        // erscheint dort nie.
+        if (_services.Session is { IsEmergency: true } emergency)
+        {
+            try
+            {
+                _services.Emergency.Logout(emergency);
+            }
+            catch (Exception exception)
+            {
+                App.LogException("Notfallzugang", exception);
+            }
+        }
 
         // Beim Abmelden wird das Hauptfenster geschlossen: Sonst bliebe der Inhalt des
         // abgemeldeten Benutzers offen, während davor nur das Anmeldefenster steht.

@@ -29,7 +29,7 @@
                 <StackPanel x:Name="HeaderButtons" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                     <TextBlock x:Name="UserText" Foreground="White" VerticalAlignment="Center" FontSize="12" />
                     <Button Content="Updates" Style="{StaticResource LiftUpHeaderButton}" Click="OnCheckUpdatesClick" />
-                    <Button Content="Passwort ändern" Style="{StaticResource LiftUpHeaderButton}" Click="OnChangePasswordClick" />
+                    <Button x:Name="ChangePasswordButton" Content="Passwort ändern" Style="{StaticResource LiftUpHeaderButton}" Click="OnChangePasswordClick" />
                     <Button Content="Abmelden" Style="{StaticResource LiftUpHeaderButton}" Click="OnLogoutClick" />
                 </StackPanel>
             </Grid>

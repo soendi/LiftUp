@@ -22,6 +22,15 @@ public sealed class Session
     public required bool MustChangePassword { get; init; }
     public DateTime LoginUtc { get; init; } = DateTime.UtcNow;
 
+    /// <summary>Notfall-Sitzung nach erfolgreicher Prüfung eines MasterKey-Lizenzcodes.</summary>
+    public bool IsEmergency { get; init; }
+
+    /// <summary>Zeitpunkt, zu dem die Notfall-Sitzung ohne Bedienung endet.</summary>
+    public DateTime? EmergencyExpiresUtc { get; init; }
+
+    /// <summary>Name im Änderungsprotokoll; Notfallzugriffe sind dort auf einen Blick erkennbar.</summary>
+    public string ActorName => IsEmergency ? $"{UserName} (Notfallzugang)" : UserName;
+
     public static Session Create(User user, Role role) => new()
     {
         UserId = user.Id,
@@ -38,6 +47,30 @@ public sealed class Session
         RoleName = role.Name,
         Permissions = role.Permissions,
         MustChangePassword = user.MustChangePassword,
+    };
+
+    /// <summary>
+    /// Sitzung des Notfallzugangs: alle Rechte, aber ausschliesslich für die Wiederherstellung
+    /// regulärer Benutzerzugänge gedacht. Grundlage ist das Konto mit den meisten Rechten.
+    /// </summary>
+    public static Session CreateEmergency(User user, DateTime expiresUtc) => new()
+    {
+        UserId = user.Id,
+        UserName = user.UserName,
+        DisplayName = user.DisplayName,
+        Company = user.Company ?? string.Empty,
+        CompanyStreet = user.CompanyStreet ?? string.Empty,
+        CompanyZip = user.CompanyZip ?? string.Empty,
+        CompanyCity = user.CompanyCity ?? string.Empty,
+        CompanyLogo = user.CompanyLogo ?? string.Empty,
+        Email = user.Email ?? string.Empty,
+        Phone = user.Phone ?? string.Empty,
+        RoleId = user.RoleId,
+        RoleName = "Notfall-Administrator (MasterKey)",
+        Permissions = Permission.All,
+        MustChangePassword = false,
+        IsEmergency = true,
+        EmergencyExpiresUtc = expiresUtc,
     };
 
     public bool Can(Permission permission) => (Permissions & permission) == permission;

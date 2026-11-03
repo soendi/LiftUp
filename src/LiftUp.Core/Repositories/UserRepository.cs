@@ -11,6 +11,10 @@ public sealed class UserRepository
         "MustChangePassword, CreatedUtc, CreatedBy, LastLoginUtc, RowVersion, IsDeleted, Company, Email, Phone, " +
         "CompanyStreet, CompanyZip, CompanyCity, CompanyLogo";
 
+    /// <summary>Dieselben Spalten mit Tabellenkürzel – nötig, sobald die Rolle mitgelesen wird.</summary>
+    private static readonly string JoinColumns =
+        string.Join(", ", Columns.Split(", ").Select(column => "u." + column.Trim()));
+
     public IReadOnlyList<UserListItem> GetListItems(SqliteConnection connection, SqliteTransaction? transaction, string? search)
     {
         var filter = string.IsNullOrWhiteSpace(search)
@@ -65,6 +69,38 @@ public sealed class UserRepository
         command.With("$id", id.ToString("D"));
         using var reader = command.ExecuteReader();
         return reader.Read() ? Map(reader) : null;
+    }
+
+    /// <summary>
+    /// Konto, auf das sich der Notfallzugang stützt: der aktive Benutzer mit den meisten
+    /// Rechten. Damit funktioniert die Wiederherstellung auch, wenn das Administratorkonto
+    /// deaktiviert wurde.
+    /// </summary>
+    public User? GetEmergencyAccount(SqliteConnection connection, SqliteTransaction? transaction)
+    {
+        using var command = Db.Command(connection, $"""
+            SELECT {JoinColumns}
+            FROM Users u
+            JOIN Roles r ON r.Id = u.RoleId
+            WHERE u.IsDeleted = 0 AND u.IsActive = 1
+            ORDER BY r.Permissions DESC, u.UserName COLLATE NOCASE
+            LIMIT 1;
+            """, transaction);
+        using var reader = command.ExecuteReader();
+        return reader.Read() ? Map(reader) : null;
+    }
+
+    /// <summary>Aktiviert oder entsperrt ein Konto.</summary>
+    public long SetActive(SqliteConnection connection, SqliteTransaction? transaction, Guid id, bool isActive)
+    {
+        using var command = Db.Command(connection, """
+            UPDATE Users
+            SET IsActive = $isActive, RowVersion = RowVersion + 1
+            WHERE Id = $id
+            RETURNING RowVersion;
+            """, transaction);
+        command.With("$id", id.ToString("D")).With("$isActive", isActive ? 1 : 0);
+        return Convert.ToInt64(command.ExecuteScalar());
     }
 
     public User? GetByUserName(SqliteConnection connection, SqliteTransaction? transaction, string userName)

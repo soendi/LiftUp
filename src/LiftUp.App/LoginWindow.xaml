@@ -33,6 +33,31 @@
                     Margin="0,4,0,0"
                     Click="OnLoginClick" />
 
+            <!-- Notfallzugang: nur für vergessene Passwörter, vollständig offline geprüft. -->
+            <Expander x:Name="EmergencyExpander" Header="Passwort vergessen?" Margin="0,14,0,0">
+                <StackPanel Margin="0,8,0,0">
+                    <TextBlock Text="MasterKey-Notfallzugang" Style="{StaticResource LiftUpFieldLabel}" />
+                    <TextBlock Text="Lizenzcode aus MasterKey.exe eingeben. Er gilt nur für die Wiederherstellung von Zugängen."
+                               Style="{StaticResource LiftUpMutedText}"
+                               TextWrapping="Wrap"
+                               Margin="0,2,0,8" />
+                    <TextBox x:Name="MasterKeyBox"
+                             FontFamily="Consolas"
+                             FontSize="12"
+                             TextWrapping="Wrap"
+                             Margin="0,0,0,8" />
+                    <TextBlock x:Name="EmergencyErrorText"
+                               Foreground="{StaticResource LiftUpDanger}"
+                               TextWrapping="Wrap"
+                               MinHeight="30"
+                               FontSize="12" />
+                    <Button Content="Mit MasterKey anmelden"
+                            HorizontalAlignment="Left"
+                            Margin="0,2,0,0"
+                            Click="OnMasterKeyLoginClick" />
+                </StackPanel>
+            </Expander>
+
             <TextBlock x:Name="FooterText" Style="{StaticResource LiftUpMutedText}" Margin="0,16,0,0" />
         </StackPanel>
     </Border>
